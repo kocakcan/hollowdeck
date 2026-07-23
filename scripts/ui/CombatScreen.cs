@@ -30,6 +30,13 @@ public partial class CombatScreen : Control
     private PackedScene _cardViewScene = null!;
     private PackedScene _enemyViewScene = null!;
     private PackedScene _potionViewScene = null!;
+    private PackedScene _floatingTextScene = null!;
+
+    // Previous HP/Block per combatant, so Refresh() can diff and pop up
+    // floating combat text - CombatManager only tells us "something
+    // changed," not what, and EnemyView gets torn down/rebuilt on every
+    // refresh (see RefreshEnemies), so this has to live here, not there.
+    private readonly Dictionary<Combatant, (int Hp, int Block)> _lastStats = new();
 
     public override void _Ready()
     {
@@ -51,6 +58,7 @@ public partial class CombatScreen : Control
         _cardViewScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
         _enemyViewScene = GD.Load<PackedScene>("res://scenes/EnemyView.tscn");
         _potionViewScene = GD.Load<PackedScene>("res://scenes/PotionView.tscn");
+        _floatingTextScene = GD.Load<PackedScene>("res://scenes/FloatingText.tscn");
 
         _endTurnButton.Pressed += () => _combat.TryEndTurn();
         _continueButton.Pressed += OnContinuePressed;
@@ -118,6 +126,7 @@ public partial class CombatScreen : Control
     private void RefreshPlayerInfo()
     {
         var player = _combat.Player;
+        PopupDelta(player, this, _hpLabel.GlobalPosition);
         _hpLabel.Text = $"HP {player.CurrentHp}/{player.MaxHp}";
         _blockLabel.Text = player.Block > 0 ? $"Block {player.Block}" : "";
         _energyLabel.Text = $"Energy {player.CurrentEnergy}/{player.MaxEnergy}";
@@ -160,7 +169,56 @@ public partial class CombatScreen : Control
             var enemyView = _enemyViewScene.Instantiate<EnemyView>();
             enemyView.Combatant = enemy;
             _enemyRow.AddChild(enemyView);
+            PopupDelta(enemy, enemyView, new Vector2(30, 4));
         }
+    }
+
+    // Diffs a combatant's HP/Block against the last time Refresh() saw it,
+    // spawning floating +/- text (and a hit flash on damage) for whatever
+    // changed. popupParent/localSpawnPos let this work for both the player
+    // (spawned under CombatScreen itself, at the HP label's position) and
+    // enemies (spawned as a child of their freshly-rebuilt EnemyView).
+    private void PopupDelta(Combatant c, Node popupParent, Vector2 localSpawnPos)
+    {
+        if (_lastStats.TryGetValue(c, out var prev))
+        {
+            int hpDelta = c.CurrentHp - prev.Hp;
+            if (hpDelta < 0)
+            {
+                SpawnFloatingText(popupParent, localSpawnPos, $"-{-hpDelta}", new Color(1f, 0.35f, 0.35f));
+                if (popupParent is CanvasItem hitTarget) FlashHit(hitTarget);
+            }
+            else if (hpDelta > 0)
+            {
+                SpawnFloatingText(popupParent, localSpawnPos, $"+{hpDelta}", new Color(0.4f, 1f, 0.4f));
+            }
+
+            int blockDelta = c.Block - prev.Block;
+            if (blockDelta > 0)
+            {
+                SpawnFloatingText(popupParent, localSpawnPos + new Vector2(0, 16),
+                    $"+{blockDelta} Block", new Color(0.6f, 0.8f, 1f));
+            }
+        }
+        _lastStats[c] = (c.CurrentHp, c.Block);
+    }
+
+    private void SpawnFloatingText(Node parent, Vector2 localPos, string text, Color color)
+    {
+        var floatingText = _floatingTextScene.Instantiate<FloatingText>();
+        parent.AddChild(floatingText);
+        floatingText.Play(text, color, localPos);
+    }
+
+    // A brief red tint pulse rather than a positional shake - EnemyView
+    // lives inside an HBoxContainer, which would fight (and win against)
+    // any manual Position tween on it every layout pass.
+    private static void FlashHit(CanvasItem target)
+    {
+        var original = target.Modulate;
+        var tween = target.GetTree().CreateTween();
+        tween.TweenProperty(target, "modulate", new Color(1f, 0.4f, 0.4f), 0.06);
+        tween.TweenProperty(target, "modulate", original, 0.12);
     }
 
     private void RefreshPotions()
@@ -203,7 +261,7 @@ public partial class CombatScreen : Control
             RunState.PlayerMaxHp = _combat.Player.MaxHp;
             RunState.Gold += CombatContext.GoldReward;
 
-            if (CombatContext.IsFinalEncounter)
+            if (CombatContext.IsBoss)
             {
                 RunEndContext.Outcome = RunEndOutcome.Win;
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Victory);
@@ -212,6 +270,7 @@ public partial class CombatScreen : Control
             {
                 RewardContext.CardChoices = SampleCardChoices(3);
                 RewardContext.GoldAwarded = CombatContext.GoldReward;
+                RewardContext.GuaranteedRelic = CombatContext.IsElite ? GrantEliteRelic() : null;
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Reward);
             }
         }
@@ -220,6 +279,22 @@ public partial class CombatScreen : Control
             RunEndContext.Outcome = RunEndOutcome.Lose;
             RunManager.Instance.ChangeScreen(RunManager.ScreenState.Defeat);
         }
+    }
+
+    // Elite fights guarantee a relic on top of the usual card/gold reward -
+    // same unowned+unlock-filtered pool ShopScreen/TreasureScreen already
+    // draw from, sampled from the dedicated Shop RNG stream.
+    private static RelicDefinition? GrantEliteRelic()
+    {
+        var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
+        var available = RelicDatabase.All
+            .Where(r => !ownedRelicIds.Contains(r.Id) && MetaProgressionManager.Instance.IsRelicUnlocked(r.Id))
+            .ToList();
+        if (available.Count == 0) return null;
+
+        var picked = available[RngStreams.Shop.Next(available.Count)];
+        RunState.Relics.Add(new RelicInstance(picked));
+        return picked;
     }
 
     private static List<CardDefinition> SampleCardChoices(int count)

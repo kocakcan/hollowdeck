@@ -19,6 +19,8 @@ public static class RelicRegistry
         ["scavengers_charm"] = def => new ScavengersCharmRelic(def),
         ["second_wind"] = def => new SecondWindRelic(def),
         ["vampire_fang"] = def => new VampireFangRelic(def),
+        ["toxic_fang"] = def => new ToxicFangRelic(def),
+        ["vengeful_spirit"] = def => new VengefulSpiritRelic(def),
     };
 
     public static RelicBehavior Create(RelicDefinition definition)

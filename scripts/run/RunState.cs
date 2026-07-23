@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Linq;
 using Hollowdeck.Data;
+using Hollowdeck.Map;
 
 namespace Hollowdeck.Run;
 
@@ -16,7 +18,10 @@ public static class RunState
     public static List<CardDefinition> Deck = new();
     public static List<RelicInstance> Relics = new();
     public static List<PotionInstance> Potions = new();
-    public static bool TreasureClaimed;
+
+    public static List<MapNode> MapNodes = new();
+    public static string CurrentNodeId = "";
+    public static HashSet<string> VisitedNodeIds = new();
 
     public static void InitNewRun()
     {
@@ -26,8 +31,13 @@ public static class RunState
         Deck = StartingDeck();
         Relics = new List<RelicInstance>();
         Potions = new List<PotionInstance>();
-        TreasureClaimed = false;
+
+        MapNodes = MapGenerator.Generate(RngStreams.Map);
+        CurrentNodeId = "";
+        VisitedNodeIds = new HashSet<string>();
     }
+
+    public static MapNode GetMapNode(string id) => MapNodes.First(n => n.Id == id);
 
     private static List<CardDefinition> StartingDeck()
     {

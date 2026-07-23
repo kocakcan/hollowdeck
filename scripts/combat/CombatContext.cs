@@ -9,6 +9,7 @@ namespace Hollowdeck.Combat;
 public static class CombatContext
 {
     public static List<string> EnemyDefinitionIds { get; set; } = new();
-    public static bool IsFinalEncounter { get; set; }
+    public static bool IsElite { get; set; }
+    public static bool IsBoss { get; set; }
     public static int GoldReward { get; set; }
 }

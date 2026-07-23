@@ -47,5 +47,125 @@
         "weight": 40
       }
     ]
+  },
+  {
+    "id": "bog_troll",
+    "name": "Bog Troll",
+    "maxHp": 78,
+    "aiType": "sequential",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "slam",
+        "intent": { "type": "Attack", "displayAmount": 9 },
+        "effects": [
+          { "action": "deal_damage", "amount": 9, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "hardened_hide",
+        "intent": { "type": "Defend", "displayAmount": 10 },
+        "effects": [
+          { "action": "gain_block", "amount": 10, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "heavy_slam",
+        "intent": { "type": "Attack", "displayAmount": 13 },
+        "effects": [
+          { "action": "deal_damage", "amount": 13, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "possessed_armor",
+    "name": "Possessed Armor",
+    "maxHp": 84,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "iron_bash",
+        "intent": { "type": "Attack", "displayAmount": 9 },
+        "effects": [
+          { "action": "deal_damage", "amount": 9, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+        ],
+        "weight": 50
+      },
+      {
+        "moveId": "empower",
+        "intent": { "type": "Buff", "displayAmount": 2 },
+        "effects": [
+          { "action": "apply_status", "status": "Strength", "amount": 2, "scope": "Self" }
+        ],
+        "weight": 30
+      },
+      {
+        "moveId": "guard_stance",
+        "intent": { "type": "Defend", "displayAmount": 8 },
+        "effects": [
+          { "action": "gain_block", "amount": 8, "scope": "Self" }
+        ],
+        "weight": 20
+      }
+    ]
+  },
+  {
+    "id": "hollow_king",
+    "name": "The Hollow King",
+    "maxHp": 150,
+    "aiType": "phase_threshold",
+    "loopFromIndex": 0,
+    "enrageHpPercent": 50,
+    "moves": [
+      {
+        "moveId": "shadow_lash",
+        "intent": { "type": "Attack", "displayAmount": 10 },
+        "effects": [
+          { "action": "deal_damage", "amount": 10, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "call_of_the_hollow",
+        "intent": { "type": "Buff", "displayAmount": 3 },
+        "effects": [
+          { "action": "apply_status", "status": "Strength", "amount": 3, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "crushing_grip",
+        "intent": { "type": "Attack", "displayAmount": 14 },
+        "effects": [
+          { "action": "deal_damage", "amount": 14, "scope": "Target" }
+        ]
+      }
+    ],
+    "enrageMoves": [
+      {
+        "moveId": "furious_onslaught",
+        "intent": { "type": "Attack", "displayAmount": 18 },
+        "effects": [
+          { "action": "deal_damage", "amount": 18, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "toxic_miasma",
+        "intent": { "type": "Attack", "displayAmount": 8 },
+        "effects": [
+          { "action": "deal_damage", "amount": 8, "scope": "Target" },
+          { "action": "apply_status", "status": "Poison", "amount": 3, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "crushing_grip_ii",
+        "intent": { "type": "Attack", "displayAmount": 16 },
+        "effects": [
+          { "action": "deal_damage", "amount": 16, "scope": "Target" }
+        ]
+      }
+    ]
   }
 ]

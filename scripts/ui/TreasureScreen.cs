@@ -26,7 +26,6 @@ public partial class TreasureScreen : Control
             label.Text = $"You found: {picked.Name}\n{picked.Description}";
         }
 
-        RunState.TreasureClaimed = true;
         GetNode<Button>("CenterContainer/VBoxContainer/ContinueButton").Pressed += OnContinuePressed;
     }
 

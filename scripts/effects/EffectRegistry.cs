@@ -14,6 +14,7 @@ public static class EffectRegistry
         ["draw_cards"] = new DrawCardsEffect(),
         ["heal"] = new HealEffect(),
         ["gain_energy"] = new GainEnergyEffect(),
+        ["lose_hp"] = new LoseHpEffect(),
     };
 
     public static void Execute(EffectContext ctx, EffectSpec spec)

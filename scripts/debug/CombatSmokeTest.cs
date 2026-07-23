@@ -33,7 +33,7 @@ public partial class CombatSmokeTest : Node
         RunState.Potions = new List<Hollowdeck.Run.PotionInstance>();
 
         CombatContext.EnemyDefinitionIds = new List<string> { "cultist" };
-        CombatContext.IsFinalEncounter = false;
+        CombatContext.IsBoss = false;
 
         var packed = GD.Load<PackedScene>("res://scenes/CombatScreen.tscn");
         var instance = packed.Instantiate();

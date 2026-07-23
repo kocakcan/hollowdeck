@@ -16,8 +16,9 @@ namespace Hollowdeck.UI;
 // the drop position and target whichever enemy (if any) the card was
 // dropped on - same drag-to-target feel as the genre reference. Dropped
 // with no enemy under it, or rejected by CombatManager (wrong state, not
-// enough energy), it snaps back to home. If it resolved, do nothing -
-// CombatManager's HandChanged rebuild will free this node.
+// enough energy), it snaps back to home. If it resolved, it plays a quick
+// resolve tween instead of just vanishing - see OnReleased for why it has
+// to reparent itself out of the hand area first.
 public partial class CardView : Panel
 {
     private static readonly Vector2 HoverScale = new(1.08f, 1.08f);
@@ -112,8 +113,41 @@ public partial class CardView : Panel
             target = FindEnemyUnderMouse();
         }
 
+        // Reparent out of the hand area BEFORE calling TryPlayCard: if it
+        // resolves, TryPlayCard fires HandChanged synchronously, and
+        // CombatScreen's rebuild only tears down whatever is still parented
+        // under _handArea - moving out first is what lets the resolve tween
+        // below actually get to play instead of the node being destroyed
+        // out from under it in the same call.
+        var handArea = GetParent();
+        var screenRoot = GetTree().CurrentScene;
+        var localPosition = Position;
+        var globalPosition = GlobalPosition;
+        handArea.RemoveChild(this);
+        screenRoot.AddChild(this);
+        GlobalPosition = globalPosition;
+
         bool resolved = CombatManager.Instance.TryPlayCard(CardInstance, target);
-        if (!resolved) SnapHome();
+        if (resolved)
+        {
+            PlayResolveTween();
+        }
+        else
+        {
+            screenRoot.RemoveChild(this);
+            handArea.AddChild(this);
+            Position = localPosition;
+            SnapHome();
+        }
+    }
+
+    private void PlayResolveTween()
+    {
+        var tween = GetTree().CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(this, "scale", Vector2.One * 0.4f, 0.18).SetTrans(Tween.TransitionType.Back);
+        tween.TweenProperty(this, "modulate:a", 0f, 0.18);
+        tween.Chain().TweenCallback(Callable.From(QueueFree));
     }
 
     private EnemyCombatant? FindEnemyUnderMouse()

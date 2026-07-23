@@ -113,5 +113,237 @@
 	"effects": [
 	  { "action": "draw_cards", "amount": 2, "scope": "Self" }
 	]
+  },
+  {
+	"id": "twin_strike",
+	"name": "Twin Strike",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"effects": [
+	  { "action": "deal_damage", "amount": 4, "scope": "Target" },
+	  { "action": "deal_damage", "amount": 4, "scope": "Target" }
+	]
+  },
+  {
+	"id": "heavy_blow",
+	"name": "Heavy Blow",
+	"cost": 2,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"effects": [
+	  { "action": "deal_damage", "amount": 14, "scope": "Target" }
+	]
+  },
+  {
+	"id": "quick_slash",
+	"name": "Quick Slash",
+	"cost": 0,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"effects": [
+	  { "action": "deal_damage", "amount": 3, "scope": "Target" }
+	]
+  },
+  {
+	"id": "poison_dart",
+	"name": "Poison Dart",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"effects": [
+	  { "action": "deal_damage", "amount": 4, "scope": "Target" },
+	  { "action": "apply_status", "status": "Poison", "amount": 3, "scope": "Target" }
+	]
+  },
+  {
+	"id": "venom_strike",
+	"name": "Venom Strike",
+	"cost": 2,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"effects": [
+	  { "action": "apply_status", "status": "Poison", "amount": 6, "scope": "Target" }
+	]
+  },
+  {
+	"id": "toxic_cloud",
+	"name": "Toxic Cloud",
+	"cost": 2,
+	"type": "Attack",
+	"target": "AllEnemies",
+	"exhaust": false,
+	"effects": [
+	  { "action": "apply_status", "status": "Poison", "amount": 3, "scope": "Target" }
+	]
+  },
+  {
+	"id": "reckless_charge",
+	"name": "Reckless Charge",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"effects": [
+	  { "action": "deal_damage", "amount": 11, "scope": "Target" },
+	  { "action": "lose_hp", "amount": 3, "scope": "Self" }
+	]
+  },
+  {
+	"id": "blood_ritual",
+	"name": "Blood Ritual",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"effects": [
+	  { "action": "lose_hp", "amount": 5, "scope": "Self" },
+	  { "action": "draw_cards", "amount": 3, "scope": "Self" }
+	]
+  },
+  {
+	"id": "second_skin",
+	"name": "Second Skin",
+	"cost": 2,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"effects": [
+	  { "action": "gain_block", "amount": 15, "scope": "Self" }
+	]
+  },
+  {
+	"id": "fortify",
+	"name": "Fortify",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"effects": [
+	  { "action": "gain_block", "amount": 6, "scope": "Self" },
+	  { "action": "apply_status", "status": "Strength", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "battle_trance",
+	"name": "Battle Trance",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"effects": [
+	  { "action": "draw_cards", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "adrenaline",
+	"name": "Adrenaline",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"effects": [
+	  { "action": "gain_energy", "amount": 1, "scope": "Self" },
+	  { "action": "draw_cards", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "war_cry",
+	"name": "War Cry",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"effects": [
+	  { "action": "apply_status", "status": "Strength", "amount": 3, "scope": "Self" }
+	]
+  },
+  {
+	"id": "riposte",
+	"name": "Riposte",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"effects": [
+	  { "action": "deal_damage", "amount": 7, "scope": "Target" },
+	  { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+	]
+  },
+  {
+	"id": "crippling_blow",
+	"name": "Crippling Blow",
+	"cost": 2,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"effects": [
+	  { "action": "deal_damage", "amount": 10, "scope": "Target" },
+	  { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" },
+	  { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+	]
+  },
+  {
+	"id": "whirlwind",
+	"name": "Whirlwind",
+	"cost": 2,
+	"type": "Attack",
+	"target": "AllEnemies",
+	"exhaust": false,
+	"effects": [
+	  { "action": "deal_damage", "amount": 10, "scope": "Target" }
+	]
+  },
+  {
+	"id": "meditate",
+	"name": "Meditate",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"effects": [
+	  { "action": "heal", "amount": 5, "scope": "Self" },
+	  { "action": "draw_cards", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "bloodletting",
+	"name": "Bloodletting",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"effects": [
+	  { "action": "lose_hp", "amount": 3, "scope": "Self" },
+	  { "action": "gain_energy", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "impale",
+	"name": "Impale",
+	"cost": 2,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": true,
+	"effects": [
+	  { "action": "deal_damage", "amount": 16, "scope": "Target" }
+	]
+  },
+  {
+	"id": "last_stand",
+	"name": "Last Stand",
+	"cost": 2,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": true,
+	"effects": [
+	  { "action": "deal_damage", "amount": 20, "scope": "Target" },
+	  { "action": "lose_hp", "amount": 5, "scope": "Self" }
+	]
   }
 ]

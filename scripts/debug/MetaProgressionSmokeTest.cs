@@ -165,7 +165,7 @@ public partial class MetaProgressionSmokeTest : Node
         var relicList = instance.GetNode<VBoxContainer>("RelicUnlocksList");
 
         Check("meta_screen_shows_shards", shardsLabel.Text.Contains("99"), $"text='{shardsLabel.Text}'");
-        Check("meta_screen_lists_locked_relics", relicList.GetChildCount() == 2, $"rows={relicList.GetChildCount()}");
+        Check("meta_screen_lists_locked_relics", relicList.GetChildCount() == 4, $"rows={relicList.GetChildCount()}");
         instance.QueueFree();
     }
 

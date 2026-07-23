@@ -12,6 +12,17 @@ public partial class RewardScreen : Control
         GetNode<Label>("CenterContainer/VBoxContainer/GoldLabel").Text =
             $"You found {RewardContext.GoldAwarded} gold.";
 
+        var relicLabel = GetNode<Label>("CenterContainer/VBoxContainer/RelicLabel");
+        if (RewardContext.GuaranteedRelic is { } relic)
+        {
+            relicLabel.Visible = true;
+            relicLabel.Text = $"Relic: {relic.Name} - {relic.Description}";
+        }
+        else
+        {
+            relicLabel.Visible = false;
+        }
+
         var choicesList = GetNode<VBoxContainer>("CenterContainer/VBoxContainer/ChoicesList");
         foreach (var card in RewardContext.CardChoices)
         {
@@ -40,9 +51,5 @@ public partial class RewardScreen : Control
 
     private void OnSkipPressed() => Advance();
 
-    private static void Advance()
-    {
-        RunManager.Instance.AdvanceEncounter();
-        RunManager.Instance.ChangeScreen(RunManager.ScreenState.Map);
-    }
+    private static void Advance() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.Map);
 }

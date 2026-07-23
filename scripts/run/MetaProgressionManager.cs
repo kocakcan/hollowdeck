@@ -17,7 +17,8 @@ public partial class MetaProgressionManager : Node
     // Relics that start locked; everything else (all cards, all potions,
     // and every other relic) is available from the start - see the Phase 3
     // plan for why only these two are worth gating at this content scale.
-    public static readonly HashSet<string> LockedRelicIds = new() { "vampire_fang", "momentum_token" };
+    public static readonly HashSet<string> LockedRelicIds = new()
+        { "vampire_fang", "momentum_token", "toxic_fang", "vengeful_spirit" };
 
     private const string SavePath = "user://meta_progression.json";
     private const int MaxRecentSeeds = 20;

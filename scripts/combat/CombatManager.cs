@@ -76,6 +76,13 @@ public partial class CombatManager : Node
 
     private void BeginPlayerTurn()
     {
+        ApplyPoisonTick(Player);
+        if (Player.IsDead)
+        {
+            EndCombat(CombatOutcome.Lose);
+            return;
+        }
+
         Player.CurrentEnergy = Player.MaxEnergy;
         Player.Piles.DrawHand(5);
 
@@ -280,6 +287,20 @@ public partial class CombatManager : Node
             return;
         }
 
+        ApplyPoisonTick(enemy);
+        if (enemy.IsDead)
+        {
+            Enemies.RemoveAll(e => e.IsDead);
+            CombatantsChanged?.Invoke();
+            if (Enemies.Count == 0)
+            {
+                EndCombat(CombatOutcome.Win);
+                return;
+            }
+            ResolveNextEnemyTurn();
+            return;
+        }
+
         TransitionTo(CombatState.ResolvingEnemyIntent);
 
         enemy.Block = 0;
@@ -317,6 +338,18 @@ public partial class CombatManager : Node
         }
 
         ResolveNextEnemyTurn();
+    }
+
+    // Poison deals direct HP loss (bypasses Block, per genre convention) at
+    // the start of the afflicted's own turn, then decays by 1 - a different
+    // trigger point than Vulnerable/Weak's end-of-turn decay above, which is
+    // an intentional difference in when each status resolves.
+    private void ApplyPoisonTick(Combatant c)
+    {
+        int poison = c.GetStatus(StatusType.Poison);
+        if (poison <= 0) return;
+        c.CurrentHp -= Math.Min(c.CurrentHp, poison);
+        c.DecayStatus(StatusType.Poison);
     }
 
     private void AdvanceEnemyIntent(EnemyCombatant enemy)

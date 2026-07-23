@@ -45,6 +45,8 @@ public static class EffectDescriptionFormatter
                 return $"Heal {effect.Amount} HP.";
             case "gain_energy":
                 return $"Gain {effect.Amount} Energy.";
+            case "lose_hp":
+                return $"Lose {effect.Amount} HP.";
             default:
                 return "";
         }

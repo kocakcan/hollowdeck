@@ -54,5 +54,47 @@
     "effects": [
       { "action": "draw_cards", "amount": 3, "scope": "Self" }
     ]
+  },
+  {
+    "id": "poison_potion",
+    "name": "Poison Potion",
+    "target": "SingleEnemy",
+    "effects": [
+      { "action": "apply_status", "status": "Poison", "amount": 6, "scope": "Target" }
+    ]
+  },
+  {
+    "id": "elixir_of_vigor",
+    "name": "Elixir of Vigor",
+    "target": "Self",
+    "effects": [
+      { "action": "heal", "amount": 12, "scope": "Self" },
+      { "action": "gain_energy", "amount": 1, "scope": "Self" }
+    ]
+  },
+  {
+    "id": "vulnerability_potion",
+    "name": "Vulnerability Potion",
+    "target": "SingleEnemy",
+    "effects": [
+      { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+    ]
+  },
+  {
+    "id": "greater_block_potion",
+    "name": "Greater Block Potion",
+    "target": "Self",
+    "effects": [
+      { "action": "gain_block", "amount": 18, "scope": "Self" }
+    ]
+  },
+  {
+    "id": "swift_potion",
+    "name": "Swift Potion",
+    "target": "Self",
+    "effects": [
+      { "action": "draw_cards", "amount": 2, "scope": "Self" },
+      { "action": "gain_energy", "amount": 1, "scope": "Self" }
+    ]
   }
 ]

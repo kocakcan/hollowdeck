@@ -32,3 +32,7 @@ text = "Start Run"
 [node name="UnlocksButton" type="Button" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "Unlocks"
+
+[node name="SettingsButton" type="Button" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+text = "Settings"

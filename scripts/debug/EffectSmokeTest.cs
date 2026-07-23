@@ -53,8 +53,8 @@ public partial class EffectSmokeTest : Node
 
     private void TestRelicAndPotionDatabasesLoad()
     {
-        Check("relics_loaded", RelicDatabase.All.Count == 14, $"count={RelicDatabase.All.Count}");
-        Check("potions_loaded", PotionDatabase.All.Count == 7, $"count={PotionDatabase.All.Count}");
+        Check("relics_loaded", RelicDatabase.All.Count == 22, $"count={RelicDatabase.All.Count}");
+        Check("potions_loaded", PotionDatabase.All.Count == 12, $"count={PotionDatabase.All.Count}");
 
         int created = 0;
         foreach (var def in RelicDatabase.All)

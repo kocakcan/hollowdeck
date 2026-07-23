@@ -101,5 +101,67 @@
     "description": "Whenever you deal damage, heal 1 HP.",
     "behaviorId": "vampire_fang",
     "params": { "amount": 1 }
+  },
+  {
+    "id": "toxic_fang",
+    "name": "Toxic Fang",
+    "description": "Whenever you play an Attack card, apply 1 Poison to a random enemy.",
+    "behaviorId": "toxic_fang",
+    "params": { "amount": 1 }
+  },
+  {
+    "id": "vengeful_spirit",
+    "name": "Vengeful Spirit",
+    "description": "Whenever a hit you deal kills an enemy, heal 3 HP.",
+    "behaviorId": "vengeful_spirit",
+    "params": { "amount": 3 }
+  },
+  {
+    "id": "sunken_idol",
+    "name": "Sunken Idol",
+    "description": "At the start of combat, heal 5 HP.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCombatStart",
+    "effect": { "action": "heal", "amount": 5, "scope": "Self" }
+  },
+  {
+    "id": "iron_resolve",
+    "name": "Iron Resolve",
+    "description": "At the start of combat, gain 12 Block.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCombatStart",
+    "effect": { "action": "gain_block", "amount": 12, "scope": "Self" }
+  },
+  {
+    "id": "cracked_hourglass",
+    "name": "Cracked Hourglass",
+    "description": "At the start of combat, gain 1 additional Energy.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCombatStart",
+    "effect": { "action": "gain_energy", "amount": 1, "scope": "Self" }
+  },
+  {
+    "id": "battle_drum",
+    "name": "Battle Drum",
+    "description": "At the start of each turn, draw 1 additional card.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnTurnStart",
+    "effect": { "action": "draw_cards", "amount": 1, "scope": "Self" }
+  },
+  {
+    "id": "clockwork_gear",
+    "name": "Clockwork Gear",
+    "description": "At the start of each turn, gain 1 additional Energy.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnTurnStart",
+    "effect": { "action": "gain_energy", "amount": 1, "scope": "Self" }
+  },
+  {
+    "id": "restless_grimoire",
+    "name": "Restless Grimoire",
+    "description": "At the start of each turn, heal 2 HP.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnTurnStart",
+    "effect": { "action": "heal", "amount": 2, "scope": "Self" }
   }
 ]

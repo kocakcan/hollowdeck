@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 RunManager="*res://scripts/run/RunManager.cs"
 MetaProgressionManager="*res://scripts/run/MetaProgressionManager.cs"
+SettingsManager="*res://scripts/run/SettingsManager.cs"
 
 [display]
 

@@ -76,14 +76,15 @@ public partial class ScreenSmokeTest : Node
     private void TestTreasureScreen()
     {
         RunState.Relics = new List<RelicInstance>();
-        RunState.TreasureClaimed = false;
+        int relicsBefore = RunState.Relics.Count;
 
         var screen = LoadScene("res://scenes/TreasureScreen.tscn");
         var label = screen.GetNode<Label>("CenterContainer/VBoxContainer/OutcomeLabel");
         var continueButton = screen.GetNode<Button>("CenterContainer/VBoxContainer/ContinueButton");
 
         Check("treasure_label_updated_from_default", label.Text != "Treasure!", $"text='{label.Text}'");
-        Check("treasure_marks_claimed", RunState.TreasureClaimed, "TreasureClaimed still false");
+        Check("treasure_grants_a_relic", RunState.Relics.Count == relicsBefore + 1,
+            $"relics={RunState.Relics.Count}");
         Check("treasure_continue_button_has_a_handler", continueButton.GetSignalConnectionList("pressed").Count > 0,
             "no pressed connections");
         screen.QueueFree();
