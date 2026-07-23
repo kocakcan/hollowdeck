@@ -1,0 +1,51 @@
+[
+  {
+    "id": "cultist",
+    "name": "Cultist",
+    "maxHp": 48,
+    "aiType": "sequential",
+    "loopFromIndex": 1,
+    "moves": [
+      {
+        "moveId": "incantation",
+        "intent": { "type": "Buff", "displayAmount": 3 },
+        "effects": [
+          { "action": "apply_status", "status": "Strength", "amount": 3, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "dark_strike",
+        "intent": { "type": "Attack", "displayAmount": 6 },
+        "effects": [
+          { "action": "deal_damage", "amount": 6, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "slime",
+    "name": "Acid Slime",
+    "maxHp": 32,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "lick",
+        "intent": { "type": "Attack", "displayAmount": 5 },
+        "effects": [
+          { "action": "deal_damage", "amount": 5, "scope": "Target" }
+        ],
+        "weight": 60
+      },
+      {
+        "moveId": "corrode",
+        "intent": { "type": "Attack", "displayAmount": 3 },
+        "effects": [
+          { "action": "deal_damage", "amount": 3, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+        ],
+        "weight": 40
+      }
+    ]
+  }
+]

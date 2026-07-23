@@ -1,7 +1,6 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/MapScreen.cs" id="1"]
-[ext_resource type="PackedScene" path="res://scenes/CardView.tscn" id="2"]
 
 [node name="MapScreen" type="Control"]
 anchors_preset = 15
@@ -17,13 +16,20 @@ offset_left = 24.0
 offset_top = 16.0
 text = "Map Screen (placeholder)"
 
+[node name="ProgressLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 48.0
+text = "Fight 1 of 3"
+
 [node name="BackButton" type="Button" parent="."]
 layout_mode = 0
 offset_left = 24.0
-offset_top = 56.0
+offset_top = 88.0
 text = "Back to Menu"
 
-[node name="CardView" parent="." instance=ExtResource("2")]
+[node name="NextFightButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 400.0
-offset_top = 200.0
+offset_left = 24.0
+offset_top = 128.0
+text = "Next Fight"

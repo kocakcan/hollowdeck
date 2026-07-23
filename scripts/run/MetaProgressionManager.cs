@@ -7,7 +7,7 @@ namespace Hollowdeck.Run;
 // versioning needs. Phase 3 adds real persistence.
 public partial class MetaProgressionManager : Node
 {
-    public static MetaProgressionManager Instance { get; private set; }
+    public static MetaProgressionManager Instance { get; private set; } = null!;
 
     public override void _Ready() => Instance = this;
 }

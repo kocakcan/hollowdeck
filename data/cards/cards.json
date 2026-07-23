@@ -1,0 +1,117 @@
+[
+  {
+    "id": "strike",
+    "name": "Strike",
+    "cost": 1,
+    "type": "Attack",
+    "target": "SingleEnemy",
+    "exhaust": false,
+    "effects": [
+      { "action": "deal_damage", "amount": 6, "scope": "Target" }
+    ]
+  },
+  {
+    "id": "defend",
+    "name": "Defend",
+    "cost": 1,
+    "type": "Skill",
+    "target": "Self",
+    "exhaust": false,
+    "effects": [
+      { "action": "gain_block", "amount": 5, "scope": "Self" }
+    ]
+  },
+  {
+    "id": "bash",
+    "name": "Bash",
+    "cost": 2,
+    "type": "Attack",
+    "target": "SingleEnemy",
+    "exhaust": false,
+    "effects": [
+      { "action": "deal_damage", "amount": 8, "scope": "Target" },
+      { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+    ]
+  },
+  {
+    "id": "cleave",
+    "name": "Cleave",
+    "cost": 1,
+    "type": "Attack",
+    "target": "AllEnemies",
+    "exhaust": false,
+    "effects": [
+      { "action": "deal_damage", "amount": 8, "scope": "Target" }
+    ]
+  },
+  {
+    "id": "iron_wave",
+    "name": "Iron Wave",
+    "cost": 1,
+    "type": "Attack",
+    "target": "SingleEnemy",
+    "exhaust": false,
+    "effects": [
+      { "action": "deal_damage", "amount": 5, "scope": "Target" },
+      { "action": "gain_block", "amount": 5, "scope": "Self" }
+    ]
+  },
+  {
+    "id": "shrug_it_off",
+    "name": "Shrug It Off",
+    "cost": 1,
+    "type": "Skill",
+    "target": "Self",
+    "exhaust": false,
+    "effects": [
+      { "action": "gain_block", "amount": 8, "scope": "Self" },
+      { "action": "draw_cards", "amount": 1, "scope": "Self" }
+    ]
+  },
+  {
+    "id": "thunderclap",
+    "name": "Thunderclap",
+    "cost": 1,
+    "type": "Attack",
+    "target": "AllEnemies",
+    "exhaust": false,
+    "effects": [
+      { "action": "deal_damage", "amount": 4, "scope": "Target" },
+      { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+    ]
+  },
+  {
+    "id": "flex",
+    "name": "Flex",
+    "cost": 0,
+    "type": "Skill",
+    "target": "Self",
+    "exhaust": false,
+    "effects": [
+      { "action": "apply_status", "status": "Strength", "amount": 2, "scope": "Self" }
+    ]
+  },
+  {
+    "id": "clothesline",
+    "name": "Clothesline",
+    "cost": 2,
+    "type": "Attack",
+    "target": "SingleEnemy",
+    "exhaust": false,
+    "effects": [
+      { "action": "deal_damage", "amount": 12, "scope": "Target" },
+      { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
+    ]
+  },
+  {
+    "id": "focus",
+    "name": "Focus",
+    "cost": 1,
+    "type": "Skill",
+    "target": "Self",
+    "exhaust": false,
+    "effects": [
+      { "action": "draw_cards", "amount": 2, "scope": "Self" }
+    ]
+  }
+]

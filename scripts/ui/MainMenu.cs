@@ -10,5 +10,5 @@ public partial class MainMenu : Control
         GetNode<Button>("CenterContainer/VBoxContainer/StartButton").Pressed += OnStartPressed;
     }
 
-    private void OnStartPressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.Map);
+    private void OnStartPressed() => RunManager.Instance.StartNewRun();
 }
