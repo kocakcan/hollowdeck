@@ -37,7 +37,8 @@ public partial class CardView : Panel
     public void SetCardInstance(CardInstance card)
     {
         CardInstance = card;
-        if (_nameLabel is not null) _nameLabel.Text = card.Definition.Name;
+        if (_nameLabel is not null) _nameLabel.Text = $"{card.Definition.Name} ({card.Definition.Cost})";
+        TooltipText = card.Definition.Description;
     }
 
     public void SetHomePosition(Vector2 pos)

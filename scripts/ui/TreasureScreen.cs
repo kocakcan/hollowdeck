@@ -12,7 +12,7 @@ public partial class TreasureScreen : Control
         var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
         var available = RelicDatabase.All.Where(r => !ownedRelicIds.Contains(r.Id)).ToList();
 
-        var label = GetNode<Label>("OutcomeLabel");
+        var label = GetNode<Label>("CenterContainer/VBoxContainer/OutcomeLabel");
         if (available.Count == 0)
         {
             label.Text = "The treasure chest is empty.";
@@ -25,7 +25,7 @@ public partial class TreasureScreen : Control
         }
 
         RunState.TreasureClaimed = true;
-        GetNode<Button>("ContinueButton").Pressed += OnContinuePressed;
+        GetNode<Button>("CenterContainer/VBoxContainer/ContinueButton").Pressed += OnContinuePressed;
     }
 
     private void OnContinuePressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.Map);

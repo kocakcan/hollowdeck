@@ -8,13 +8,13 @@ public partial class RewardScreen : Control
 {
     public override void _Ready()
     {
-        GetNode<Label>("GoldLabel").Text = $"You found {RewardContext.GoldAwarded} gold.";
+        GetNode<Label>("CenterContainer/VBoxContainer/GoldLabel").Text = $"You found {RewardContext.GoldAwarded} gold.";
 
         var cardButtons = new[]
         {
-            GetNode<Button>("CardChoice0"),
-            GetNode<Button>("CardChoice1"),
-            GetNode<Button>("CardChoice2"),
+            GetNode<Button>("CenterContainer/VBoxContainer/CardChoice0"),
+            GetNode<Button>("CenterContainer/VBoxContainer/CardChoice1"),
+            GetNode<Button>("CenterContainer/VBoxContainer/CardChoice2"),
         };
 
         for (int i = 0; i < cardButtons.Length; i++)
@@ -30,7 +30,7 @@ public partial class RewardScreen : Control
             cardButtons[i].Pressed += () => OnCardChosen(card);
         }
 
-        GetNode<Button>("SkipButton").Pressed += OnSkipPressed;
+        GetNode<Button>("CenterContainer/VBoxContainer/SkipButton").Pressed += OnSkipPressed;
     }
 
     private void OnCardChosen(CardDefinition card)
