@@ -12,6 +12,7 @@ public partial class RestScreen : Control
 
     public override void _Ready()
     {
+        ScreenBackground.Attach(this, "dirt", new Color(0.5f, 0.42f, 0.35f));
         int healAmount = Mathf.RoundToInt(RunState.PlayerMaxHp * HealFraction);
         var healButton = GetNode<Button>("CenterContainer/VBoxContainer/HealButton");
         healButton.Text = $"Rest - Heal {healAmount} HP";

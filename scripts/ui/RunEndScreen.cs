@@ -10,6 +10,7 @@ public partial class RunEndScreen : Control
 
     public override void _Ready()
     {
+        ScreenBackground.Attach(this, "demonic", new Color(0.75f, 0.7f, 0.7f));
         bool won = RunEndContext.Outcome == RunEndOutcome.Win;
 
         int shards = RunCompletionShards + (won ? RunWinBonusShards : 0);

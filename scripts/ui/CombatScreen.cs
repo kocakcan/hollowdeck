@@ -21,6 +21,7 @@ public partial class CombatScreen : Control
     private Label _blockLabel = null!;
     private Label _energyLabel = null!;
     private Label _pileCountsLabel = null!;
+    private HBoxContainer _playerStatusRow = null!;
     private Label _targetHintLabel = null!;
     private Button _endTurnButton = null!;
     private Control _combatEndPanel = null!;
@@ -40,6 +41,7 @@ public partial class CombatScreen : Control
 
     public override void _Ready()
     {
+        ScreenBackground.Attach(this, "crypt", new Color(0.75f, 0.75f, 0.8f));
         _combat = GetNode<CombatManager>("CombatManager");
         _enemyRow = GetNode<HBoxContainer>("EnemyRow");
         _handArea = GetNode<Control>("HandArea");
@@ -49,6 +51,7 @@ public partial class CombatScreen : Control
         _blockLabel = GetNode<Label>("PlayerInfoPanel/BlockLabel");
         _energyLabel = GetNode<Label>("PlayerInfoPanel/EnergyLabel");
         _pileCountsLabel = GetNode<Label>("PileCountsLabel");
+        _playerStatusRow = GetNode<HBoxContainer>("PlayerStatusRow");
         _targetHintLabel = GetNode<Label>("TargetHintLabel");
         _endTurnButton = GetNode<Button>("EndTurnButton");
         _combatEndPanel = GetNode<Control>("CombatEndPanel");
@@ -150,6 +153,7 @@ public partial class CombatScreen : Control
         _energyLabel.Text = $"Energy {player.CurrentEnergy}/{player.MaxEnergy}";
         _pileCountsLabel.Text =
             $"Draw {player.Piles.DrawPile.Count} · Discard {player.Piles.Discard.Count} · Exhaust {player.Piles.Exhaust.Count}";
+        StatusRow.Populate(_playerStatusRow, player, 20);
     }
 
     private void RefreshHand()

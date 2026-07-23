@@ -39,6 +39,19 @@ public partial class ArtScreenshot : Node
 
         var combat = GD.Load<PackedScene>("res://scenes/CombatScreen.tscn").Instantiate();
         AddChild(combat);
+
+        // Seed some statuses so the status rows are visible in the shot,
+        // then poke the screen's private Refresh to redraw them.
+        var manager = Hollowdeck.Combat.CombatManager.Instance;
+        manager.Player.AddStatus(StatusType.Strength, 2);
+        manager.Player.AddStatus(StatusType.Poison, 3);
+        manager.Enemies[0].AddStatus(StatusType.Weak, 2);
+        manager.Enemies[1].AddStatus(StatusType.Vulnerable, 2);
+        manager.Enemies[1].AddStatus(StatusType.Poison, 4);
+        typeof(UI.CombatScreen)
+            .GetMethod("Refresh", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .Invoke(combat, null);
+
         await Snapshot("user://art_screenshot.png");
         RemoveChild(combat);
         combat.QueueFree();

@@ -14,6 +14,7 @@ public partial class MetaProgressionScreen : Control
 
     public override void _Ready()
     {
+        ScreenBackground.Attach(this, "etched", new Color(0.75f, 0.75f, 0.8f));
         _shardsLabel = GetNode<Label>("ShardsLabel");
         _relicUnlocksList = GetNode<VBoxContainer>("RelicUnlocksList");
         _seedHistoryList = GetNode<VBoxContainer>("SeedHistoryList");

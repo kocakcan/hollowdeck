@@ -7,6 +7,7 @@ public partial class SettingsScreen : Control
 {
     public override void _Ready()
     {
+        ScreenBackground.Attach(this, "black_cobalt", new Color(0.7f, 0.7f, 0.75f));
         var volumeSlider = GetNode<HSlider>("CenterContainer/VBoxContainer/VolumeSlider");
         volumeSlider.Value = SettingsManager.Instance.MasterVolume;
         volumeSlider.ValueChanged += v => SettingsManager.Instance.SetMasterVolume((float)v);

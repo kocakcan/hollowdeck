@@ -1,4 +1,5 @@
 using Godot;
+using Hollowdeck.Combat;
 using Hollowdeck.Data;
 using Hollowdeck.Map;
 
@@ -34,6 +35,11 @@ public static class ArtAssets
         IntentType.Buff => "buff",
         _ => "unknown",
     }}.svg");
+
+    public static Texture2D? StatusIcon(StatusType type) =>
+        Load($"res://assets/icons/status/{type.ToString().ToLowerInvariant()}.svg");
+
+    public static Texture2D? BackgroundTile(string name) => Load($"res://assets/backgrounds/{name}.png");
 
     private static Texture2D? Load(string path) =>
         ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : null;

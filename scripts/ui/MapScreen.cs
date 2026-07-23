@@ -26,6 +26,7 @@ public partial class MapScreen : Control
 
     public override void _Ready()
     {
+        ScreenBackground.Attach(this, "black_cobalt", new Color(0.85f, 0.85f, 0.9f));
         _nodeButtons = GetNode<Control>("NodeButtons");
         _goldLabel = GetNode<Label>("GoldLabel");
         _relicsRow = GetNode<HBoxContainer>("RelicsRow");

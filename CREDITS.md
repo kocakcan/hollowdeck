@@ -15,6 +15,11 @@ The 32×32 pixel sprites in `assets/sprites/` come from the
 | Possessed Armor | `undead/ancient_champion.png` |
 | Hollow King | `undead/ancient_lich.png` |
 
+The tiled screen backgrounds in `assets/backgrounds/` are from the same set
+(`crawl-ref/source/rltiles/dngn/floor/`, CC0, upscaled 2×): `crypt0`,
+`black_cobalt01`, `dirt0`, `etched0`, `cobble_blood1`, `floor_gulch0`,
+`demonic_red1`.
+
 ## Icons — game-icons.net (CC BY 3.0)
 
 All SVG icons in `assets/icons/` are from [game-icons.net](https://game-icons.net),
@@ -23,6 +28,7 @@ They were recolored (white on transparent) but otherwise unmodified. Icons by au
 
 - **Lorc** (https://lorcblog.blogspot.com): anchor, axe-swing, barbed-spear,
   bordered-shield, bottle-vapors, bottled-bolt, brainstorm, broken-bottle, campfire,
+  cracked-saber, cracked-shield,
   crossed-swords, crowned-skull, evil-book, fanged-skull, fire-bottle, fizzing-flask,
   flying-flag, gears, ghost, hammer-drop, heart-bottle, heart-drop, hourglass,
   lightning-arc, lightning-mask, magic-shield, meditation, microscope-lens,
@@ -34,7 +40,7 @@ They were recolored (white on transparent) but otherwise unmodified. Icons by au
   coins-pile, dart, drum, health-potion, snake-spiral, stone-wall, totem, two-coins,
   warhammer
 - **Skoll** (https://game-icons.net): blood, fangs, open-treasure-chest
-- **sbed** (https://opengameart.org/content/95-game-icons): death-skull, shield
+- **sbed** (https://opengameart.org/content/95-game-icons): death-skull, poison, shield
 - **Willdabeast** (https://wjbstories.blogspot.com): black-book, round-shield
 - **Andy Meneely** (https://www.se.rit.edu/~andy/): riposte
 - **Caro Asercion** (https://game-icons.net): coinflip

@@ -18,6 +18,7 @@ public partial class EnemyView : Button
     private Label _hpLabel = null!;
     private TextureRect _intentIcon = null!;
     private Label _intentLabel = null!;
+    private HBoxContainer _statusRow = null!;
 
     public override void _Ready()
     {
@@ -26,6 +27,7 @@ public partial class EnemyView : Button
         _hpLabel = GetNode<Label>("VBox/HpLabel");
         _intentIcon = GetNode<TextureRect>("VBox/IntentRow/IntentIcon");
         _intentLabel = GetNode<Label>("VBox/IntentRow/IntentLabel");
+        _statusRow = GetNode<HBoxContainer>("VBox/StatusRow");
         _sprite.Texture = ArtAssets.EnemySprite(Combatant.Definition.Id);
         Pressed += OnPressed;
         Instances.Add(this);
@@ -46,6 +48,7 @@ public partial class EnemyView : Button
         _intentIcon.Texture = intent is null ? null : ArtAssets.IntentIcon(intent.Type);
         _intentIcon.Visible = _intentIcon.Texture is not null;
         _intentLabel.Text = FormatIntent(intent);
+        StatusRow.Populate(_statusRow, Combatant, 16);
     }
 
     private static string FormatIntent(EnemyIntent? intent)

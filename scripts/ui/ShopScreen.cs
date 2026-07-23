@@ -18,6 +18,7 @@ public partial class ShopScreen : Control
 
     public override void _Ready()
     {
+        ScreenBackground.Attach(this, "cobble", new Color(0.7f, 0.7f, 0.75f));
         _goldLabel = GetNode<Label>("GoldLabel");
         _offersList = GetNode<VBoxContainer>("OffersList");
         GetNode<Button>("LeaveButton").Pressed += OnLeavePressed;
