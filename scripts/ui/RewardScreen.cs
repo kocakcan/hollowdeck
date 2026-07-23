@@ -28,6 +28,12 @@ public partial class RewardScreen : Control
         {
             var row = new VBoxContainer();
             var button = new Button { Text = $"{card.Name} ({card.Type}, cost {card.Cost})" };
+            if (ArtAssets.CardIcon(card.Id) is { } icon)
+            {
+                button.Icon = icon;
+                button.ExpandIcon = true;
+                button.CustomMinimumSize = new Vector2(0, 36);
+            }
             var description = new Label
             {
                 Text = EffectDescriptionFormatter.Describe(card.Effects),

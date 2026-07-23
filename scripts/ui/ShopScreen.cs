@@ -29,7 +29,7 @@ public partial class ShopScreen : Control
         foreach (var card in Sample(CardDatabase.All.ToList(), 4, rng))
         {
             AddOfferRow($"{card.Name} (card) - {CardPrice}g", EffectDescriptionFormatter.Describe(card.Effects),
-                CardPrice, () => RunState.Deck.Add(card));
+                CardPrice, () => RunState.Deck.Add(card), ArtAssets.CardIcon(card.Id));
         }
 
         var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
@@ -39,7 +39,7 @@ public partial class ShopScreen : Control
         foreach (var relic in Sample(availableRelics, 2, rng))
         {
             AddOfferRow($"{relic.Name} (relic) - {RelicPrice}g", relic.Description, RelicPrice,
-                () => RunState.Relics.Add(new RelicInstance(relic)));
+                () => RunState.Relics.Add(new RelicInstance(relic)), ArtAssets.RelicIcon(relic.Id));
         }
 
         // All potions unlocked too - same reasoning as cards above.
@@ -51,7 +51,7 @@ public partial class ShopScreen : Control
                 if (RunState.Potions.Count >= RunState.MaxPotionSlots) return false;
                 RunState.Potions.Add(new PotionInstance(potion));
                 return true;
-            });
+            }, ArtAssets.PotionIcon(potion.Id));
         }
 
         RefreshGoldLabel();
@@ -68,13 +68,19 @@ public partial class ShopScreen : Control
         return copy.Take(count).ToList();
     }
 
-    private void AddOfferRow(string label, string description, int price, System.Action onBuy) =>
-        AddOfferRow(label, description, price, () => { onBuy(); return true; });
+    private void AddOfferRow(string label, string description, int price, System.Action onBuy, Texture2D? icon = null) =>
+        AddOfferRow(label, description, price, () => { onBuy(); return true; }, icon);
 
-    private void AddOfferRow(string label, string description, int price, System.Func<bool> onBuy)
+    private void AddOfferRow(string label, string description, int price, System.Func<bool> onBuy, Texture2D? icon = null)
     {
         var row = new VBoxContainer();
         var button = new Button { Text = label };
+        if (icon is not null)
+        {
+            button.Icon = icon;
+            button.ExpandIcon = true;
+            button.CustomMinimumSize = new Vector2(0, 36);
+        }
         var descriptionLabel = new Label
         {
             Text = description,

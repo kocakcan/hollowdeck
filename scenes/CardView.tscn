@@ -15,6 +15,10 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 6.0
+offset_top = 6.0
+offset_right = -6.0
+offset_bottom = -6.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
@@ -25,9 +29,19 @@ mouse_filter = 2
 horizontal_alignment = 1
 text = "Strike (1)"
 
+[node name="ArtIcon" type="TextureRect" parent="VBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+self_modulate = Color(1, 1, 1, 0.92)
+
 [node name="DescriptionLabel" type="Label" parent="VBox"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_font_sizes/font_size = 13
 horizontal_alignment = 1
 autowrap_mode = 3
 text = "Deal 6 damage."

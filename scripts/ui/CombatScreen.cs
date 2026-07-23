@@ -60,6 +60,8 @@ public partial class CombatScreen : Control
         _potionViewScene = GD.Load<PackedScene>("res://scenes/PotionView.tscn");
         _floatingTextScene = GD.Load<PackedScene>("res://scenes/FloatingText.tscn");
 
+        GetNode<TextureRect>("PlayerSprite").Texture = ArtAssets.PlayerSprite();
+
         _endTurnButton.Pressed += () => _combat.TryEndTurn();
         _continueButton.Pressed += OnContinuePressed;
 
@@ -94,11 +96,27 @@ public partial class CombatScreen : Control
 
         foreach (var relic in RunState.Relics)
         {
-            _relicBar.AddChild(new Label
+            var tooltip = $"{relic.Definition.Name}\n{relic.Definition.Description}";
+            if (ArtAssets.RelicIcon(relic.Definition.Id) is { } icon)
             {
-                Text = relic.Definition.Name,
-                TooltipText = relic.Definition.Description,
-            });
+                _relicBar.AddChild(new TextureRect
+                {
+                    Texture = icon,
+                    CustomMinimumSize = new Vector2(34, 34),
+                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                    TooltipText = tooltip,
+                    MouseFilter = MouseFilterEnum.Stop,
+                });
+            }
+            else
+            {
+                _relicBar.AddChild(new Label
+                {
+                    Text = relic.Definition.Name,
+                    TooltipText = tooltip,
+                });
+            }
         }
     }
 

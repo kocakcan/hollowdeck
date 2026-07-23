@@ -27,6 +27,7 @@ public partial class CardView : Panel
     public CardInstance? CardInstance { get; private set; }
 
     private Label _nameLabel = null!;
+    private TextureRect _artIcon = null!;
     private Label _descriptionLabel = null!;
     private bool _dragging;
     private Vector2 _homePosition;
@@ -36,6 +37,7 @@ public partial class CardView : Panel
         PivotOffset = Size / 2f;
         _homePosition = Position;
         _nameLabel = GetNode<Label>("VBox/NameLabel");
+        _artIcon = GetNode<TextureRect>("VBox/ArtIcon");
         _descriptionLabel = GetNode<Label>("VBox/DescriptionLabel");
         MouseEntered += OnMouseEntered;
         MouseExited += OnMouseExited;
@@ -46,9 +48,26 @@ public partial class CardView : Panel
         CardInstance = card;
         if (_nameLabel is null) return;
         _nameLabel.Text = $"{card.Definition.Name} ({card.Definition.Cost})";
+        _artIcon.Texture = ArtAssets.CardIcon(card.Definition.Id);
+        AddThemeStyleboxOverride("panel", FrameStyle(card.Definition.Type));
         // Live player context (Strength/Weak) so the shown damage number is
         // always what would actually land, not stale hand-authored prose.
         _descriptionLabel.Text = EffectDescriptionFormatter.Describe(card.Definition.Effects, CombatManager.Instance?.Player);
+    }
+
+    // Attack/Skill get distinct frame colors so card type reads at a glance,
+    // matching the genre convention of color-coded card frames.
+    private static StyleBoxFlat FrameStyle(CardType type)
+    {
+        var isAttack = type == CardType.Attack;
+        var style = new StyleBoxFlat
+        {
+            BgColor = isAttack ? new Color(0.32f, 0.13f, 0.13f) : new Color(0.12f, 0.26f, 0.22f),
+            BorderColor = isAttack ? new Color(0.65f, 0.32f, 0.28f) : new Color(0.3f, 0.55f, 0.45f),
+        };
+        style.SetBorderWidthAll(2);
+        style.SetCornerRadiusAll(10);
+        return style;
     }
 
     public void SetHomePosition(Vector2 pos)

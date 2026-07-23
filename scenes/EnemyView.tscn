@@ -17,6 +17,14 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
+[node name="Sprite" type="TextureRect" parent="VBox"]
+custom_minimum_size = Vector2(0, 84)
+layout_mode = 2
+mouse_filter = 2
+texture_filter = 1
+expand_mode = 1
+stretch_mode = 5
+
 [node name="NameLabel" type="Label" parent="VBox"]
 layout_mode = 2
 mouse_filter = 2
@@ -29,7 +37,19 @@ mouse_filter = 2
 horizontal_alignment = 1
 text = "HP 0/0"
 
-[node name="IntentLabel" type="Label" parent="VBox"]
+[node name="IntentRow" type="HBoxContainer" parent="VBox"]
+layout_mode = 2
+mouse_filter = 2
+alignment = 1
+
+[node name="IntentIcon" type="TextureRect" parent="VBox/IntentRow"]
+custom_minimum_size = Vector2(22, 22)
+layout_mode = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="IntentLabel" type="Label" parent="VBox/IntentRow"]
 layout_mode = 2
 mouse_filter = 2
 horizontal_alignment = 1

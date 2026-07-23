@@ -13,15 +13,20 @@ public partial class EnemyView : Button
 
     public EnemyCombatant Combatant { get; set; } = null!;
 
+    private TextureRect _sprite = null!;
     private Label _nameLabel = null!;
     private Label _hpLabel = null!;
+    private TextureRect _intentIcon = null!;
     private Label _intentLabel = null!;
 
     public override void _Ready()
     {
+        _sprite = GetNode<TextureRect>("VBox/Sprite");
         _nameLabel = GetNode<Label>("VBox/NameLabel");
         _hpLabel = GetNode<Label>("VBox/HpLabel");
-        _intentLabel = GetNode<Label>("VBox/IntentLabel");
+        _intentIcon = GetNode<TextureRect>("VBox/IntentRow/IntentIcon");
+        _intentLabel = GetNode<Label>("VBox/IntentRow/IntentLabel");
+        _sprite.Texture = ArtAssets.EnemySprite(Combatant.Definition.Id);
         Pressed += OnPressed;
         Instances.Add(this);
         Refresh();
@@ -37,7 +42,10 @@ public partial class EnemyView : Button
         _nameLabel.Text = Combatant.Name;
         _hpLabel.Text = $"HP {Combatant.CurrentHp}/{Combatant.MaxHp}" +
                          (Combatant.Block > 0 ? $"  🛡{Combatant.Block}" : "");
-        _intentLabel.Text = FormatIntent(Combatant.CurrentMove?.Intent);
+        var intent = Combatant.CurrentMove?.Intent;
+        _intentIcon.Texture = intent is null ? null : ArtAssets.IntentIcon(intent.Type);
+        _intentIcon.Visible = _intentIcon.Texture is not null;
+        _intentLabel.Text = FormatIntent(intent);
     }
 
     private static string FormatIntent(EnemyIntent? intent)
@@ -45,8 +53,8 @@ public partial class EnemyView : Button
         if (intent is null) return "";
         return intent.Type switch
         {
-            IntentType.Attack => $"⚔ {intent.DisplayAmount}",
-            IntentType.Defend => "🛡",
+            IntentType.Attack => $"{intent.DisplayAmount}",
+            IntentType.Defend => "",
             IntentType.Buff => $"+{intent.DisplayAmount} Str",
             _ => "",
         };

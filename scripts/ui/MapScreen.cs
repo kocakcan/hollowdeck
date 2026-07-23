@@ -74,12 +74,24 @@ public partial class MapScreen : Control
             bool isReachable = reachable.Contains(node.Id);
             var button = new Button
             {
-                Text = NodeLabel(node.Type),
                 Position = center - new Vector2(NodeSize / 2f, NodeSize / 2f),
                 Size = new Vector2(NodeSize, NodeSize),
                 Disabled = !isReachable,
                 Modulate = RunState.VisitedNodeIds.Contains(node.Id) ? new Color(0.6f, 0.6f, 0.6f) : Colors.White,
+                TooltipText = NodeLabel(node.Type),
             };
+            // Icon-only node buttons when art exists; text label fallback.
+            var icon = ArtAssets.MapIcon(node.Type);
+            if (icon is not null)
+            {
+                button.Icon = icon;
+                button.ExpandIcon = true;
+                button.IconAlignment = HorizontalAlignment.Center;
+            }
+            else
+            {
+                button.Text = NodeLabel(node.Type);
+            }
             if (isReachable)
             {
                 button.Pressed += () => OnNodeChosen(node);
