@@ -16,6 +16,7 @@ public partial class CombatScreen : Control
     private HBoxContainer _enemyRow = null!;
     private Control _handArea = null!;
     private HBoxContainer _potionBelt = null!;
+    private HBoxContainer _relicBar = null!;
     private Label _hpLabel = null!;
     private Label _blockLabel = null!;
     private Label _energyLabel = null!;
@@ -36,6 +37,7 @@ public partial class CombatScreen : Control
         _enemyRow = GetNode<HBoxContainer>("EnemyRow");
         _handArea = GetNode<Control>("HandArea");
         _potionBelt = GetNode<HBoxContainer>("PotionBelt");
+        _relicBar = GetNode<HBoxContainer>("RelicBar");
         _hpLabel = GetNode<Label>("PlayerInfoPanel/HpLabel");
         _blockLabel = GetNode<Label>("PlayerInfoPanel/BlockLabel");
         _energyLabel = GetNode<Label>("PlayerInfoPanel/EnergyLabel");
@@ -71,6 +73,25 @@ public partial class CombatScreen : Control
             .ToList();
 
         _combat.StartCombat(player, enemies, RunState.Relics);
+        RefreshRelics();
+    }
+
+    private void RefreshRelics()
+    {
+        foreach (var child in _relicBar.GetChildren())
+        {
+            _relicBar.RemoveChild(child);
+            child.QueueFree();
+        }
+
+        foreach (var relic in RunState.Relics)
+        {
+            _relicBar.AddChild(new Label
+            {
+                Text = relic.Definition.Name,
+                TooltipText = relic.Definition.Description,
+            });
+        }
     }
 
     public override void _UnhandledInput(InputEvent @event)

@@ -45,3 +45,10 @@ layout_mode = 0
 offset_left = 24.0
 offset_top = 208.0
 text = "Open Treasure"
+
+[node name="RelicsLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 248.0
+offset_right = 1100.0
+text = "Relics: none yet"

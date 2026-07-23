@@ -1,5 +1,6 @@
 using Godot;
 using Hollowdeck.Combat;
+using Hollowdeck.Data;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
@@ -10,10 +11,12 @@ namespace Hollowdeck.UI;
 // conflict a real HBoxContainer would cause during drag (the seam Phase 0's
 // prototype flagged), at the cost of the spawner doing its own row layout.
 //
-// On release: if CombatManager rejects the play, or the play requires enemy
-// targeting (hasn't left the hand yet), snap back to home. If it resolved
-// synchronously, do nothing - CombatManager's HandChanged rebuild will free
-// this node.
+// On release: for a SingleEnemy card, hit-test EnemyView.Instances against
+// the drop position and target whichever enemy (if any) the card was
+// dropped on - same drag-to-target feel as the genre reference. Dropped
+// with no enemy under it, or rejected by CombatManager (wrong state, not
+// enough energy), it snaps back to home. If it resolved, do nothing -
+// CombatManager's HandChanged rebuild will free this node.
 public partial class CardView : Panel
 {
     private static readonly Vector2 HoverScale = new(1.08f, 1.08f);
@@ -22,6 +25,7 @@ public partial class CardView : Panel
     public CardInstance? CardInstance { get; private set; }
 
     private Label _nameLabel = null!;
+    private Label _descriptionLabel = null!;
     private bool _dragging;
     private Vector2 _homePosition;
 
@@ -29,7 +33,8 @@ public partial class CardView : Panel
     {
         PivotOffset = Size / 2f;
         _homePosition = Position;
-        _nameLabel = GetNode<Label>("NameLabel");
+        _nameLabel = GetNode<Label>("VBox/NameLabel");
+        _descriptionLabel = GetNode<Label>("VBox/DescriptionLabel");
         MouseEntered += OnMouseEntered;
         MouseExited += OnMouseExited;
     }
@@ -37,8 +42,9 @@ public partial class CardView : Panel
     public void SetCardInstance(CardInstance card)
     {
         CardInstance = card;
-        if (_nameLabel is not null) _nameLabel.Text = $"{card.Definition.Name} ({card.Definition.Cost})";
-        TooltipText = card.Definition.Description;
+        if (_nameLabel is null) return;
+        _nameLabel.Text = $"{card.Definition.Name} ({card.Definition.Cost})";
+        _descriptionLabel.Text = card.Definition.Description;
     }
 
     public void SetHomePosition(Vector2 pos)
@@ -97,7 +103,23 @@ public partial class CardView : Panel
             return;
         }
 
-        bool resolved = CombatManager.Instance.TryPlayCard(CardInstance);
+        EnemyCombatant? target = null;
+        if (CardInstance.Definition.Target == CardTargetType.SingleEnemy)
+        {
+            target = FindEnemyUnderMouse();
+        }
+
+        bool resolved = CombatManager.Instance.TryPlayCard(CardInstance, target);
         if (!resolved) SnapHome();
+    }
+
+    private EnemyCombatant? FindEnemyUnderMouse()
+    {
+        var mousePos = GetGlobalMousePosition();
+        foreach (var enemyView in EnemyView.Instances)
+        {
+            if (enemyView.GetGlobalRect().HasPoint(mousePos)) return enemyView.Combatant;
+        }
+        return null;
     }
 }

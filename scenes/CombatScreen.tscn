@@ -41,6 +41,13 @@ custom_minimum_size = Vector2(140, 0)
 layout_mode = 2
 text = "Energy 0/0"
 
+[node name="RelicBar" type="HBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 250.0
+offset_right = 1128.0
+offset_bottom = 290.0
+
 [node name="PileCountsLabel" type="Label" parent="."]
 layout_mode = 0
 offset_left = 24.0

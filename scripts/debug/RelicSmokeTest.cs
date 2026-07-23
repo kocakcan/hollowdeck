@@ -27,6 +27,7 @@ public partial class RelicSmokeTest : Node
         TestOnTurnEnd_FrugalSatchel();
         TestOnCardPlayed_SkirmishersSash();
         TestOnDamageDealt_VampireFang();
+        TestCardTargeting_NoTargetRejected_ExplicitTargetResolves();
         TestOnDamageTaken_ThornedCarapace_MidRoundDeath();
         TestOnCombatEnd_SecondWindAndScavengersCharm();
 
@@ -137,10 +138,33 @@ public partial class RelicSmokeTest : Node
 
         var strike = new CardInstance(CardDatabase.Get("strike"));
         player.Piles.Hand.Add(strike);
-        combat.TryPlayCard(strike);
-        combat.TryTargetEnemy(enemy);
+        combat.TryPlayCard(strike, enemy);
 
         Check("vampire_fang_heals_on_damage_dealt", player.CurrentHp == 41, $"hp={player.CurrentHp}");
+        combat.QueueFree();
+    }
+
+    private void TestCardTargeting_NoTargetRejected_ExplicitTargetResolves()
+    {
+        var combat = NewCombat();
+        var player = MakePlayer();
+        var enemy = EnemyFactory.Create(EnemyDatabase.Get("cultist"));
+        combat.StartCombat(player, new List<EnemyCombatant> { enemy }, new List<RelicInstance>());
+
+        var strike1 = new CardInstance(CardDatabase.Get("strike"));
+        player.Piles.Hand.Add(strike1);
+        bool resolvedWithNoTarget = combat.TryPlayCard(strike1, null);
+        Check("single_enemy_card_with_no_target_is_rejected",
+            !resolvedWithNoTarget && player.Piles.Hand.Contains(strike1),
+            $"resolved={resolvedWithNoTarget} stillInHand={player.Piles.Hand.Contains(strike1)}");
+
+        var strike2 = new CardInstance(CardDatabase.Get("strike"));
+        player.Piles.Hand.Add(strike2);
+        int enemyHpBefore = enemy.CurrentHp;
+        bool resolvedWithTarget = combat.TryPlayCard(strike2, enemy);
+        Check("single_enemy_card_with_explicit_target_resolves",
+            resolvedWithTarget && !player.Piles.Hand.Contains(strike2) && enemy.CurrentHp == enemyHpBefore - 6,
+            $"resolved={resolvedWithTarget} enemyHp={enemy.CurrentHp}");
         combat.QueueFree();
     }
 
@@ -183,8 +207,7 @@ public partial class RelicSmokeTest : Node
 
         var strike = new CardInstance(CardDatabase.Get("strike"));
         player.Piles.Hand.Add(strike);
-        combat.TryPlayCard(strike);
-        combat.TryTargetEnemy(enemy); // kills the 1-hp enemy -> triggers EndCombat(Win)
+        combat.TryPlayCard(strike, enemy); // kills the 1-hp enemy -> triggers EndCombat(Win)
 
         Check("combat_ended_in_win", combat.State == CombatState.CombatEnd && combat.Outcome == CombatOutcome.Win,
             $"state={combat.State} outcome={combat.Outcome}");

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
@@ -6,6 +7,10 @@ namespace Hollowdeck.UI;
 
 public partial class EnemyView : Button
 {
+    // Lets CardView hit-test "is the mouse over an enemy" for drag-to-target,
+    // without CardView needing a reference to CombatScreen or the enemy row.
+    public static readonly List<EnemyView> Instances = new();
+
     public EnemyCombatant Combatant { get; set; } = null!;
 
     private Label _nameLabel = null!;
@@ -18,7 +23,13 @@ public partial class EnemyView : Button
         _hpLabel = GetNode<Label>("VBox/HpLabel");
         _intentLabel = GetNode<Label>("VBox/IntentLabel");
         Pressed += OnPressed;
+        Instances.Add(this);
         Refresh();
+    }
+
+    public override void _ExitTree()
+    {
+        Instances.Remove(this);
     }
 
     public void Refresh()

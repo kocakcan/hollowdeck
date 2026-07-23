@@ -41,7 +41,6 @@ public partial class CombatManager : Node
     public List<EnemyCombatant> Enemies { get; private set; } = new();
     public List<RelicInstance> Relics { get; private set; } = new();
 
-    private CardInstance? _pendingCard;
     private PotionInstance? _pendingPotion;
     private int _enemyTurnIndex;
     private List<EnemyCombatant> _enemyTurnOrder = new();
@@ -94,25 +93,19 @@ public partial class CombatManager : Node
         StateChanged?.Invoke(next);
     }
 
-    // Returns true only if the card resolved synchronously in this call (i.e.
-    // it actually left the hand) - callers (CardView) use this to decide
-    // whether to snap the dragged card back to its hand position. A card
-    // entering AwaitingTarget hasn't left the hand yet (ResolveCard runs
-    // later, from TryTargetEnemy), so it also snaps back for now; nothing
-    // else needs to track "the visual" separately from _pendingCard.
-    public bool TryPlayCard(CardInstance card)
+    // Cards are targeted by dragging directly onto an enemy (CardView hit-
+    // tests EnemyView.Instances on release and passes the result here), not
+    // via the click-based AwaitingTarget flow potions still use below - a
+    // SingleEnemy card dropped with no enemy under it is simply rejected so
+    // the caller snaps it back to hand. Returns true only if the card
+    // resolved synchronously in this call (i.e. it actually left the hand).
+    public bool TryPlayCard(CardInstance card, EnemyCombatant? explicitTarget = null)
     {
         if (State != CombatState.PlayerTurn) return false;
         if (card.Definition.Cost > Player.CurrentEnergy) return false;
+        if (card.Definition.Target == CardTargetType.SingleEnemy && explicitTarget is null) return false;
 
-        if (card.Definition.Target == CardTargetType.SingleEnemy)
-        {
-            _pendingCard = card;
-            TransitionTo(CombatState.AwaitingTarget);
-            return false;
-        }
-
-        ResolveCard(card, ResolveTargets(card.Definition.Target, null));
+        ResolveCard(card, ResolveTargets(card.Definition.Target, explicitTarget));
         return true;
     }
 
@@ -134,27 +127,18 @@ public partial class CombatManager : Node
     public void CancelTargeting()
     {
         if (State != CombatState.AwaitingTarget) return;
-        _pendingCard = null;
         _pendingPotion = null;
         TransitionTo(CombatState.PlayerTurn);
     }
 
+    // Only potions use click-to-target now - cards resolve directly through
+    // TryPlayCard's explicitTarget parameter via drag-and-drop.
     public void TryTargetEnemy(EnemyCombatant enemy)
     {
-        if (State != CombatState.AwaitingTarget) return;
-
-        if (_pendingCard is not null)
-        {
-            var card = _pendingCard;
-            _pendingCard = null;
-            ResolveCard(card, ResolveTargets(card.Definition.Target, enemy));
-        }
-        else if (_pendingPotion is not null)
-        {
-            var potion = _pendingPotion;
-            _pendingPotion = null;
-            ResolvePotion(potion, ResolveTargets(potion.Definition.Target, enemy));
-        }
+        if (State != CombatState.AwaitingTarget || _pendingPotion is null) return;
+        var potion = _pendingPotion;
+        _pendingPotion = null;
+        ResolvePotion(potion, ResolveTargets(potion.Definition.Target, enemy));
     }
 
     private List<Combatant> ResolveTargets(CardTargetType targetType, EnemyCombatant? explicitTarget)

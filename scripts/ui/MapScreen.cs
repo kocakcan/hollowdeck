@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Run;
@@ -18,11 +19,13 @@ public partial class MapScreen : Control
 
     private Label _progressLabel = null!;
     private Button _treasureButton = null!;
+    private Label _relicsLabel = null!;
 
     public override void _Ready()
     {
         _progressLabel = GetNode<Label>("ProgressLabel");
         _treasureButton = GetNode<Button>("TreasureButton");
+        _relicsLabel = GetNode<Label>("RelicsLabel");
 
         GetNode<Button>("BackButton").Pressed += OnBackPressed;
         GetNode<Button>("NextFightButton").Pressed += OnNextFightPressed;
@@ -32,6 +35,10 @@ public partial class MapScreen : Control
         int index = RunManager.Instance.CurrentEncounterIndex;
         _progressLabel.Text = $"Fight {index + 1} of {Encounters.Count}";
         _treasureButton.Visible = !RunState.TreasureClaimed && index == TreasureAtEncounterIndex;
+
+        _relicsLabel.Text = RunState.Relics.Count == 0
+            ? "Relics: none yet"
+            : $"Relics: {string.Join(", ", RunState.Relics.Select(r => r.Definition.Name))}";
     }
 
     private void OnBackPressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.MainMenu);
