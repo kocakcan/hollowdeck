@@ -1,0 +1,17 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Mono/.NET-specific ignores
+.mono/
+data_*/
+
+# C#/.NET build artifacts (the .sln/.csproj themselves ARE committed)
+.vs/
+.idea/
+bin/
+obj/
+*.csproj.user
+
+# OS cruft
+.DS_Store
