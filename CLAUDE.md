@@ -2,17 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current state of this repo
-
-This repo is **pre-implementation**. It currently contains only `hollowdeck.md`, a tech-stack and
-architecture plan — no Godot project, no source code, and no build/test tooling exist yet. There
-are no build/lint/test commands to document because nothing has been scaffolded.
-
-When asked to start implementing, treat `hollowdeck.md` as the source of truth for stack and
-architecture decisions below, and scaffold the Godot project per "Build Sequencing" (Phase 0
-first). Update this CLAUDE.md with real commands (Godot CLI invocations for headless
-export/test runs, GUT test commands, etc.) once the project exists.
-
 ## Project
 
 Hollowdeck is a standalone desktop deckbuilder roguelike in the vein of Slay the Spire:
@@ -46,16 +35,6 @@ implementations (`DealDamageEffect`, `ApplyStatusEffect`, `DrawCardsEffect`, ...
 new data rows, not new classes — a one-class-per-card approach becomes unmaintainable at
 hundreds-of-cards scale. Reserve a small `IScriptedEffect` escape hatch for the rare card that
 doesn't decompose into existing effects.
-
-Intended layout once scaffolded:
-```
-/data/cards/*.json /relics/*.json /enemies/*.json /potions/*.json
-/scripts/effects/    — IEffect implementations + EffectRegistry
-/scripts/run/         — RunManager (autoload), deck/pile management
-/scripts/combat/       — CombatManager: turn loop, intent telegraphing, targeting
-/scripts/map/            — map generation, node graph
-/scenes/{MapScreen,CombatScreen,ShopScreen,RewardScreen,MetaProgressionScreen}.tscn
-```
 
 **State machine:** `RunManager` (autoload) owns run state and drives scene transitions:
 MainMenu → RunSetup → MapScreen → {Combat, Elite, Event, Rest, Shop, Treasure} → RewardScreen →
