@@ -20,6 +20,7 @@ grow_vertical = 2
 
 [node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
 layout_mode = 2
+custom_minimum_size = Vector2(420, 0)
 
 [node name="TitleLabel" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
@@ -31,17 +32,8 @@ layout_mode = 2
 horizontal_alignment = 1
 text = "You found 0 gold."
 
-[node name="CardChoice0" type="Button" parent="CenterContainer/VBoxContainer"]
+[node name="ChoicesList" type="VBoxContainer" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
-text = "Card 1"
-
-[node name="CardChoice1" type="Button" parent="CenterContainer/VBoxContainer"]
-layout_mode = 2
-text = "Card 2"
-
-[node name="CardChoice2" type="Button" parent="CenterContainer/VBoxContainer"]
-layout_mode = 2
-text = "Card 3"
 
 [node name="SkipButton" type="Button" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2

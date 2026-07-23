@@ -2,7 +2,6 @@
   {
 	"id": "strike",
 	"name": "Strike",
-	"description": "Deal 6 damage.",
 	"cost": 1,
 	"type": "Attack",
 	"target": "SingleEnemy",
@@ -14,7 +13,6 @@
   {
 	"id": "defend",
 	"name": "Defend",
-	"description": "Gain 5 Block.",
 	"cost": 1,
 	"type": "Skill",
 	"target": "Self",
@@ -26,7 +24,6 @@
   {
 	"id": "bash",
 	"name": "Bash",
-	"description": "Deal 8 damage. Apply 2 Vulnerable.",
 	"cost": 2,
 	"type": "Attack",
 	"target": "SingleEnemy",
@@ -39,7 +36,6 @@
   {
 	"id": "cleave",
 	"name": "Cleave",
-	"description": "Deal 8 damage to all enemies.",
 	"cost": 1,
 	"type": "Attack",
 	"target": "AllEnemies",
@@ -51,7 +47,6 @@
   {
 	"id": "iron_wave",
 	"name": "Iron Wave",
-	"description": "Deal 5 damage. Gain 5 Block.",
 	"cost": 1,
 	"type": "Attack",
 	"target": "SingleEnemy",
@@ -64,7 +59,6 @@
   {
 	"id": "shrug_it_off",
 	"name": "Shrug It Off",
-	"description": "Gain 8 Block. Draw 1 card.",
 	"cost": 1,
 	"type": "Skill",
 	"target": "Self",
@@ -77,7 +71,6 @@
   {
 	"id": "thunderclap",
 	"name": "Thunderclap",
-	"description": "Deal 4 damage to all enemies. Apply 1 Vulnerable to all enemies.",
 	"cost": 1,
 	"type": "Attack",
 	"target": "AllEnemies",
@@ -90,7 +83,6 @@
   {
 	"id": "flex",
 	"name": "Flex",
-	"description": "Gain 2 Strength.",
 	"cost": 0,
 	"type": "Skill",
 	"target": "Self",
@@ -102,7 +94,6 @@
   {
 	"id": "clothesline",
 	"name": "Clothesline",
-	"description": "Deal 12 damage. Apply 2 Weak.",
 	"cost": 2,
 	"type": "Attack",
 	"target": "SingleEnemy",
@@ -115,7 +106,6 @@
   {
 	"id": "focus",
 	"name": "Focus",
-	"description": "Draw 2 cards.",
 	"cost": 1,
 	"type": "Skill",
 	"target": "Self",

@@ -31,6 +31,7 @@ public partial class EffectSmokeTest : Node
         TestGainBlockAndDraw();
         TestHeal();
         TestGainEnergy();
+        TestEffectDescriptionFormatter();
 
         GD.Print($"EffectSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -164,5 +165,26 @@ public partial class EffectSmokeTest : Node
 
         EffectRegistry.Execute(ctx, new EffectSpec { Action = "gain_energy", Amount = 2 });
         Check("gain_energy", player.CurrentEnergy == 3, $"energy={player.CurrentEnergy}");
+    }
+
+    private void TestEffectDescriptionFormatter()
+    {
+        var strike = CardDatabase.Get("strike");
+
+        var noContext = EffectDescriptionFormatter.Describe(strike.Effects);
+        Check("description_base_damage_with_no_player_context", noContext.Contains("Deal 6 damage"),
+            $"text='{noContext}'");
+        Check("description_shows_vulnerable_preview", noContext.Contains("~9 vs Vulnerable"),
+            $"text='{noContext}'");
+
+        var strongPlayer = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 50 };
+        strongPlayer.AddStatus(StatusType.Strength, 2);
+        var withStrength = EffectDescriptionFormatter.Describe(strike.Effects, strongPlayer);
+        Check("description_reflects_live_strength", withStrength.Contains("Deal 8 damage"),
+            $"text='{withStrength}' (expected 6 base + 2 strength = 8)");
+
+        var flex = CardDatabase.Get("flex");
+        var flexText = EffectDescriptionFormatter.Describe(flex.Effects);
+        Check("description_self_strength_reads_as_gain", flexText == "Gain 2 Strength.", $"text='{flexText}'");
     }
 }

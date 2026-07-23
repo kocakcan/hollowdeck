@@ -1,5 +1,6 @@
 using Godot;
 using Hollowdeck.Combat;
+using Hollowdeck.Effects;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
@@ -12,7 +13,7 @@ public partial class PotionView : Button
     {
         _potion = potion;
         Text = potion.Definition.Name;
-        TooltipText = potion.Definition.Description;
+        TooltipText = EffectDescriptionFormatter.Describe(potion.Definition.Effects, CombatManager.Instance?.Player);
     }
 
     public override void _Ready()

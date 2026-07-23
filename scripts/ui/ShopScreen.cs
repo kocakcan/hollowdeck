@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Hollowdeck.Data;
+using Hollowdeck.Effects;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
@@ -25,20 +26,22 @@ public partial class ShopScreen : Control
 
         foreach (var card in Sample(CardDatabase.All.ToList(), 4, rng))
         {
-            AddOfferRow($"{card.Name} (card) - {CardPrice}g", CardPrice, () => RunState.Deck.Add(card));
+            AddOfferRow($"{card.Name} (card) - {CardPrice}g", EffectDescriptionFormatter.Describe(card.Effects),
+                CardPrice, () => RunState.Deck.Add(card));
         }
 
         var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
         var availableRelics = RelicDatabase.All.Where(r => !ownedRelicIds.Contains(r.Id)).ToList();
         foreach (var relic in Sample(availableRelics, 2, rng))
         {
-            AddOfferRow($"{relic.Name} (relic) - {RelicPrice}g", RelicPrice,
+            AddOfferRow($"{relic.Name} (relic) - {RelicPrice}g", relic.Description, RelicPrice,
                 () => RunState.Relics.Add(new RelicInstance(relic)));
         }
 
         foreach (var potion in Sample(PotionDatabase.All.ToList(), 2, rng))
         {
-            AddOfferRow($"{potion.Name} (potion) - {PotionPrice}g", PotionPrice, () =>
+            AddOfferRow($"{potion.Name} (potion) - {PotionPrice}g", EffectDescriptionFormatter.Describe(potion.Effects),
+                PotionPrice, () =>
             {
                 if (RunState.Potions.Count >= RunState.MaxPotionSlots) return false;
                 RunState.Potions.Add(new PotionInstance(potion));
@@ -60,14 +63,20 @@ public partial class ShopScreen : Control
         return copy.Take(count).ToList();
     }
 
-    private void AddOfferRow(string label, int price, System.Action onBuy) =>
-        AddOfferRow(label, price, () => { onBuy(); return true; });
+    private void AddOfferRow(string label, string description, int price, System.Action onBuy) =>
+        AddOfferRow(label, description, price, () => { onBuy(); return true; });
 
-    private void AddOfferRow(string label, int price, System.Func<bool> onBuy)
+    private void AddOfferRow(string label, string description, int price, System.Func<bool> onBuy)
     {
-        var row = new HBoxContainer();
+        var row = new VBoxContainer();
         var button = new Button { Text = label };
+        var descriptionLabel = new Label
+        {
+            Text = description,
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
         row.AddChild(button);
+        row.AddChild(descriptionLabel);
         _offersList.AddChild(row);
 
         button.Pressed += () =>

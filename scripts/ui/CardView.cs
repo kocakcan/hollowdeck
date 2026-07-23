@@ -1,6 +1,7 @@
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
+using Hollowdeck.Effects;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
@@ -44,7 +45,9 @@ public partial class CardView : Panel
         CardInstance = card;
         if (_nameLabel is null) return;
         _nameLabel.Text = $"{card.Definition.Name} ({card.Definition.Cost})";
-        _descriptionLabel.Text = card.Definition.Description;
+        // Live player context (Strength/Weak) so the shown damage number is
+        // always what would actually land, not stale hand-authored prose.
+        _descriptionLabel.Text = EffectDescriptionFormatter.Describe(card.Definition.Effects, CombatManager.Instance?.Player);
     }
 
     public void SetHomePosition(Vector2 pos)

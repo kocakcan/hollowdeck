@@ -58,11 +58,17 @@ public partial class ScreenSmokeTest : Node
 
         var screen = LoadScene("res://scenes/RewardScreen.tscn");
         var goldLabel = screen.GetNode<Label>("CenterContainer/VBoxContainer/GoldLabel");
-        var card0 = screen.GetNode<Button>("CenterContainer/VBoxContainer/CardChoice0");
+        var choicesList = screen.GetNode<VBoxContainer>("CenterContainer/VBoxContainer/ChoicesList");
+        var firstRow = choicesList.GetChild(0);
+        var card0Button = firstRow.GetChild<Button>(0);
+        var card0Description = firstRow.GetChild<Label>(1);
         var skip = screen.GetNode<Button>("CenterContainer/VBoxContainer/SkipButton");
 
         Check("reward_gold_label_shows_awarded_amount", goldLabel.Text.Contains("25"), $"text='{goldLabel.Text}'");
-        Check("reward_card_button_shows_real_name", card0.Text.Contains("Strike"), $"text='{card0.Text}'");
+        Check("reward_has_a_row_per_choice", choicesList.GetChildCount() == 3, $"rows={choicesList.GetChildCount()}");
+        Check("reward_card_button_shows_real_name", card0Button.Text.Contains("Strike"), $"text='{card0Button.Text}'");
+        Check("reward_card_shows_mechanical_description", card0Description.Text.Contains("Deal 6 damage"),
+            $"text='{card0Description.Text}'");
         Check("reward_skip_button_has_a_handler", skip.GetSignalConnectionList("pressed").Count > 0, "no pressed connections");
         screen.QueueFree();
     }
@@ -95,6 +101,10 @@ public partial class ScreenSmokeTest : Node
 
         Check("shop_gold_label_shows_current_gold", goldLabel.Text.Contains("200"), $"text='{goldLabel.Text}'");
         Check("shop_has_offer_rows", offers.GetChildCount() == 8, $"rows={offers.GetChildCount()}");
+
+        var firstRowDescription = offers.GetChild(0).GetChild<Label>(1);
+        Check("shop_offer_shows_description", firstRowDescription.Text.Length > 0,
+            $"text='{firstRowDescription.Text}'");
         screen.QueueFree();
     }
 }

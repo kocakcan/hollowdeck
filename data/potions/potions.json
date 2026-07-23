@@ -2,7 +2,6 @@
   {
     "id": "healing_potion",
     "name": "Healing Potion",
-    "description": "Heal 20 HP.",
     "target": "Self",
     "effects": [
       { "action": "heal", "amount": 20, "scope": "Self" }
@@ -11,7 +10,6 @@
   {
     "id": "block_potion",
     "name": "Block Potion",
-    "description": "Gain 12 Block.",
     "target": "Self",
     "effects": [
       { "action": "gain_block", "amount": 12, "scope": "Self" }
@@ -20,7 +18,6 @@
   {
     "id": "fire_potion",
     "name": "Fire Potion",
-    "description": "Deal 20 damage to an enemy.",
     "target": "SingleEnemy",
     "effects": [
       { "action": "deal_damage", "amount": 20, "scope": "Target" }
@@ -29,7 +26,6 @@
   {
     "id": "weak_potion",
     "name": "Weak Potion",
-    "description": "Apply 2 Weak to all enemies.",
     "target": "AllEnemies",
     "effects": [
       { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
@@ -38,7 +34,6 @@
   {
     "id": "strength_potion",
     "name": "Strength Potion",
-    "description": "Gain 2 Strength.",
     "target": "Self",
     "effects": [
       { "action": "apply_status", "status": "Strength", "amount": 2, "scope": "Self" }
@@ -47,7 +42,6 @@
   {
     "id": "energy_potion",
     "name": "Energy Potion",
-    "description": "Gain 2 Energy.",
     "target": "Self",
     "effects": [
       { "action": "gain_energy", "amount": 2, "scope": "Self" }
@@ -56,7 +50,6 @@
   {
     "id": "focus_potion",
     "name": "Focus Potion",
-    "description": "Draw 3 cards.",
     "target": "Self",
     "effects": [
       { "action": "draw_cards", "amount": 3, "scope": "Self" }
