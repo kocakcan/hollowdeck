@@ -69,6 +69,13 @@ offset_top = 400.0
 offset_right = 1128.0
 offset_bottom = 620.0
 
+[node name="PotionBelt" type="HBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 350.0
+offset_right = 400.0
+offset_bottom = 394.0
+
 [node name="EndTurnButton" type="Button" parent="."]
 layout_mode = 0
 offset_left = 1000.0

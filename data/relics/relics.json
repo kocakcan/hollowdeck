@@ -1,0 +1,105 @@
+[
+  {
+    "id": "anchor_stone",
+    "name": "Anchor Stone",
+    "description": "At the start of combat, gain 8 Block.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCombatStart",
+    "effect": { "action": "gain_block", "amount": 8, "scope": "Self" }
+  },
+  {
+    "id": "coiled_serpent",
+    "name": "Coiled Serpent",
+    "description": "At the start of combat, gain 2 Strength.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCombatStart",
+    "effect": { "action": "apply_status", "status": "Strength", "amount": 2, "scope": "Self" }
+  },
+  {
+    "id": "gamblers_deck",
+    "name": "Gambler's Deck",
+    "description": "At the start of combat, draw 1 additional card.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCombatStart",
+    "effect": { "action": "draw_cards", "amount": 1, "scope": "Self" }
+  },
+  {
+    "id": "warded_bracer",
+    "name": "Warded Bracer",
+    "description": "At the start of each turn, gain 3 Block.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnTurnStart",
+    "effect": { "action": "gain_block", "amount": 3, "scope": "Self" }
+  },
+  {
+    "id": "focusing_lens",
+    "name": "Focusing Lens",
+    "description": "At the start of each turn, gain 1 Strength.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnTurnStart",
+    "effect": { "action": "apply_status", "status": "Strength", "amount": 1, "scope": "Self" }
+  },
+  {
+    "id": "frugal_satchel",
+    "name": "Frugal Satchel",
+    "description": "At the end of your turn, if you have 2 or more unspent Energy, gain 2 Block.",
+    "behaviorId": "frugal_satchel",
+    "params": { "amount": 2 }
+  },
+  {
+    "id": "thorned_carapace",
+    "name": "Thorned Carapace",
+    "description": "Whenever you take damage, deal 2 damage back to the attacker.",
+    "behaviorId": "thorned_carapace",
+    "params": { "amount": 2 }
+  },
+  {
+    "id": "bulwark_charm",
+    "name": "Bulwark Charm",
+    "description": "The first time you take damage each turn, gain 4 Block.",
+    "behaviorId": "bulwark_charm",
+    "params": { "amount": 4 }
+  },
+  {
+    "id": "momentum_token",
+    "name": "Momentum Token",
+    "description": "Every 3rd card you play in a turn deals 4 damage to an enemy.",
+    "behaviorId": "momentum_token",
+    "params": { "amount": 4 }
+  },
+  {
+    "id": "skirmishers_sash",
+    "name": "Skirmisher's Sash",
+    "description": "Whenever you play a Skill card, gain 1 Block.",
+    "behaviorId": "skirmishers_sash",
+    "params": { "amount": 1 }
+  },
+  {
+    "id": "ledger_of_ruin",
+    "name": "Ledger of Ruin",
+    "description": "The first Attack card you play each combat grants 1 Strength for the rest of the fight.",
+    "behaviorId": "ledger_of_ruin",
+    "params": { "amount": 1 }
+  },
+  {
+    "id": "scavengers_charm",
+    "name": "Scavenger's Charm",
+    "description": "Winning a fight with more than half your max HP grants 5 bonus gold.",
+    "behaviorId": "scavengers_charm",
+    "params": { "amount": 5 }
+  },
+  {
+    "id": "second_wind",
+    "name": "Second Wind",
+    "description": "Winning a fight heals 6 HP.",
+    "behaviorId": "second_wind",
+    "params": { "amount": 6 }
+  },
+  {
+    "id": "vampire_fang",
+    "name": "Vampire Fang",
+    "description": "Whenever you deal damage, heal 1 HP.",
+    "behaviorId": "vampire_fang",
+    "params": { "amount": 1 }
+  }
+]

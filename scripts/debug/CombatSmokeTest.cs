@@ -20,6 +20,18 @@ public partial class CombatSmokeTest : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        RelicDatabase.LoadAll();
+        PotionDatabase.LoadAll();
+
+        // CombatScreen now sources HP/deck from RunState, which this test
+        // bypasses (it never goes through RunManager.StartNewRun()) - seed
+        // it manually so the scene has something to work with.
+        RunState.PlayerMaxHp = 50;
+        RunState.PlayerCurrentHp = 50;
+        RunState.Deck = new List<CardDefinition>(CardDatabase.All);
+        RunState.Relics = new List<Hollowdeck.Run.RelicInstance>();
+        RunState.Potions = new List<Hollowdeck.Run.PotionInstance>();
+
         CombatContext.EnemyDefinitionIds = new List<string> { "cultist" };
         CombatContext.IsFinalEncounter = false;
 

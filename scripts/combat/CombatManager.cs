@@ -4,6 +4,7 @@ using System.Linq;
 using Godot;
 using Hollowdeck.Data;
 using Hollowdeck.Effects;
+using Hollowdeck.Relics;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.Combat;
@@ -31,30 +32,37 @@ public partial class CombatManager : Node
     public event Action<CombatState>? StateChanged;
     public event Action? HandChanged;
     public event Action? CombatantsChanged;
+    public event Action? PotionsChanged;
 
     public CombatState State { get; private set; } = CombatState.Start;
     public CombatOutcome Outcome { get; private set; } = CombatOutcome.None;
 
     public PlayerCombatant Player { get; private set; } = null!;
     public List<EnemyCombatant> Enemies { get; private set; } = new();
+    public List<RelicInstance> Relics { get; private set; } = new();
 
     private CardInstance? _pendingCard;
+    private PotionInstance? _pendingPotion;
     private int _enemyTurnIndex;
+    private List<EnemyCombatant> _enemyTurnOrder = new();
 
     public override void _Ready()
     {
         Instance = this;
     }
 
-    public void StartCombat(PlayerCombatant player, List<EnemyCombatant> enemies)
+    public void StartCombat(PlayerCombatant player, List<EnemyCombatant> enemies, List<RelicInstance> relics)
     {
         Player = player;
         Enemies = enemies;
+        Relics = relics;
         State = CombatState.Start;
         Outcome = CombatOutcome.None;
 
         Player.Piles.Shuffle(Player.Piles.DrawPile);
-        // OnCombatStart relic-trigger seam - no relics yet (Phase 2).
+
+        var ctx = MakeRelicContext();
+        foreach (var relic in Relics) relic.Behavior.OnCombatStart(ctx);
 
         foreach (var enemy in Enemies)
         {
@@ -65,10 +73,16 @@ public partial class CombatManager : Node
         BeginPlayerTurn();
     }
 
+    private RelicContext MakeRelicContext() => new() { Combat = this, Player = Player };
+
     private void BeginPlayerTurn()
     {
         Player.CurrentEnergy = Player.MaxEnergy;
         Player.Piles.DrawHand(5);
+
+        var ctx = MakeRelicContext();
+        foreach (var relic in Relics) relic.Behavior.OnTurnStart(ctx);
+
         HandChanged?.Invoke();
         TransitionTo(CombatState.PlayerTurn);
     }
@@ -102,19 +116,45 @@ public partial class CombatManager : Node
         return true;
     }
 
+    public bool TryUsePotion(PotionInstance potion)
+    {
+        if (State != CombatState.PlayerTurn) return false;
+
+        if (potion.Definition.Target == CardTargetType.SingleEnemy)
+        {
+            _pendingPotion = potion;
+            TransitionTo(CombatState.AwaitingTarget);
+            return false;
+        }
+
+        ResolvePotion(potion, ResolveTargets(potion.Definition.Target, null));
+        return true;
+    }
+
     public void CancelTargeting()
     {
         if (State != CombatState.AwaitingTarget) return;
         _pendingCard = null;
+        _pendingPotion = null;
         TransitionTo(CombatState.PlayerTurn);
     }
 
     public void TryTargetEnemy(EnemyCombatant enemy)
     {
-        if (State != CombatState.AwaitingTarget || _pendingCard is null) return;
-        var card = _pendingCard;
-        _pendingCard = null;
-        ResolveCard(card, ResolveTargets(card.Definition.Target, enemy));
+        if (State != CombatState.AwaitingTarget) return;
+
+        if (_pendingCard is not null)
+        {
+            var card = _pendingCard;
+            _pendingCard = null;
+            ResolveCard(card, ResolveTargets(card.Definition.Target, enemy));
+        }
+        else if (_pendingPotion is not null)
+        {
+            var potion = _pendingPotion;
+            _pendingPotion = null;
+            ResolvePotion(potion, ResolveTargets(potion.Definition.Target, enemy));
+        }
     }
 
     private List<Combatant> ResolveTargets(CardTargetType targetType, EnemyCombatant? explicitTarget)
@@ -127,6 +167,31 @@ public partial class CombatManager : Node
             CardTargetType.None => new List<Combatant>(),
             _ => new List<Combatant>(),
         };
+    }
+
+    // Wraps EffectRegistry.Execute so deal_damage effects also fire the
+    // OnDamageDealt/OnDamageTaken relic hooks, computed from actual HP lost
+    // (post-block), and always attributed to the Player since relics in
+    // this game are always player-owned.
+    private void ExecuteEffect(EffectSpec spec, Combatant source, List<Combatant> targets)
+    {
+        if (spec.Action != "deal_damage")
+        {
+            EffectRegistry.Execute(new EffectContext { Source = source, Targets = targets, Combat = this }, spec);
+            return;
+        }
+
+        var before = targets.ToDictionary(t => t, t => t.CurrentHp);
+        EffectRegistry.Execute(new EffectContext { Source = source, Targets = targets, Combat = this }, spec);
+
+        var relicCtx = MakeRelicContext();
+        foreach (var target in targets)
+        {
+            int dealt = before[target] - target.CurrentHp;
+            if (dealt <= 0) continue;
+            if (source == Player) foreach (var relic in Relics) relic.Behavior.OnDamageDealt(relicCtx, target, dealt);
+            if (target == Player) foreach (var relic in Relics) relic.Behavior.OnDamageTaken(relicCtx, source, dealt);
+        }
     }
 
     private void ResolveCard(CardInstance card, List<Combatant> targets)
@@ -144,7 +209,37 @@ public partial class CombatManager : Node
             var scopedTargets = effect.Scope == EffectScope.Self
                 ? new List<Combatant> { Player }
                 : targets;
-            EffectRegistry.Execute(new EffectContext { Source = Player, Targets = scopedTargets, Combat = this }, effect);
+            ExecuteEffect(effect, Player, scopedTargets);
+        }
+
+        var relicCtx = MakeRelicContext();
+        foreach (var relic in Relics) relic.Behavior.OnCardPlayed(relicCtx, card);
+
+        Enemies.RemoveAll(e => e.IsDead);
+        CombatantsChanged?.Invoke();
+
+        if (Enemies.Count == 0)
+        {
+            EndCombat(CombatOutcome.Win);
+            return;
+        }
+
+        TransitionTo(CombatState.PlayerTurn);
+    }
+
+    private void ResolvePotion(PotionInstance potion, List<Combatant> targets)
+    {
+        TransitionTo(CombatState.ResolvingCard);
+
+        RunState.Potions.Remove(potion);
+        PotionsChanged?.Invoke();
+
+        foreach (var effect in potion.Definition.Effects)
+        {
+            var scopedTargets = effect.Scope == EffectScope.Self
+                ? new List<Combatant> { Player }
+                : targets;
+            ExecuteEffect(effect, Player, scopedTargets);
         }
 
         Enemies.RemoveAll(e => e.IsDead);
@@ -163,10 +258,14 @@ public partial class CombatManager : Node
     {
         if (State != CombatState.PlayerTurn) return;
 
+        var relicCtx = MakeRelicContext();
+        foreach (var relic in Relics) relic.Behavior.OnTurnEnd(relicCtx);
+
         Player.Piles.DiscardHand();
         Player.DecayStatus(StatusType.Vulnerable);
         Player.DecayStatus(StatusType.Weak);
 
+        _enemyTurnOrder = new List<EnemyCombatant>(Enemies);
         _enemyTurnIndex = 0;
         TransitionTo(CombatState.EnemyTurn);
         ResolveNextEnemyTurn();
@@ -174,15 +273,32 @@ public partial class CombatManager : Node
 
     private void ResolveNextEnemyTurn()
     {
-        if (_enemyTurnIndex >= Enemies.Count)
+        if (_enemyTurnIndex >= _enemyTurnOrder.Count)
         {
+            // Block clears here, not in BeginPlayerTurn itself - it must
+            // persist through the enemy's turn (so it can absorb their
+            // attacks) and must NOT be wiped by the very first call to
+            // BeginPlayerTurn from StartCombat, which runs right after
+            // OnCombatStart relics (e.g. Anchor Stone) grant their bonus.
+            Player.Block = 0;
             BeginPlayerTurn();
             return;
         }
 
-        var enemy = Enemies[_enemyTurnIndex];
+        var enemy = _enemyTurnOrder[_enemyTurnIndex];
+        _enemyTurnIndex++;
+
+        if (enemy.IsDead)
+        {
+            // Died earlier this round (e.g. a relic retaliation kill) -
+            // nothing left to resolve for it.
+            ResolveNextEnemyTurn();
+            return;
+        }
+
         TransitionTo(CombatState.ResolvingEnemyIntent);
 
+        enemy.Block = 0;
         var move = enemy.CurrentMove!;
         var playerTargets = new List<Combatant> { Player };
         foreach (var effect in move.Effects)
@@ -190,7 +306,7 @@ public partial class CombatManager : Node
             var scopedTargets = effect.Scope == EffectScope.Self
                 ? new List<Combatant> { enemy }
                 : playerTargets;
-            EffectRegistry.Execute(new EffectContext { Source = enemy, Targets = scopedTargets, Combat = this }, effect);
+            ExecuteEffect(effect, enemy, scopedTargets);
         }
 
         if (Player.IsDead)
@@ -199,12 +315,23 @@ public partial class CombatManager : Node
             return;
         }
 
-        enemy.DecayStatus(StatusType.Vulnerable);
-        enemy.DecayStatus(StatusType.Weak);
-        AdvanceEnemyIntent(enemy);
+        Enemies.RemoveAll(e => e.IsDead);
         CombatantsChanged?.Invoke();
 
-        _enemyTurnIndex++;
+        if (Enemies.Count == 0)
+        {
+            EndCombat(CombatOutcome.Win);
+            return;
+        }
+
+        if (!enemy.IsDead)
+        {
+            enemy.DecayStatus(StatusType.Vulnerable);
+            enemy.DecayStatus(StatusType.Weak);
+            AdvanceEnemyIntent(enemy);
+            CombatantsChanged?.Invoke();
+        }
+
         ResolveNextEnemyTurn();
     }
 
@@ -217,6 +344,8 @@ public partial class CombatManager : Node
     private void EndCombat(CombatOutcome outcome)
     {
         Outcome = outcome;
+        var relicCtx = MakeRelicContext();
+        foreach (var relic in Relics) relic.Behavior.OnCombatEnd(relicCtx, outcome);
         TransitionTo(CombatState.CombatEnd);
     }
 }

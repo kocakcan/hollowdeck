@@ -12,6 +12,8 @@ public static class EffectRegistry
         ["gain_block"] = new GainBlockEffect(),
         ["apply_status"] = new ApplyStatusEffect(),
         ["draw_cards"] = new DrawCardsEffect(),
+        ["heal"] = new HealEffect(),
+        ["gain_energy"] = new GainEnergyEffect(),
     };
 
     public static void Execute(EffectContext ctx, EffectSpec spec)

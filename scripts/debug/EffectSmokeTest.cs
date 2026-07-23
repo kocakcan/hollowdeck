@@ -3,6 +3,7 @@ using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
 using Hollowdeck.Effects;
+using Hollowdeck.Relics;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.Debug;
@@ -20,11 +21,16 @@ public partial class EffectSmokeTest : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        RelicDatabase.LoadAll();
+        PotionDatabase.LoadAll();
 
+        TestRelicAndPotionDatabasesLoad();
         TestPileShuffleAndDraw();
         TestDamageWithVulnerableWeakStrength();
         TestBlockAbsorption();
         TestGainBlockAndDraw();
+        TestHeal();
+        TestGainEnergy();
 
         GD.Print($"EffectSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -42,6 +48,21 @@ public partial class EffectSmokeTest : Node
             _fail++;
             GD.Print($"FAIL {name}: {detail}");
         }
+    }
+
+    private void TestRelicAndPotionDatabasesLoad()
+    {
+        Check("relics_loaded", RelicDatabase.All.Count == 14, $"count={RelicDatabase.All.Count}");
+        Check("potions_loaded", PotionDatabase.All.Count == 7, $"count={PotionDatabase.All.Count}");
+
+        int created = 0;
+        foreach (var def in RelicDatabase.All)
+        {
+            var behavior = RelicRegistry.Create(def);
+            if (behavior is not null) created++;
+        }
+        Check("every_relic_behavior_id_resolves", created == RelicDatabase.All.Count,
+            $"created={created} expected={RelicDatabase.All.Count}");
     }
 
     private void TestPileShuffleAndDraw()
@@ -122,5 +143,26 @@ public partial class EffectSmokeTest : Node
 
         EffectRegistry.Execute(ctx, new EffectSpec { Action = "draw_cards", Amount = 2 });
         Check("draw_cards", player.Piles.Hand.Count == 2, $"hand={player.Piles.Hand.Count}");
+    }
+
+    private void TestHeal()
+    {
+        var player = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 30 };
+        var ctx = new EffectContext { Source = player, Targets = new List<Combatant> { player }, Combat = null! };
+
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "heal", Amount = 10 });
+        Check("heal_below_max", player.CurrentHp == 40, $"hp={player.CurrentHp}");
+
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "heal", Amount = 100 });
+        Check("heal_clamps_to_max", player.CurrentHp == 50, $"hp={player.CurrentHp}");
+    }
+
+    private void TestGainEnergy()
+    {
+        var player = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 50, MaxEnergy = 3, CurrentEnergy = 1 };
+        var ctx = new EffectContext { Source = player, Targets = new List<Combatant> { player }, Combat = null! };
+
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "gain_energy", Amount = 2 });
+        Check("gain_energy", player.CurrentEnergy == 3, $"energy={player.CurrentEnergy}");
     }
 }

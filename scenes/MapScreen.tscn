@@ -33,3 +33,15 @@ layout_mode = 0
 offset_left = 24.0
 offset_top = 128.0
 text = "Next Fight"
+
+[node name="ShopButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 168.0
+text = "Visit Shop"
+
+[node name="TreasureButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 208.0
+text = "Open Treasure"

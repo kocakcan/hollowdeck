@@ -15,6 +15,7 @@ public partial class CombatScreen : Control
     private CombatManager _combat = null!;
     private HBoxContainer _enemyRow = null!;
     private Control _handArea = null!;
+    private HBoxContainer _potionBelt = null!;
     private Label _hpLabel = null!;
     private Label _blockLabel = null!;
     private Label _energyLabel = null!;
@@ -27,12 +28,14 @@ public partial class CombatScreen : Control
 
     private PackedScene _cardViewScene = null!;
     private PackedScene _enemyViewScene = null!;
+    private PackedScene _potionViewScene = null!;
 
     public override void _Ready()
     {
         _combat = GetNode<CombatManager>("CombatManager");
         _enemyRow = GetNode<HBoxContainer>("EnemyRow");
         _handArea = GetNode<Control>("HandArea");
+        _potionBelt = GetNode<HBoxContainer>("PotionBelt");
         _hpLabel = GetNode<Label>("PlayerInfoPanel/HpLabel");
         _blockLabel = GetNode<Label>("PlayerInfoPanel/BlockLabel");
         _energyLabel = GetNode<Label>("PlayerInfoPanel/EnergyLabel");
@@ -45,6 +48,7 @@ public partial class CombatScreen : Control
 
         _cardViewScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
         _enemyViewScene = GD.Load<PackedScene>("res://scenes/EnemyView.tscn");
+        _potionViewScene = GD.Load<PackedScene>("res://scenes/PotionView.tscn");
 
         _endTurnButton.Pressed += () => _combat.TryEndTurn();
         _continueButton.Pressed += OnContinuePressed;
@@ -52,20 +56,21 @@ public partial class CombatScreen : Control
         _combat.StateChanged += _ => Refresh();
         _combat.HandChanged += Refresh;
         _combat.CombatantsChanged += Refresh;
+        _combat.PotionsChanged += Refresh;
 
         var player = new PlayerCombatant
         {
             Name = "Player",
-            MaxHp = 50,
-            CurrentHp = 50,
-            Piles = new PileManager(CardDatabase.All),
+            MaxHp = RunState.PlayerMaxHp,
+            CurrentHp = RunState.PlayerCurrentHp,
+            Piles = new PileManager(RunState.Deck),
         };
 
         var enemies = CombatContext.EnemyDefinitionIds
             .Select(id => EnemyFactory.Create(EnemyDatabase.Get(id)))
             .ToList();
 
-        _combat.StartCombat(player, enemies);
+        _combat.StartCombat(player, enemies, RunState.Relics);
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -85,6 +90,7 @@ public partial class CombatScreen : Control
         RefreshPlayerInfo();
         RefreshHand();
         RefreshEnemies();
+        RefreshPotions();
         RefreshStateUi();
     }
 
@@ -136,6 +142,22 @@ public partial class CombatScreen : Control
         }
     }
 
+    private void RefreshPotions()
+    {
+        foreach (var child in _potionBelt.GetChildren())
+        {
+            _potionBelt.RemoveChild(child);
+            child.QueueFree();
+        }
+
+        foreach (var potion in RunState.Potions)
+        {
+            var potionView = _potionViewScene.Instantiate<PotionView>();
+            _potionBelt.AddChild(potionView);
+            potionView.SetPotionInstance(potion);
+        }
+    }
+
     private void RefreshStateUi()
     {
         _targetHintLabel.Visible = _combat.State == CombatState.AwaitingTarget;
@@ -156,6 +178,10 @@ public partial class CombatScreen : Control
     {
         if (_combat.Outcome == CombatOutcome.Win)
         {
+            RunState.PlayerCurrentHp = _combat.Player.CurrentHp;
+            RunState.PlayerMaxHp = _combat.Player.MaxHp;
+            RunState.Gold += CombatContext.GoldReward;
+
             if (CombatContext.IsFinalEncounter)
             {
                 RunEndContext.Outcome = RunEndOutcome.Win;
@@ -163,8 +189,9 @@ public partial class CombatScreen : Control
             }
             else
             {
-                RunManager.Instance.AdvanceEncounter();
-                RunManager.Instance.ChangeScreen(RunManager.ScreenState.Map);
+                RewardContext.CardChoices = SampleCardChoices(3);
+                RewardContext.GoldAwarded = CombatContext.GoldReward;
+                RunManager.Instance.ChangeScreen(RunManager.ScreenState.Reward);
             }
         }
         else
@@ -172,5 +199,17 @@ public partial class CombatScreen : Control
             RunEndContext.Outcome = RunEndOutcome.Lose;
             RunManager.Instance.ChangeScreen(RunManager.ScreenState.Defeat);
         }
+    }
+
+    private static List<CardDefinition> SampleCardChoices(int count)
+    {
+        var pool = CardDatabase.All.ToList();
+        var rng = RngStreams.Shop;
+        for (int i = pool.Count - 1; i > 0; i--)
+        {
+            int j = rng.Next(i + 1);
+            (pool[i], pool[j]) = (pool[j], pool[i]);
+        }
+        return pool.Take(count).ToList();
     }
 }

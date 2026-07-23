@@ -23,9 +23,12 @@ public partial class RunManager : Node
         { ScreenState.MainMenu, "res://scenes/MainMenu.tscn" },
         { ScreenState.Map, "res://scenes/MapScreen.tscn" },
         { ScreenState.Combat, "res://scenes/CombatScreen.tscn" },
+        { ScreenState.Shop, "res://scenes/ShopScreen.tscn" },
+        { ScreenState.Treasure, "res://scenes/TreasureScreen.tscn" },
+        { ScreenState.Reward, "res://scenes/RewardScreen.tscn" },
         { ScreenState.Victory, "res://scenes/RunEndScreen.tscn" },
         { ScreenState.Defeat, "res://scenes/RunEndScreen.tscn" },
-        // TODO(Phase 2+): Elite, Event, Rest, Shop, Treasure, Reward, MetaProgression.
+        // TODO(Phase 3+): Elite, Event, Rest, MetaProgression.
     };
 
     public ScreenState CurrentScreen { get; private set; } = ScreenState.MainMenu;
@@ -37,6 +40,8 @@ public partial class RunManager : Node
         Instance = this;
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        RelicDatabase.LoadAll();
+        PotionDatabase.LoadAll();
     }
 
     public void ChangeScreen(ScreenState next)
@@ -55,6 +60,7 @@ public partial class RunManager : Node
         CurrentEncounterIndex = 0;
         RunSeed = new Random().Next();
         RngStreams.Init(RunSeed);
+        RunState.InitNewRun();
         GD.Print($"Run seed: {RunSeed}");
         ChangeScreen(ScreenState.Map);
     }
