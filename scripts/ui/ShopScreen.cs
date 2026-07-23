@@ -24,6 +24,8 @@ public partial class ShopScreen : Control
 
         var rng = RngStreams.Shop;
 
+        // All cards unlocked from the start; see MetaProgressionManager.LockedRelicIds
+        // - only relics are lockable at this content scale.
         foreach (var card in Sample(CardDatabase.All.ToList(), 4, rng))
         {
             AddOfferRow($"{card.Name} (card) - {CardPrice}g", EffectDescriptionFormatter.Describe(card.Effects),
@@ -31,13 +33,16 @@ public partial class ShopScreen : Control
         }
 
         var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
-        var availableRelics = RelicDatabase.All.Where(r => !ownedRelicIds.Contains(r.Id)).ToList();
+        var availableRelics = RelicDatabase.All
+            .Where(r => !ownedRelicIds.Contains(r.Id) && MetaProgressionManager.Instance.IsRelicUnlocked(r.Id))
+            .ToList();
         foreach (var relic in Sample(availableRelics, 2, rng))
         {
             AddOfferRow($"{relic.Name} (relic) - {RelicPrice}g", relic.Description, RelicPrice,
                 () => RunState.Relics.Add(new RelicInstance(relic)));
         }
 
+        // All potions unlocked too - same reasoning as cards above.
         foreach (var potion in Sample(PotionDatabase.All.ToList(), 2, rng))
         {
             AddOfferRow($"{potion.Name} (potion) - {PotionPrice}g", EffectDescriptionFormatter.Describe(potion.Effects),

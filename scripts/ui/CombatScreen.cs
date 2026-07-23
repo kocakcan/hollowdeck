@@ -224,6 +224,8 @@ public partial class CombatScreen : Control
 
     private static List<CardDefinition> SampleCardChoices(int count)
     {
+        // No unlock filter - all cards are available from the start (see
+        // MetaProgressionManager.LockedRelicIds; only relics are lockable).
         var pool = CardDatabase.All.ToList();
         var rng = RngStreams.Shop;
         for (int i = pool.Count - 1; i > 0; i--)

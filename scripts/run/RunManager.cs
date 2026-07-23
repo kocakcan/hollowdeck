@@ -28,7 +28,11 @@ public partial class RunManager : Node
         { ScreenState.Reward, "res://scenes/RewardScreen.tscn" },
         { ScreenState.Victory, "res://scenes/RunEndScreen.tscn" },
         { ScreenState.Defeat, "res://scenes/RunEndScreen.tscn" },
-        // TODO(Phase 3+): Elite, Event, Rest, MetaProgression.
+        { ScreenState.MetaProgression, "res://scenes/MetaProgressionScreen.tscn" },
+        // TODO(Phase 4+): Elite, Event, Rest.
+        // RunSetup deliberately stays unregistered too - no pre-run choices
+        // exist yet (all content unlocked, no character/class selection) to
+        // justify a pause screen between MainMenu and Map.
     };
 
     public ScreenState CurrentScreen { get; private set; } = ScreenState.MainMenu;

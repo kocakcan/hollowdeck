@@ -1,0 +1,49 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/MetaProgressionScreen.cs" id="1"]
+
+[node name="MetaProgressionScreen" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="TitleLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 16.0
+text = "Unlocks"
+
+[node name="ShardsLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 48.0
+text = "Shards: 0"
+
+[node name="RelicUnlocksList" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 88.0
+offset_right = 500.0
+offset_bottom = 300.0
+
+[node name="SeedHistoryLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 310.0
+text = "Recent Seeds"
+
+[node name="SeedHistoryList" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 340.0
+offset_right = 700.0
+offset_bottom = 600.0
+
+[node name="BackButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 610.0
+text = "Back"

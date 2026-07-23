@@ -10,7 +10,9 @@ public partial class TreasureScreen : Control
     public override void _Ready()
     {
         var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
-        var available = RelicDatabase.All.Where(r => !ownedRelicIds.Contains(r.Id)).ToList();
+        var available = RelicDatabase.All
+            .Where(r => !ownedRelicIds.Contains(r.Id) && MetaProgressionManager.Instance.IsRelicUnlocked(r.Id))
+            .ToList();
 
         var label = GetNode<Label>("CenterContainer/VBoxContainer/OutcomeLabel");
         if (available.Count == 0)

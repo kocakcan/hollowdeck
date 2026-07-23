@@ -31,6 +31,7 @@ public static class RunState
 
     private static List<CardDefinition> StartingDeck()
     {
+        // Not affected by unlocks - all cards are available from the start.
         var counts = new (string id, int count)[]
         {
             ("strike", 5),
