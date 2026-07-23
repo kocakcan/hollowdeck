@@ -100,8 +100,13 @@ public partial class CombatScreen : Control
 
     private void RefreshHand()
     {
+        // RemoveChild (not just QueueFree) so the removal is immediate -
+        // Refresh() can run multiple times in the same frame (state/hand/
+        // combatant events all fire synchronously), and QueueFree alone
+        // defers removal until frame end, letting rebuilds stack duplicates.
         foreach (var child in _handArea.GetChildren())
         {
+            _handArea.RemoveChild(child);
             child.QueueFree();
         }
 
@@ -119,6 +124,7 @@ public partial class CombatScreen : Control
     {
         foreach (var child in _enemyRow.GetChildren())
         {
+            _enemyRow.RemoveChild(child);
             child.QueueFree();
         }
 
