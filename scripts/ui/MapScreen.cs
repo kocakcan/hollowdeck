@@ -21,14 +21,14 @@ public partial class MapScreen : Control
 
     private Control _nodeButtons = null!;
     private Label _goldLabel = null!;
-    private Label _relicsLabel = null!;
+    private HBoxContainer _relicsRow = null!;
     private readonly Dictionary<string, Vector2> _nodeCenters = new();
 
     public override void _Ready()
     {
         _nodeButtons = GetNode<Control>("NodeButtons");
         _goldLabel = GetNode<Label>("GoldLabel");
-        _relicsLabel = GetNode<Label>("RelicsLabel");
+        _relicsRow = GetNode<HBoxContainer>("RelicsRow");
         GetNode<Button>("BackButton").Pressed += OnBackPressed;
 
         BuildLayout();
@@ -120,12 +120,43 @@ public partial class MapScreen : Control
         _ => "?",
     };
 
+    // Relics render as an icon row (same treatment as CombatScreen's relic
+    // bar) rather than a comma-joined name list, which wrapped into the map
+    // area once the list grew.
     private void RefreshInfo()
     {
         _goldLabel.Text = $"Gold: {RunState.Gold}";
-        _relicsLabel.Text = RunState.Relics.Count == 0
-            ? "Relics: none yet"
-            : $"Relics: {string.Join(", ", RunState.Relics.Select(r => r.Definition.Name))}";
+
+        if (RunState.Relics.Count == 0)
+        {
+            _relicsRow.AddChild(new Label
+            {
+                Text = "Relics: none yet",
+                Modulate = new Color(1f, 1f, 1f, 0.6f),
+            });
+            return;
+        }
+
+        foreach (var relic in RunState.Relics)
+        {
+            var tooltip = $"{relic.Definition.Name}\n{relic.Definition.Description}";
+            if (ArtAssets.RelicIcon(relic.Definition.Id) is { } icon)
+            {
+                _relicsRow.AddChild(new TextureRect
+                {
+                    Texture = icon,
+                    CustomMinimumSize = new Vector2(30, 30),
+                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                    TooltipText = tooltip,
+                    MouseFilter = MouseFilterEnum.Stop,
+                });
+            }
+            else
+            {
+                _relicsRow.AddChild(new Label { Text = relic.Definition.Name, TooltipText = tooltip });
+            }
+        }
     }
 
     private void OnNodeChosen(MapNode node)
