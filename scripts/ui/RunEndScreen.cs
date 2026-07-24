@@ -16,6 +16,7 @@ public partial class RunEndScreen : Control
         int shards = RunCompletionShards + (won ? RunWinBonusShards : 0);
         MetaProgressionManager.Instance.GrantShards(shards);
         MetaProgressionManager.Instance.LogSeed(RunManager.Instance.RunSeed, won ? "Win" : "Lose");
+        RunSaveManager.Delete();
 
         var outcomeLabel = GetNode<Label>("CenterContainer/VBoxContainer/OutcomeLabel");
         outcomeLabel.Text = (won ? "Victory! You cleared the run." : "Defeated...") +

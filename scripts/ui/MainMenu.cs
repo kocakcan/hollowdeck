@@ -8,10 +8,15 @@ public partial class MainMenu : Control
     public override void _Ready()
     {
         ScreenBackground.Attach(this, "etched", new Color(0.9f, 0.9f, 0.95f));
+        var continueButton = GetNode<Button>("CenterContainer/VBoxContainer/ContinueButton");
+        continueButton.Visible = RunSaveManager.SaveExists();
+        continueButton.Pressed += OnContinuePressed;
         GetNode<Button>("CenterContainer/VBoxContainer/StartButton").Pressed += OnStartPressed;
         GetNode<Button>("CenterContainer/VBoxContainer/UnlocksButton").Pressed += OnUnlocksPressed;
         GetNode<Button>("CenterContainer/VBoxContainer/SettingsButton").Pressed += OnSettingsPressed;
     }
+
+    private void OnContinuePressed() => RunManager.Instance.TryContinueRun();
 
     private void OnStartPressed() => RunManager.Instance.StartNewRun();
 
