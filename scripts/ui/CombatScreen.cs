@@ -41,7 +41,7 @@ public partial class CombatScreen : Control
 
     public override void _Ready()
     {
-        ScreenBackground.Attach(this, "crypt", new Color(0.75f, 0.75f, 0.8f));
+        ScreenBackground.AttachCombat(this, "crypt", new Color(0.6f, 0.58f, 0.62f));
         _combat = GetNode<CombatManager>("CombatManager");
         _enemyRow = GetNode<HBoxContainer>("EnemyRow");
         _handArea = GetNode<Control>("HandArea");
