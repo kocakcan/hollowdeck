@@ -41,6 +41,7 @@ public partial class CombatScreen : Control
     private Control _drawPileAnchor = null!;
     private Control _discardPileAnchor = null!;
     private Control _exhaustPileAnchor = null!;
+    private TextureRect _playerSprite = null!;
 
     private PackedScene _cardViewScene = null!;
     private PackedScene _enemyViewScene = null!;
@@ -48,6 +49,10 @@ public partial class CombatScreen : Control
     private PackedScene _floatingTextScene = null!;
 
     private Texture2D? _energyOrbTexture;
+    private Texture2D? _sparkTexture;
+    private Vector2 _playerSpriteRestPos;
+    private Tween? _playerIdleTween;
+    private Tween? _screenShakeTween;
 
     // Previous HP/Block per combatant, so Refresh() can diff and pop up
     // floating combat text - CombatManager only tells us "something
@@ -94,7 +99,10 @@ public partial class CombatScreen : Control
         _potionViewScene = GD.Load<PackedScene>("res://scenes/PotionView.tscn");
         _floatingTextScene = GD.Load<PackedScene>("res://scenes/FloatingText.tscn");
 
-        GetNode<TextureRect>("PlayerSprite").Texture = ArtAssets.PlayerSprite();
+        _playerSprite = GetNode<TextureRect>("PlayerSprite");
+        _playerSprite.Texture = ArtAssets.PlayerSprite();
+        _playerSpriteRestPos = _playerSprite.Position;
+        StartPlayerIdleBob();
 
         // Placeholder tint until Phase 8 supplies a real ornate-frame/fill
         // texture, matching EnemyView's HP bar treatment.
@@ -109,6 +117,7 @@ public partial class CombatScreen : Control
         _combat.HandChanged += Refresh;
         _combat.CombatantsChanged += Refresh;
         _combat.PotionsChanged += Refresh;
+        _combat.EnemyActing += OnEnemyActing;
 
         var player = new PlayerCombatant
         {
@@ -158,6 +167,163 @@ public partial class CombatScreen : Control
                 });
             }
         }
+    }
+
+    // Continuous gentle bob - Position is safe here since PlayerSprite is a
+    // direct child of the CombatScreen root, not Container-managed.
+    private void StartPlayerIdleBob()
+    {
+        _playerIdleTween?.Kill();
+        _playerSprite.Position = _playerSpriteRestPos;
+        var tween = _playerSprite.CreateTween();
+        _playerIdleTween = tween;
+        tween.SetLoops();
+        tween.SetTrans(Tween.TransitionType.Sine);
+        tween.TweenProperty(_playerSprite, "position", _playerSpriteRestPos + new Vector2(0, -6), 1.3);
+        tween.TweenProperty(_playerSprite, "position", _playerSpriteRestPos, 1.3);
+    }
+
+    // Shared driver for any one-off PlayerSprite Position beat (hit-shake,
+    // attack lunge) - always kills the idle bob first (both drive Position)
+    // and restarts it once the beat settles back to rest.
+    private void PlayPlayerPositionBeat(List<Vector2> waypoints, float stepDuration)
+    {
+        _playerIdleTween?.Kill();
+        var tween = _playerSprite.CreateTween();
+        foreach (var wp in waypoints)
+        {
+            tween.TweenProperty(_playerSprite, "position", wp, stepDuration);
+        }
+        tween.TweenProperty(_playerSprite, "position", _playerSpriteRestPos, stepDuration);
+        tween.TweenCallback(Callable.From(StartPlayerIdleBob));
+    }
+
+    private void PlayPlayerHitShake()
+    {
+        var rng = new RandomNumberGenerator();
+        var waypoints = new List<Vector2>();
+        for (int i = 0; i < 4; i++)
+        {
+            waypoints.Add(_playerSpriteRestPos + new Vector2(rng.RandfRange(-8f, 8f), rng.RandfRange(-4f, 4f)));
+        }
+        PlayPlayerPositionBeat(waypoints, 0.035f);
+    }
+
+    private void PlayPlayerLungeToward(Vector2 targetGlobalPos)
+    {
+        var direction = (targetGlobalPos - (_playerSprite.GlobalPosition + _playerSprite.Size / 2f)).Normalized();
+        PlayPlayerPositionBeat(new List<Vector2> { _playerSpriteRestPos + direction * 26f }, 0.09f);
+    }
+
+    // Fired right before an enemy's telegraphed move resolves (see
+    // CombatManager.ResolveEnemyTurnAsync's PreActionDelaySec beat) - plays
+    // a brief wind-up lean on that specific enemy during the pause.
+    private void OnEnemyActing(EnemyCombatant enemy)
+    {
+        if (_enemyViews.TryGetValue(enemy, out var view))
+        {
+            view.PlayWindUp();
+        }
+    }
+
+    // Screen shake: jitters the CombatScreen root itself - safe since it's
+    // the scene root, not Container-managed. Kills any shake already in
+    // flight first so overlapping hits (e.g. an AOE card) don't leave the
+    // screen stuck off-center from two competing tweens.
+    private void PlayScreenShake(float magnitude = 6f)
+    {
+        _screenShakeTween?.Kill();
+        Position = Vector2.Zero;
+        var tween = CreateTween();
+        _screenShakeTween = tween;
+        var rng = new RandomNumberGenerator();
+        for (int i = 0; i < 5; i++)
+        {
+            var offset = new Vector2(rng.RandfRange(-magnitude, magnitude), rng.RandfRange(-magnitude, magnitude));
+            tween.TweenProperty(this, "position", offset, 0.03);
+        }
+        tween.TweenProperty(this, "position", Vector2.Zero, 0.03);
+    }
+
+    // Control (unlike Node2D/Node3D) has no ToLocal() - invert its own
+    // global transform manually to convert a global point into this node's
+    // local coordinate space.
+    private Vector2 ToLocalPoint(Vector2 globalPos) => GetGlobalTransform().AffineInverse() * globalPos;
+
+    // One-shot particle burst (CPUParticles2D, simpler than GPU particles
+    // for this small a burst) at a global position - works fine as a direct
+    // child of a Control since Control is still a CanvasItem. Texture is a
+    // procedural radial dot (same GradientTexture2D technique as the energy
+    // orbs/vignette), so no external asset is needed.
+    private void SpawnHitSpark(Vector2 globalPos, Color tint)
+    {
+        _sparkTexture ??= BuildSparkTexture();
+        var particles = new CpuParticles2D
+        {
+            Position = ToLocalPoint(globalPos),
+            Emitting = false,
+            OneShot = true,
+            Amount = 14,
+            Lifetime = 0.35,
+            Texture = _sparkTexture,
+            Direction = Vector2.Up,
+            Spread = 180f,
+            InitialVelocityMin = 60f,
+            InitialVelocityMax = 160f,
+            ScaleAmountMin = 0.4f,
+            ScaleAmountMax = 0.9f,
+            Color = tint,
+            Gravity = new Vector2(0, 200f),
+        };
+        AddChild(particles);
+        particles.Emitting = true;
+        var tween = particles.CreateTween();
+        tween.TweenInterval(particles.Lifetime + 0.1);
+        tween.TweenCallback(Callable.From(particles.QueueFree));
+    }
+
+    private static Texture2D BuildSparkTexture()
+    {
+        var gradient = new Gradient
+        {
+            Offsets = new float[] { 0f, 1f },
+            Colors = new Color[] { Colors.White, new Color(1, 1, 1, 0) },
+        };
+        return new GradientTexture2D
+        {
+            Gradient = gradient,
+            Fill = GradientTexture2D.FillEnum.Radial,
+            FillFrom = new Vector2(0.5f, 0.5f),
+            FillTo = new Vector2(1f, 0.5f),
+            Width = 24,
+            Height = 24,
+        };
+    }
+
+    // Tapering stroke from attacker to target, fading fast - reads as a
+    // directional slash better than a particle cloud would for a melee hit.
+    private void PlaySlashTrail(Vector2 fromGlobal, Vector2 toGlobal)
+    {
+        var line = new Line2D
+        {
+            Width = 10f,
+            DefaultColor = new Color(1f, 1f, 1f, 0.85f),
+        };
+        line.AddPoint(ToLocalPoint(fromGlobal));
+        line.AddPoint(ToLocalPoint(toGlobal));
+        AddChild(line);
+        var tween = line.CreateTween();
+        tween.TweenProperty(line, "modulate:a", 0f, 0.18).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenCallback(Callable.From(line.QueueFree));
+    }
+
+    // Blue tint pulse for block gain, mirroring FlashHit's red damage pulse.
+    private static void FlashBlock(CanvasItem target)
+    {
+        var original = target.Modulate;
+        var tween = target.CreateTween();
+        tween.TweenProperty(target, "modulate", new Color(0.55f, 0.8f, 1f), 0.06);
+        tween.TweenProperty(target, "modulate", original, 0.14);
     }
 
     public override void _UnhandledInput(InputEvent @event)
@@ -327,15 +493,18 @@ public partial class CombatScreen : Control
 
         // Death case: still tracked but no longer in Enemies (already
         // stripped by Enemies.RemoveAll(e => e.IsDead) before
-        // CombatantsChanged fires) - remove now (Phase 7 adds a death tween
-        // here instead of this plain free).
+        // CombatantsChanged fires) - play a death tween before removing.
         foreach (var (enemyCombatant, view) in _enemyViews.ToList())
         {
             if (currentSet.Contains(enemyCombatant)) continue;
             _enemyViews.Remove(enemyCombatant);
             if (!IsInstanceValid(view)) continue;
-            _enemyRow.RemoveChild(view);
-            view.QueueFree();
+            view.PlayDeathTween(() =>
+            {
+                if (!IsInstanceValid(view)) return;
+                if (view.GetParent() == _enemyRow) _enemyRow.RemoveChild(view);
+                view.QueueFree();
+            });
         }
 
         foreach (var enemy in _combat.Enemies)
@@ -371,6 +540,7 @@ public partial class CombatScreen : Control
             {
                 SpawnFloatingText(popupParent, localSpawnPos, $"-{-hpDelta}", new Color(1f, 0.35f, 0.35f));
                 if (popupParent is CanvasItem hitTarget) FlashHit(hitTarget);
+                PlayHitVfx(popupParent);
             }
             else if (hpDelta > 0)
             {
@@ -382,9 +552,34 @@ public partial class CombatScreen : Control
             {
                 SpawnFloatingText(popupParent, localSpawnPos + new Vector2(0, 16),
                     $"+{blockDelta} Block", new Color(0.6f, 0.8f, 1f));
+                if (popupParent is CanvasItem blockTarget) FlashBlock(blockTarget);
             }
         }
         _lastStats[c] = (c.CurrentHp, c.Block);
+    }
+
+    // Damage-direction VFX: player-attacks-enemy gets a lunge + slash trail
+    // in addition to the target's recoil; enemy-attacks-player gets a
+    // camera-shake-style hit on the player sprite instead. Both get a spark
+    // burst and a screen shake.
+    private void PlayHitVfx(Node popupParent)
+    {
+        if (popupParent is EnemyView enemyView)
+        {
+            var center = enemyView.GlobalPosition + enemyView.Size / 2f;
+            enemyView.PlayHitRecoil();
+            PlayPlayerLungeToward(center);
+            PlaySlashTrail(_playerSprite.GlobalPosition + _playerSprite.Size / 2f, center);
+            SpawnHitSpark(center, new Color(1f, 0.5f, 0.35f));
+            PlayScreenShake();
+        }
+        else if (popupParent == this)
+        {
+            var center = _playerSprite.GlobalPosition + _playerSprite.Size / 2f;
+            PlayPlayerHitShake();
+            SpawnHitSpark(center, new Color(1f, 0.5f, 0.35f));
+            PlayScreenShake();
+        }
     }
 
     private void SpawnFloatingText(Node parent, Vector2 localPos, string text, Color color)
