@@ -31,6 +31,8 @@ public partial class CardView : Panel
     private Label _descriptionLabel = null!;
     private bool _dragging;
     private Vector2 _homePosition;
+    private float _homeRotation;
+    private int _restZIndex;
 
     public override void _Ready()
     {
@@ -71,10 +73,19 @@ public partial class CardView : Panel
         return style;
     }
 
-    public void SetHomePosition(Vector2 pos)
+    // pos/rotationDeg are this card's resting slot in the fan (CombatScreen
+    // computes the fan formula); zIndex is its paint order at rest so the
+    // fan's overlap direction is consistent - hover/drag temporarily bump
+    // above this, then restore it on release/exit.
+    public void SetHomeTransform(Vector2 pos, float rotationDeg, int zIndex)
     {
         _homePosition = pos;
+        _homeRotation = rotationDeg;
+        _restZIndex = zIndex;
+        if (_dragging) return;
         Position = pos;
+        RotationDegrees = rotationDeg;
+        ZIndex = zIndex;
     }
 
     private void OnMouseEntered()
@@ -82,7 +93,7 @@ public partial class CardView : Panel
         if (_dragging) return;
         GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine)
             .TweenProperty(this, "scale", HoverScale, 0.12);
-        ZIndex = 1;
+        ZIndex = 100;
     }
 
     private void OnMouseExited()
@@ -90,13 +101,16 @@ public partial class CardView : Panel
         if (_dragging) return;
         GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine)
             .TweenProperty(this, "scale", NormalScale, 0.12);
-        ZIndex = 0;
+        ZIndex = _restZIndex;
     }
 
     private void SnapHome()
     {
-        GetTree().CreateTween().SetTrans(Tween.TransitionType.Back)
-            .TweenProperty(this, "position", _homePosition, 0.2);
+        ZIndex = _restZIndex;
+        var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Back);
+        tween.SetParallel(true);
+        tween.TweenProperty(this, "position", _homePosition, 0.2);
+        tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.2);
     }
 
     public override void _GuiInput(InputEvent @event)
@@ -105,7 +119,11 @@ public partial class CardView : Panel
         {
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } mb:
                 _dragging = mb.Pressed;
-                ZIndex = mb.Pressed ? 2 : 0;
+                ZIndex = mb.Pressed ? 200 : _restZIndex;
+                if (mb.Pressed)
+                {
+                    RotationDegrees = 0f;
+                }
                 if (!mb.Pressed)
                 {
                     OnReleased();

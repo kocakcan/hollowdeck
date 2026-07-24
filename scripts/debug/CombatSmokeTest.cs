@@ -41,13 +41,13 @@ public partial class CombatSmokeTest : Node
 
         var enemyRow = instance.GetNode("EnemyRow");
         var handArea = instance.GetNode("HandArea");
-        var hpLabel = instance.GetNode<Label>("PlayerInfoPanel/HpLabel");
-        var energyLabel = instance.GetNode<Label>("PlayerInfoPanel/EnergyLabel");
+        var hpLabel = instance.GetNode<Label>("PlayerHpFrame/HpLabel");
+        var energyLabel = instance.GetNode<Label>("EnergyLabel");
 
         Check("enemy_row_has_one_view", enemyRow.GetChildCount() == 1, $"got {enemyRow.GetChildCount()}");
         Check("hand_area_has_five_cards", handArea.GetChildCount() == 5, $"got {handArea.GetChildCount()}");
-        Check("hp_label_reflects_player", hpLabel.Text == "HP 50/50", $"got '{hpLabel.Text}'");
-        Check("energy_label_reflects_player", energyLabel.Text == "Energy 3/3", $"got '{energyLabel.Text}'");
+        Check("hp_label_reflects_player", hpLabel.Text == "50/50", $"got '{hpLabel.Text}'");
+        Check("energy_label_reflects_player", energyLabel.Text == "3/3", $"got '{energyLabel.Text}'");
 
         GD.Print($"CombatSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);

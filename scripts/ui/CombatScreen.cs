@@ -9,16 +9,27 @@ namespace Hollowdeck.UI;
 
 public partial class CombatScreen : Control
 {
-    private const float CardWidth = 160f;
-    private const float CardGap = 16f;
+    private const float CardWidth = 224f;
+    // Fan layout: cards overlap by up to ~55% of their width (shrinking
+    // further if the hand is too wide to fit), rotate up to MaxFanRotationDeg
+    // at the outer edges, and arc so the outer cards sit higher than the
+    // center one - see RefreshHand() for the actual formula.
+    private const float MaxFanRotationDeg = 12f;
+    private const float FanArcHeight = 36f;
+    // HandArea's own rect only needs to be wide enough for the fan-width
+    // math below; its top edge sits well below where cards actually rest -
+    // this pulls the resting fan up so cards (308 tall) stay mostly inside
+    // the 648-tall viewport instead of hanging off the bottom edge.
+    private const float FanBaseY = -140f;
 
     private CombatManager _combat = null!;
     private HBoxContainer _enemyRow = null!;
     private Control _handArea = null!;
     private HBoxContainer _potionBelt = null!;
     private HBoxContainer _relicBar = null!;
-    private Label _hpLabel = null!;
-    private Label _blockLabel = null!;
+    private ProgressBar _playerHpBar = null!;
+    private Label _playerHpLabel = null!;
+    private HBoxContainer _energyRow = null!;
     private Label _energyLabel = null!;
     private Label _pileCountsLabel = null!;
     private HBoxContainer _playerStatusRow = null!;
@@ -32,6 +43,8 @@ public partial class CombatScreen : Control
     private PackedScene _enemyViewScene = null!;
     private PackedScene _potionViewScene = null!;
     private PackedScene _floatingTextScene = null!;
+
+    private Texture2D? _energyOrbTexture;
 
     // Previous HP/Block per combatant, so Refresh() can diff and pop up
     // floating combat text - CombatManager only tells us "something
@@ -58,9 +71,10 @@ public partial class CombatScreen : Control
         _handArea = GetNode<Control>("HandArea");
         _potionBelt = GetNode<HBoxContainer>("PotionBelt");
         _relicBar = GetNode<HBoxContainer>("RelicBar");
-        _hpLabel = GetNode<Label>("PlayerInfoPanel/HpLabel");
-        _blockLabel = GetNode<Label>("PlayerInfoPanel/BlockLabel");
-        _energyLabel = GetNode<Label>("PlayerInfoPanel/EnergyLabel");
+        _playerHpBar = GetNode<ProgressBar>("PlayerHpFrame/HpBar");
+        _playerHpLabel = GetNode<Label>("PlayerHpFrame/HpLabel");
+        _energyRow = GetNode<HBoxContainer>("EnergyRow");
+        _energyLabel = GetNode<Label>("EnergyLabel");
         _pileCountsLabel = GetNode<Label>("PileCountsLabel");
         _playerStatusRow = GetNode<HBoxContainer>("PlayerStatusRow");
         _targetHintLabel = GetNode<Label>("TargetHintLabel");
@@ -76,8 +90,10 @@ public partial class CombatScreen : Control
 
         GetNode<TextureRect>("PlayerSprite").Texture = ArtAssets.PlayerSprite();
 
-        _hpLabel.ThemeTypeVariation = "CombatDisplayLabel";
-        _blockLabel.ThemeTypeVariation = "CombatDisplayLabel";
+        // Placeholder tint until Phase 8 supplies a real ornate-frame/fill
+        // texture, matching EnemyView's HP bar treatment.
+        _playerHpBar.Modulate = new Color(0.82f, 0.24f, 0.22f);
+        _playerHpLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _energyLabel.ThemeTypeVariation = "CombatDisplayLabel";
 
         _endTurnButton.Pressed += () => _combat.TryEndTurn();
@@ -162,13 +178,67 @@ public partial class CombatScreen : Control
     private void RefreshPlayerInfo()
     {
         var player = _combat.Player;
-        PopupDelta(player, this, _hpLabel.GlobalPosition);
-        _hpLabel.Text = $"HP {player.CurrentHp}/{player.MaxHp}";
-        _blockLabel.Text = player.Block > 0 ? $"Block {player.Block}" : "";
-        _energyLabel.Text = $"Energy {player.CurrentEnergy}/{player.MaxEnergy}";
+        PopupDelta(player, this, _playerHpBar.GlobalPosition);
+        _playerHpBar.MaxValue = player.MaxHp;
+        _playerHpBar.Value = player.CurrentHp;
+        _playerHpLabel.Text = $"{player.CurrentHp}/{player.MaxHp}" +
+                               (player.Block > 0 ? $"  🛡{player.Block}" : "");
+        _energyLabel.Text = $"{player.CurrentEnergy}/{player.MaxEnergy}";
+        RefreshEnergyPips(player.CurrentEnergy, player.MaxEnergy);
         _pileCountsLabel.Text =
             $"Draw {player.Piles.DrawPile.Count} · Discard {player.Piles.Discard.Count} · Exhaust {player.Piles.Exhaust.Count}";
         StatusRow.Populate(_playerStatusRow, player, 20);
+    }
+
+    // Rebuilt fully each refresh, same as the (non-animated) relic/potion
+    // bars - unlike hand/enemy views, these pips have no animation state
+    // worth preserving across refreshes yet.
+    private void RefreshEnergyPips(int current, int max)
+    {
+        foreach (var child in _energyRow.GetChildren())
+        {
+            _energyRow.RemoveChild(child);
+            child.QueueFree();
+        }
+
+        _energyOrbTexture ??= BuildEnergyOrbTexture();
+        for (int i = 0; i < max; i++)
+        {
+            _energyRow.AddChild(new TextureRect
+            {
+                Texture = _energyOrbTexture,
+                CustomMinimumSize = new Vector2(24, 24),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+                Modulate = i < current ? Colors.White : new Color(1, 1, 1, 0.25f),
+                MouseFilter = MouseFilterEnum.Ignore,
+            });
+        }
+    }
+
+    // Procedural radial glow (no external asset needed) standing in for the
+    // "glowing blue crystal" energy pips until Phase 8's chrome pass.
+    private static Texture2D BuildEnergyOrbTexture()
+    {
+        var gradient = new Gradient
+        {
+            Offsets = new float[] { 0f, 0.6f, 1f },
+            Colors = new Color[]
+            {
+                new(0.75f, 0.9f, 1f, 1f),
+                new(0.25f, 0.55f, 0.95f, 1f),
+                new(0.1f, 0.25f, 0.6f, 0f),
+            },
+        };
+        return new GradientTexture2D
+        {
+            Gradient = gradient,
+            Fill = GradientTexture2D.FillEnum.Radial,
+            FillFrom = new Vector2(0.5f, 0.5f),
+            FillTo = new Vector2(1f, 0.5f),
+            Width = 48,
+            Height = 48,
+        };
     }
 
     private void RefreshHand()
@@ -198,7 +268,21 @@ public partial class CombatScreen : Control
         }
 
         // Add newly-drawn cards, update everyone's slot/live description.
-        for (int i = 0; i < hand.Count; i++)
+        int n = hand.Count;
+        float availableWidth = _handArea.Size.X - CardWidth;
+        // Target a total fan width that stays clear of the player HP/energy
+        // column on the left and the End Turn button on the right (empirically
+        // ~760px reads clean at this layout's proportions), while keeping
+        // per-card spacing within a readable-but-still-overlapping range and
+        // never exceeding what actually fits in the hand area.
+        const float FanSafeWidth = 760f;
+        float preferredSpacing = n <= 1 ? 0f : (FanSafeWidth - CardWidth) / (n - 1);
+        float maxSpacing = Mathf.Min(CardWidth * 0.85f, availableWidth / Mathf.Max(n - 1, 1));
+        float spacing = n <= 1 ? 0f : Mathf.Clamp(preferredSpacing, CardWidth * 0.45f, maxSpacing);
+        float totalWidth = CardWidth + (n - 1) * spacing;
+        float startX = (_handArea.Size.X - totalWidth) / 2f;
+
+        for (int i = 0; i < n; i++)
         {
             var card = hand[i];
             if (!_cardViews.TryGetValue(card, out var cardView))
@@ -211,7 +295,16 @@ public partial class CombatScreen : Control
             // depend on live player Strength/Weak, which can change between
             // refreshes without this specific card being re-drawn.
             cardView.SetCardInstance(card);
-            cardView.SetHomePosition(new Vector2(i * (CardWidth + CardGap), 0));
+
+            // Fan: cards rotate outward from center and the outer cards sit
+            // higher than the center one, like cards spread from a grip
+            // point below the screen - center stays at baseline, edges lift.
+            float t = n <= 1 ? 0.5f : (float)i / (n - 1);
+            float centered = t - 0.5f;
+            float rotationDeg = centered * 2f * MaxFanRotationDeg;
+            float yOffset = FanArcHeight * (1f - Mathf.Cos(centered * Mathf.Pi));
+            var pos = new Vector2(startX + i * spacing, FanBaseY + yOffset);
+            cardView.SetHomeTransform(pos, rotationDeg, i);
         }
     }
 

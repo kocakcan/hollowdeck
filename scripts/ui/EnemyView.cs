@@ -15,6 +15,7 @@ public partial class EnemyView : Button
 
     private TextureRect _sprite = null!;
     private Label _nameLabel = null!;
+    private ProgressBar _hpBar = null!;
     private Label _hpLabel = null!;
     private TextureRect _intentIcon = null!;
     private Label _intentLabel = null!;
@@ -24,13 +25,18 @@ public partial class EnemyView : Button
     {
         _sprite = GetNode<TextureRect>("VBox/Sprite");
         _nameLabel = GetNode<Label>("VBox/NameLabel");
-        _hpLabel = GetNode<Label>("VBox/HpLabel");
+        _hpBar = GetNode<ProgressBar>("VBox/HpFrame/HpBar");
+        _hpLabel = GetNode<Label>("VBox/HpFrame/HpLabel");
         _intentIcon = GetNode<TextureRect>("VBox/IntentRow/IntentIcon");
         _intentLabel = GetNode<Label>("VBox/IntentRow/IntentLabel");
         _statusRow = GetNode<HBoxContainer>("VBox/StatusRow");
         _sprite.Texture = ArtAssets.EnemySprite(Combatant.Definition.Id);
         _nameLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _hpLabel.ThemeTypeVariation = "CombatDisplayLabel";
+        // Placeholder tint until Phase 8 supplies a real ornate-frame/fill
+        // texture - reads as a health bar (red fill) rather than the
+        // default theme color in the meantime.
+        _hpBar.Modulate = new Color(0.82f, 0.24f, 0.22f);
         Pressed += OnPressed;
         Instances.Add(this);
         Refresh();
@@ -44,7 +50,9 @@ public partial class EnemyView : Button
     public void Refresh()
     {
         _nameLabel.Text = Combatant.Name;
-        _hpLabel.Text = $"HP {Combatant.CurrentHp}/{Combatant.MaxHp}" +
+        _hpBar.MaxValue = Combatant.MaxHp;
+        _hpBar.Value = Combatant.CurrentHp;
+        _hpLabel.Text = $"{Combatant.CurrentHp}/{Combatant.MaxHp}" +
                          (Combatant.Block > 0 ? $"  🛡{Combatant.Block}" : "");
         var intent = Combatant.CurrentMove?.Intent;
         _intentIcon.Texture = intent is null ? null : ArtAssets.IntentIcon(intent.Type);
