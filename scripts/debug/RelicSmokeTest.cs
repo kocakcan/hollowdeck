@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
@@ -15,7 +16,7 @@ public partial class RelicSmokeTest : Node
     private int _pass;
     private int _fail;
 
-    public override void _Ready()
+    public override async void _Ready()
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
@@ -23,16 +24,28 @@ public partial class RelicSmokeTest : Node
         PotionDatabase.LoadAll();
 
         TestOnCombatStart_AnchorStone();
-        TestOnTurnStart_WardedBracer();
+        await TestOnTurnStart_WardedBracer();
         TestOnTurnEnd_FrugalSatchel();
         TestOnCardPlayed_SkirmishersSash();
         TestOnDamageDealt_VampireFang();
         TestCardTargeting_NoTargetRejected_ExplicitTargetResolves();
-        TestOnDamageTaken_ThornedCarapace_MidRoundDeath();
+        await TestOnDamageTaken_ThornedCarapace_MidRoundDeath();
         TestOnCombatEnd_SecondWindAndScavengersCharm();
 
         GD.Print($"RelicSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
+    }
+
+    // CombatManager now paces enemy turns with real delays between actions
+    // (see CombatManager.ResolveEnemyTurnAsync) instead of resolving them all
+    // synchronously in one call, so any test asserting on post-enemy-turn
+    // state has to wait for the turn to actually finish first.
+    private async Task WaitForEnemyTurnToResolve(CombatManager combat)
+    {
+        while (combat.State is CombatState.EnemyTurn or CombatState.ResolvingEnemyIntent)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
     }
 
     private void Check(string name, bool condition, string detail)
@@ -71,7 +84,7 @@ public partial class RelicSmokeTest : Node
         combat.QueueFree();
     }
 
-    private void TestOnTurnStart_WardedBracer()
+    private async Task TestOnTurnStart_WardedBracer()
     {
         var combat = NewCombat();
         var player = MakePlayer();
@@ -83,6 +96,7 @@ public partial class RelicSmokeTest : Node
         // Second turn: end turn (enemy resolves), block should reset to 0
         // then gain another 3 at the next BeginPlayerTurn.
         combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
         Check("warded_bracer_grants_block_again_next_turn", player.Block == 3, $"block={player.Block}");
         combat.QueueFree();
     }
@@ -168,7 +182,7 @@ public partial class RelicSmokeTest : Node
         combat.QueueFree();
     }
 
-    private void TestOnDamageTaken_ThornedCarapace_MidRoundDeath()
+    private async Task TestOnDamageTaken_ThornedCarapace_MidRoundDeath()
     {
         var combat = NewCombat();
         var player = MakePlayer();
@@ -183,7 +197,9 @@ public partial class RelicSmokeTest : Node
         // "dark_strike" (damage) move for round 2, which is what should
         // trigger the retaliation-kills-enemy1-mid-round scenario.
         combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
         combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
 
         Check("enemy1_died_to_retaliation_mid_round", enemy1.IsDead, $"enemy1.hp={enemy1.CurrentHp}");
         Check("enemy2_still_resolved_after_enemy1_died", enemy2.CurrentMove is not null, "enemy2 has no move");

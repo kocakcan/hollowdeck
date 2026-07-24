@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Godot;
 using Hollowdeck.Data;
 using Hollowdeck.Effects;
@@ -34,6 +35,18 @@ public partial class CombatManager : Node
     public event Action? CombatantsChanged;
     public event Action? PotionsChanged;
 
+    // Fired right before an enemy's telegraphed move actually resolves, so
+    // the UI can play a wind-up animation on that specific enemy during the
+    // PreActionDelaySec beat below. Purely additive - nothing here reads it.
+    public event Action<EnemyCombatant>? EnemyActing;
+
+    // Beats between enemy actions in ResolveEnemyTurnAsync, so multi-enemy
+    // turns read as a sequence of distinct hits instead of one instant
+    // simultaneous burst - this is what makes per-hit cinematic effects
+    // (screen shake, hit-pause, sequential impact) legible.
+    private const float PreActionDelaySec = 0.2f;
+    private const float PostActionDelaySec = 0.15f;
+
     public CombatState State { get; private set; } = CombatState.Start;
     public CombatOutcome Outcome { get; private set; } = CombatOutcome.None;
 
@@ -42,7 +55,6 @@ public partial class CombatManager : Node
     public List<RelicInstance> Relics { get; private set; } = new();
 
     private PotionInstance? _pendingPotion;
-    private int _enemyTurnIndex;
     private List<EnemyCombatant> _enemyTurnOrder = new();
 
     public override void _Ready()
@@ -257,87 +269,87 @@ public partial class CombatManager : Node
         Player.DecayStatus(StatusType.Weak);
 
         _enemyTurnOrder = new List<EnemyCombatant>(Enemies);
-        _enemyTurnIndex = 0;
         TransitionTo(CombatState.EnemyTurn);
-        ResolveNextEnemyTurn();
+        _ = ResolveEnemyTurnAsync();
     }
 
-    private void ResolveNextEnemyTurn()
+    // Iterates the enemy turn order one enemy at a time with a wind-up beat
+    // before each action and an impact/hit-pause beat after, instead of
+    // resolving the whole turn synchronously in one frame - same order and
+    // outcomes as before, just paced so per-hit VFX (shake, sparks, floating
+    // damage) has time to read, especially in multi-enemy fights.
+    private async Task ResolveEnemyTurnAsync()
     {
-        if (_enemyTurnIndex >= _enemyTurnOrder.Count)
+        foreach (var enemy in _enemyTurnOrder)
         {
-            // Block clears here, not in BeginPlayerTurn itself - it must
-            // persist through the enemy's turn (so it can absorb their
-            // attacks) and must NOT be wiped by the very first call to
-            // BeginPlayerTurn from StartCombat, which runs right after
-            // OnCombatStart relics (e.g. Anchor Stone) grant their bonus.
-            Player.Block = 0;
-            BeginPlayerTurn();
-            return;
-        }
+            if (enemy.IsDead) continue; // Died earlier this round (e.g. a relic retaliation kill).
 
-        var enemy = _enemyTurnOrder[_enemyTurnIndex];
-        _enemyTurnIndex++;
+            ApplyPoisonTick(enemy);
+            if (enemy.IsDead)
+            {
+                Enemies.RemoveAll(e => e.IsDead);
+                CombatantsChanged?.Invoke();
+                if (Enemies.Count == 0)
+                {
+                    EndCombat(CombatOutcome.Win);
+                    return;
+                }
+                continue;
+            }
 
-        if (enemy.IsDead)
-        {
-            // Died earlier this round (e.g. a relic retaliation kill) -
-            // nothing left to resolve for it.
-            ResolveNextEnemyTurn();
-            return;
-        }
+            EnemyActing?.Invoke(enemy);
+            TransitionTo(CombatState.ResolvingEnemyIntent);
+            await Delay(PreActionDelaySec);
 
-        ApplyPoisonTick(enemy);
-        if (enemy.IsDead)
-        {
+            enemy.Block = 0;
+            var move = enemy.CurrentMove!;
+            var playerTargets = new List<Combatant> { Player };
+            foreach (var effect in move.Effects)
+            {
+                var scopedTargets = effect.Scope == EffectScope.Self
+                    ? new List<Combatant> { enemy }
+                    : playerTargets;
+                ExecuteEffect(effect, enemy, scopedTargets);
+            }
+
+            if (Player.IsDead)
+            {
+                EndCombat(CombatOutcome.Lose);
+                return;
+            }
+
             Enemies.RemoveAll(e => e.IsDead);
             CombatantsChanged?.Invoke();
+
             if (Enemies.Count == 0)
             {
                 EndCombat(CombatOutcome.Win);
                 return;
             }
-            ResolveNextEnemyTurn();
-            return;
+
+            if (!enemy.IsDead)
+            {
+                enemy.DecayStatus(StatusType.Vulnerable);
+                enemy.DecayStatus(StatusType.Weak);
+                AdvanceEnemyIntent(enemy);
+                CombatantsChanged?.Invoke();
+            }
+
+            await Delay(PostActionDelaySec);
         }
 
-        TransitionTo(CombatState.ResolvingEnemyIntent);
+        // Block clears here, not in BeginPlayerTurn itself - it must persist
+        // through the enemy's turn (so it can absorb their attacks) and must
+        // NOT be wiped by the very first call to BeginPlayerTurn from
+        // StartCombat, which runs right after OnCombatStart relics (e.g.
+        // Anchor Stone) grant their bonus.
+        Player.Block = 0;
+        BeginPlayerTurn();
+    }
 
-        enemy.Block = 0;
-        var move = enemy.CurrentMove!;
-        var playerTargets = new List<Combatant> { Player };
-        foreach (var effect in move.Effects)
-        {
-            var scopedTargets = effect.Scope == EffectScope.Self
-                ? new List<Combatant> { enemy }
-                : playerTargets;
-            ExecuteEffect(effect, enemy, scopedTargets);
-        }
-
-        if (Player.IsDead)
-        {
-            EndCombat(CombatOutcome.Lose);
-            return;
-        }
-
-        Enemies.RemoveAll(e => e.IsDead);
-        CombatantsChanged?.Invoke();
-
-        if (Enemies.Count == 0)
-        {
-            EndCombat(CombatOutcome.Win);
-            return;
-        }
-
-        if (!enemy.IsDead)
-        {
-            enemy.DecayStatus(StatusType.Vulnerable);
-            enemy.DecayStatus(StatusType.Weak);
-            AdvanceEnemyIntent(enemy);
-            CombatantsChanged?.Invoke();
-        }
-
-        ResolveNextEnemyTurn();
+    private async Task Delay(float seconds)
+    {
+        await ToSignal(GetTree().CreateTimer(seconds), Timer.SignalName.Timeout);
     }
 
     // Poison deals direct HP loss (bypasses Block, per genre convention) at

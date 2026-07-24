@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
@@ -15,20 +16,29 @@ public partial class Phase4ContentSmokeTest : Node
     private int _pass;
     private int _fail;
 
-    public override void _Ready()
+    public override async void _Ready()
     {
+        // Captured before TestEliteRewardGrantsGuaranteedRelic runs: that
+        // test's simulated Continue click triggers ChangeSceneToFile, which
+        // replaces this node as the tree's current scene - after that,
+        // calling GetTree() on `this` throws because `this` is no longer
+        // attached. The SceneTree object itself survives the scene swap, so
+        // grabbing it up front and reusing it for the final Quit() sidesteps
+        // that instead of relying on GetTree() still working at the end.
+        var tree = GetTree();
+
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
-        TestPoisonTickBypassesBlockAndDecays();
+        await TestPoisonTickBypassesBlockAndDecays();
         TestLoseHpEffect();
         TestEnragePickerSwitchesAtThreshold();
-        TestEliteRewardGrantsGuaranteedRelic();
+        await TestEliteRewardGrantsGuaranteedRelic();
 
         GD.Print($"Phase4ContentSmokeTest: {_pass} passed, {_fail} failed");
-        GetTree().Quit(_fail == 0 ? 0 : 1);
+        tree.Quit(_fail == 0 ? 0 : 1);
     }
 
     private void Check(string name, bool condition, string detail)
@@ -37,7 +47,19 @@ public partial class Phase4ContentSmokeTest : Node
         else { _fail++; GD.Print($"FAIL {name}: {detail}"); }
     }
 
-    private void TestPoisonTickBypassesBlockAndDecays()
+    // CombatManager now paces enemy turns with real delays between actions
+    // (see CombatManager.ResolveEnemyTurnAsync) instead of resolving them
+    // synchronously in one call, so tests asserting post-enemy-turn state
+    // have to wait for the turn to actually finish first.
+    private async Task WaitForEnemyTurnToResolve(CombatManager combat)
+    {
+        while (combat.State is CombatState.EnemyTurn or CombatState.ResolvingEnemyIntent)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+    }
+
+    private async Task TestPoisonTickBypassesBlockAndDecays()
     {
         var player = new PlayerCombatant
         {
@@ -58,6 +80,7 @@ public partial class Phase4ContentSmokeTest : Node
         AddChild(combat);
         combat.StartCombat(player, new List<EnemyCombatant> { enemy }, new List<RelicInstance>());
         combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
 
         Check("poison_deals_direct_hp_loss_bypassing_block", enemy.CurrentHp == enemy.MaxHp - 5,
             $"expected {enemy.MaxHp - 5}, got {enemy.CurrentHp}");
@@ -100,7 +123,7 @@ public partial class Phase4ContentSmokeTest : Node
             $"got moveId={enragedMove.MoveId}");
     }
 
-    private void TestEliteRewardGrantsGuaranteedRelic()
+    private async Task TestEliteRewardGrantsGuaranteedRelic()
     {
         RunState.Gold = 0;
         RunState.PlayerMaxHp = 50;
@@ -121,11 +144,17 @@ public partial class Phase4ContentSmokeTest : Node
         // Drag-to-target normally drives this; directly killing the enemy
         // exercises the same win path CombatScreen.OnContinuePressed reads.
         var enemy = combat.Enemies[0];
-        while (!enemy.IsDead)
+        while (!enemy.IsDead && combat.State != CombatState.CombatEnd)
         {
-            combat.TryPlayCard(combat.Player.Piles.Hand[0], enemy);
-            if (combat.State == CombatState.CombatEnd) break;
-            if (combat.Player.Piles.Hand.Count == 0 || combat.State != CombatState.PlayerTurn) combat.TryEndTurn();
+            if (combat.State == CombatState.PlayerTurn)
+            {
+                if (combat.Player.Piles.Hand.Count > 0) combat.TryPlayCard(combat.Player.Piles.Hand[0], enemy);
+                else combat.TryEndTurn();
+            }
+            // Enemy-turn resolution is now paced with real delays (see
+            // CombatManager.ResolveEnemyTurnAsync), so yield a frame each
+            // iteration instead of busy-spinning while it catches up.
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
 
         Check("elite_fight_reaches_combat_end", combat.State == CombatState.CombatEnd,

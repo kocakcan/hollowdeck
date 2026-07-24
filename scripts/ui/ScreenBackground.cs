@@ -91,7 +91,11 @@ public static class ScreenBackground
         fog.OffsetRight += 40;
         fog.OffsetBottom += 40;
         var basePos = fog.Position;
-        var tween = fog.GetTree().CreateTween();
+        // fog.CreateTween() (not GetTree().CreateTween()) so this infinite,
+        // long-lived loop auto-kills when fog leaves the tree - unlike the
+        // codebase's other short one-shot tweens, this one is virtually
+        // guaranteed to still be running whenever the screen is torn down.
+        var tween = fog.CreateTween();
         tween.SetLoops();
         tween.SetTrans(Tween.TransitionType.Sine);
         tween.TweenProperty(fog, "position", basePos + new Vector2(24, 14), 14.0);
