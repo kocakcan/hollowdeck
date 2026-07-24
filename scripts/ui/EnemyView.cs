@@ -11,6 +11,27 @@ public partial class EnemyView : Button
     // without CardView needing a reference to CombatScreen or the enemy row.
     public static readonly List<EnemyView> Instances = new();
 
+    // Target-lock glow while a SingleEnemy card is being dragged over this
+    // enemy. Overrides "normal" rather than "hover": the native Button hover
+    // stylebox can never actually apply during a drag anyway (the dragged
+    // CardView Panel sits on top and occludes this Button from Godot's mouse
+    // picking), so there's no state to reconcile against.
+    private static readonly StyleBoxFlat TargetLockStyle = BuildTargetLockStyle();
+
+    private static StyleBoxFlat BuildTargetLockStyle()
+    {
+        var style = new StyleBoxFlat
+        {
+            BgColor = new Color(0.216f, 0.243f, 0.325f, 1f),
+            BorderColor = new Color(1f, 0.85f, 0.3f, 1f),
+        };
+        style.SetBorderWidthAll(4);
+        style.SetCornerRadiusAll(6);
+        style.ShadowColor = new Color(1f, 0.85f, 0.3f, 0.65f);
+        style.ShadowSize = 10;
+        return style;
+    }
+
     public EnemyCombatant Combatant { get; set; } = null!;
 
     private TextureRect _sprite = null!;
@@ -111,6 +132,13 @@ public partial class EnemyView : Button
     public override void _ExitTree()
     {
         Instances.Remove(this);
+    }
+
+    // Toggled continuously by CardView while dragging a SingleEnemy card.
+    public void SetTargetLocked(bool locked)
+    {
+        if (locked) AddThemeStyleboxOverride("normal", TargetLockStyle);
+        else RemoveThemeStyleboxOverride("normal");
     }
 
     public void Refresh()

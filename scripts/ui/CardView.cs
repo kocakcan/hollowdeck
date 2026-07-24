@@ -33,6 +33,7 @@ public partial class CardView : Panel
     private Vector2 _homePosition;
     private float _homeRotation;
     private int _restZIndex;
+    private EnemyView? _targetLockedView;
 
     public override void _Ready()
     {
@@ -192,13 +193,39 @@ public partial class CardView : Panel
                 break;
             case InputEventMouseMotion motion when _dragging:
                 Position += motion.Relative;
+                UpdateTargetHighlight();
                 GetViewport().SetInputAsHandled();
                 break;
         }
     }
 
+    // Continuously highlights whichever enemy is under the cursor while
+    // dragging a SingleEnemy card - the drag-and-drop equivalent of the
+    // hover glow potions already get via native Button hover (which can't
+    // fire here since this card's own Panel occludes the enemy underneath).
+    private void UpdateTargetHighlight()
+    {
+        EnemyView? underMouse = CardInstance?.Definition.Target == CardTargetType.SingleEnemy
+            ? FindEnemyViewUnderMouse()
+            : null;
+        if (underMouse == _targetLockedView) return;
+        if (GodotObject.IsInstanceValid(_targetLockedView)) _targetLockedView!.SetTargetLocked(false);
+        underMouse?.SetTargetLocked(true);
+        _targetLockedView = underMouse;
+    }
+
+    private void ClearTargetHighlight()
+    {
+        if (GodotObject.IsInstanceValid(_targetLockedView)) _targetLockedView!.SetTargetLocked(false);
+        _targetLockedView = null;
+    }
+
+    public override void _ExitTree() => ClearTargetHighlight();
+
     private void OnReleased()
     {
+        ClearTargetHighlight();
+
         if (CardInstance is null || CombatManager.Instance is null)
         {
             SnapHome();
@@ -208,7 +235,7 @@ public partial class CardView : Panel
         EnemyCombatant? target = null;
         if (CardInstance.Definition.Target == CardTargetType.SingleEnemy)
         {
-            target = FindEnemyUnderMouse();
+            target = FindEnemyViewUnderMouse()?.Combatant;
         }
 
         // Reparent out of the hand area BEFORE calling TryPlayCard: if it
@@ -249,12 +276,12 @@ public partial class CardView : Panel
         tween.Chain().TweenCallback(Callable.From(QueueFree));
     }
 
-    private EnemyCombatant? FindEnemyUnderMouse()
+    private EnemyView? FindEnemyViewUnderMouse()
     {
         var mousePos = GetGlobalMousePosition();
         foreach (var enemyView in EnemyView.Instances)
         {
-            if (enemyView.GetGlobalRect().HasPoint(mousePos)) return enemyView.Combatant;
+            if (enemyView.GetGlobalRect().HasPoint(mousePos)) return enemyView;
         }
         return null;
     }
