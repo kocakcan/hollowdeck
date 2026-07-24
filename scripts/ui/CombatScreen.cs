@@ -445,16 +445,13 @@ public partial class CombatScreen : Control
 
         // Add newly-drawn cards, update everyone's slot/live description.
         int n = hand.Count;
-        float availableWidth = _handArea.Size.X - CardWidth;
         // Target a total fan width that stays clear of the player HP/energy
         // column on the left and the End Turn button on the right (empirically
         // ~760px reads clean at this layout's proportions), while keeping
         // per-card spacing within a readable-but-still-overlapping range and
         // never exceeding what actually fits in the hand area.
         const float FanSafeWidth = 760f;
-        float preferredSpacing = n <= 1 ? 0f : (FanSafeWidth - CardWidth) / (n - 1);
-        float maxSpacing = Mathf.Min(CardWidth * 0.85f, availableWidth / Mathf.Max(n - 1, 1));
-        float spacing = n <= 1 ? 0f : Mathf.Clamp(preferredSpacing, CardWidth * 0.45f, maxSpacing);
+        float spacing = HandFanLayout.ComputeSpacing(n, _handArea.Size.X, CardWidth, FanSafeWidth);
         float totalWidth = CardWidth + (n - 1) * spacing;
         float startX = (_handArea.Size.X - totalWidth) / 2f;
 
