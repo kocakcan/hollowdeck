@@ -36,6 +36,7 @@ public static class CardUpgrade
             Type = original.Type,
             Target = original.Target,
             Exhaust = original.Exhaust,
+            Rarity = original.Rarity,
             Effects = original.Effects.Select(ScaleEffect).ToList(),
         };
     }

@@ -53,34 +53,10 @@ public partial class CardView : Panel
         if (_nameLabel is null) return;
         _nameLabel.Text = $"{card.Definition.Name} ({card.Definition.Cost})";
         _artIcon.Texture = ArtAssets.CardIcon(card.Definition.Id);
-        AddThemeStyleboxOverride("panel", FrameStyle(card.Definition.Type, hovered: false));
+        AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(card.Definition.Type, card.Definition.Rarity, hovered: false));
         // Live player context (Strength/Weak) so the shown damage number is
         // always what would actually land, not stale hand-authored prose.
         _descriptionLabel.Text = EffectDescriptionFormatter.Describe(card.Definition.Effects, CombatManager.Instance?.Player);
-    }
-
-    // Attack/Skill get distinct frame colors so card type reads at a glance,
-    // matching the genre convention of color-coded card frames. Hovered adds
-    // a thicker, brighter border plus a native StyleBoxFlat drop-shadow for
-    // the "glow outline" - no shader needed.
-    private static StyleBoxFlat FrameStyle(CardType type, bool hovered)
-    {
-        var isAttack = type == CardType.Attack;
-        var style = new StyleBoxFlat
-        {
-            BgColor = isAttack ? new Color(0.32f, 0.13f, 0.13f) : new Color(0.12f, 0.26f, 0.22f),
-            BorderColor = hovered
-                ? (isAttack ? new Color(0.95f, 0.55f, 0.35f) : new Color(0.5f, 0.85f, 0.7f))
-                : (isAttack ? new Color(0.65f, 0.32f, 0.28f) : new Color(0.3f, 0.55f, 0.45f)),
-        };
-        style.SetBorderWidthAll(hovered ? 4 : 2);
-        style.SetCornerRadiusAll(10);
-        if (hovered)
-        {
-            style.ShadowColor = isAttack ? new Color(0.9f, 0.4f, 0.25f, 0.65f) : new Color(0.35f, 0.8f, 0.6f, 0.65f);
-            style.ShadowSize = 10;
-        }
-        return style;
     }
 
     // pos/rotationDeg are this card's resting slot in the fan (CombatScreen
@@ -106,7 +82,7 @@ public partial class CardView : Panel
         tween.SetParallel(true);
         tween.TweenProperty(this, "scale", HoverScale, 0.12);
         tween.TweenProperty(this, "rotation_degrees", 0f, 0.12); // "stands up straight"
-        if (CardInstance is not null) AddThemeStyleboxOverride("panel", FrameStyle(CardInstance.Definition.Type, hovered: true));
+        if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: true));
     }
 
     private void OnMouseExited()
@@ -117,7 +93,7 @@ public partial class CardView : Panel
         tween.SetParallel(true);
         tween.TweenProperty(this, "scale", NormalScale, 0.12);
         tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.12);
-        if (CardInstance is not null) AddThemeStyleboxOverride("panel", FrameStyle(CardInstance.Definition.Type, hovered: false));
+        if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: false));
     }
 
     // Cards animate in from the draw pile when newly added to hand -
