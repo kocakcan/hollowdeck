@@ -21,7 +21,7 @@ namespace Hollowdeck.UI;
 // to reparent itself out of the hand area first.
 public partial class CardView : Panel
 {
-    private static readonly Vector2 HoverScale = new(1.08f, 1.08f);
+    private static readonly Vector2 HoverScale = new(1.15f, 1.15f);
     private static readonly Vector2 NormalScale = Vector2.One;
 
     public CardInstance? CardInstance { get; private set; }
@@ -52,24 +52,33 @@ public partial class CardView : Panel
         if (_nameLabel is null) return;
         _nameLabel.Text = $"{card.Definition.Name} ({card.Definition.Cost})";
         _artIcon.Texture = ArtAssets.CardIcon(card.Definition.Id);
-        AddThemeStyleboxOverride("panel", FrameStyle(card.Definition.Type));
+        AddThemeStyleboxOverride("panel", FrameStyle(card.Definition.Type, hovered: false));
         // Live player context (Strength/Weak) so the shown damage number is
         // always what would actually land, not stale hand-authored prose.
         _descriptionLabel.Text = EffectDescriptionFormatter.Describe(card.Definition.Effects, CombatManager.Instance?.Player);
     }
 
     // Attack/Skill get distinct frame colors so card type reads at a glance,
-    // matching the genre convention of color-coded card frames.
-    private static StyleBoxFlat FrameStyle(CardType type)
+    // matching the genre convention of color-coded card frames. Hovered adds
+    // a thicker, brighter border plus a native StyleBoxFlat drop-shadow for
+    // the "glow outline" - no shader needed.
+    private static StyleBoxFlat FrameStyle(CardType type, bool hovered)
     {
         var isAttack = type == CardType.Attack;
         var style = new StyleBoxFlat
         {
             BgColor = isAttack ? new Color(0.32f, 0.13f, 0.13f) : new Color(0.12f, 0.26f, 0.22f),
-            BorderColor = isAttack ? new Color(0.65f, 0.32f, 0.28f) : new Color(0.3f, 0.55f, 0.45f),
+            BorderColor = hovered
+                ? (isAttack ? new Color(0.95f, 0.55f, 0.35f) : new Color(0.5f, 0.85f, 0.7f))
+                : (isAttack ? new Color(0.65f, 0.32f, 0.28f) : new Color(0.3f, 0.55f, 0.45f)),
         };
-        style.SetBorderWidthAll(2);
+        style.SetBorderWidthAll(hovered ? 4 : 2);
         style.SetCornerRadiusAll(10);
+        if (hovered)
+        {
+            style.ShadowColor = isAttack ? new Color(0.9f, 0.4f, 0.25f, 0.65f) : new Color(0.35f, 0.8f, 0.6f, 0.65f);
+            style.ShadowSize = 10;
+        }
         return style;
     }
 
@@ -91,17 +100,68 @@ public partial class CardView : Panel
     private void OnMouseEntered()
     {
         if (_dragging) return;
-        GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine)
-            .TweenProperty(this, "scale", HoverScale, 0.12);
         ZIndex = 100;
+        var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
+        tween.SetParallel(true);
+        tween.TweenProperty(this, "scale", HoverScale, 0.12);
+        tween.TweenProperty(this, "rotation_degrees", 0f, 0.12); // "stands up straight"
+        if (CardInstance is not null) AddThemeStyleboxOverride("panel", FrameStyle(CardInstance.Definition.Type, hovered: true));
     }
 
     private void OnMouseExited()
     {
         if (_dragging) return;
-        GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine)
-            .TweenProperty(this, "scale", NormalScale, 0.12);
         ZIndex = _restZIndex;
+        var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
+        tween.SetParallel(true);
+        tween.TweenProperty(this, "scale", NormalScale, 0.12);
+        tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.12);
+        if (CardInstance is not null) AddThemeStyleboxOverride("panel", FrameStyle(CardInstance.Definition.Type, hovered: false));
+    }
+
+    // Cards animate in from the draw pile when newly added to hand -
+    // staggerDelaySec cascades a multi-card draw instead of popping all at
+    // once. Target position/rotation are whatever SetHomeTransform already
+    // set immediately before this is called.
+    public void PlayDrawTween(Vector2 fromGlobalPos, float staggerDelaySec)
+    {
+        var toPos = _homePosition;
+        var toRotation = _homeRotation;
+        Scale = Vector2.One * 0.6f;
+        Modulate = new Color(1, 1, 1, 0f);
+        GlobalPosition = fromGlobalPos;
+        RotationDegrees = toRotation + (GD.Randf() * 20f - 10f);
+
+        var tween = GetTree().CreateTween();
+        tween.TweenInterval(staggerDelaySec);
+        tween.SetParallel(true);
+        tween.SetTrans(Tween.TransitionType.Back);
+        tween.TweenProperty(this, "position", toPos, 0.28);
+        tween.TweenProperty(this, "rotation_degrees", toRotation, 0.28);
+        tween.TweenProperty(this, "scale", Vector2.One, 0.28);
+        tween.TweenProperty(this, "modulate:a", 1f, 0.18).SetTrans(Tween.TransitionType.Sine);
+    }
+
+    // Discard/exhaust without being played (end-of-turn hand clear, or a
+    // future exhaust-from-hand effect) - flies to the given pile anchor and
+    // fades out. Exhaust gets a faster, brighter/hotter flourish so it reads
+    // as distinct from an ordinary discard.
+    public void PlayExitTween(Vector2 toGlobalPos, bool isExhaust)
+    {
+        var screenRoot = GetTree().CurrentScene;
+        var globalPos = GlobalPosition;
+        GetParent().RemoveChild(this);
+        screenRoot.AddChild(this);
+        GlobalPosition = globalPos;
+        ZIndex = 50;
+
+        float duration = isExhaust ? 0.18f : 0.26f;
+        var tween = GetTree().CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(this, "global_position", toGlobalPos, duration).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenProperty(this, "scale", Vector2.One * (isExhaust ? 0.1f : 0.3f), duration).SetTrans(Tween.TransitionType.Back);
+        tween.TweenProperty(this, "modulate", isExhaust ? new Color(1.6f, 1.3f, 0.7f, 0f) : new Color(1f, 1f, 1f, 0f), duration);
+        tween.Chain().TweenCallback(Callable.From(QueueFree));
     }
 
     private void SnapHome()
@@ -181,10 +241,11 @@ public partial class CardView : Panel
 
     private void PlayResolveTween()
     {
+        bool isExhaust = CardInstance?.Definition.Exhaust ?? false;
         var tween = GetTree().CreateTween();
         tween.SetParallel(true);
-        tween.TweenProperty(this, "scale", Vector2.One * 0.4f, 0.18).SetTrans(Tween.TransitionType.Back);
-        tween.TweenProperty(this, "modulate:a", 0f, 0.18);
+        tween.TweenProperty(this, "scale", Vector2.One * (isExhaust ? 0.15f : 0.4f), 0.18).SetTrans(Tween.TransitionType.Back);
+        tween.TweenProperty(this, "modulate", isExhaust ? new Color(1.6f, 1.3f, 0.7f, 0f) : new Color(1, 1, 1, 0f), 0.18);
         tween.Chain().TweenCallback(Callable.From(QueueFree));
     }
 

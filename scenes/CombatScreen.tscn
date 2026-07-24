@@ -110,6 +110,30 @@ offset_right = 300.0
 offset_bottom = 94.0
 theme_override_font_sizes/font_size = 13
 
+[node name="DrawPileAnchor" type="Control" parent="."]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 85.0
+offset_right = 30.0
+offset_bottom = 85.0
+mouse_filter = 2
+
+[node name="DiscardPileAnchor" type="Control" parent="."]
+layout_mode = 0
+offset_left = 130.0
+offset_top = 85.0
+offset_right = 130.0
+offset_bottom = 85.0
+mouse_filter = 2
+
+[node name="ExhaustPileAnchor" type="Control" parent="."]
+layout_mode = 0
+offset_left = 230.0
+offset_top = 85.0
+offset_right = 230.0
+offset_bottom = 85.0
+mouse_filter = 2
+
 [node name="TargetHintLabel" type="Label" parent="."]
 layout_mode = 0
 anchors_preset = 8

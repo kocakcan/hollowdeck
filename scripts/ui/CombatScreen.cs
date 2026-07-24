@@ -38,6 +38,9 @@ public partial class CombatScreen : Control
     private Control _combatEndPanel = null!;
     private Label _outcomeLabel = null!;
     private Button _continueButton = null!;
+    private Control _drawPileAnchor = null!;
+    private Control _discardPileAnchor = null!;
+    private Control _exhaustPileAnchor = null!;
 
     private PackedScene _cardViewScene = null!;
     private PackedScene _enemyViewScene = null!;
@@ -76,6 +79,9 @@ public partial class CombatScreen : Control
         _energyRow = GetNode<HBoxContainer>("EnergyRow");
         _energyLabel = GetNode<Label>("EnergyLabel");
         _pileCountsLabel = GetNode<Label>("PileCountsLabel");
+        _drawPileAnchor = GetNode<Control>("DrawPileAnchor");
+        _discardPileAnchor = GetNode<Control>("DiscardPileAnchor");
+        _exhaustPileAnchor = GetNode<Control>("ExhaustPileAnchor");
         _playerStatusRow = GetNode<HBoxContainer>("PlayerStatusRow");
         _targetHintLabel = GetNode<Label>("TargetHintLabel");
         _endTurnButton = GetNode<Button>("EndTurnButton");
@@ -248,8 +254,8 @@ public partial class CombatScreen : Control
 
         // Drop tracking for any card no longer in hand. Two distinct cases:
         // - Still parented under _handArea: nobody's handled its exit yet
-        //   (e.g. a bulk end-of-turn discard) - remove it now (Phase 6 adds
-        //   an exit animation here instead of this plain free).
+        //   (e.g. a bulk end-of-turn discard) - fly it to the matching pile
+        //   anchor and fade it out instead of just vanishing.
         // - Already reparented elsewhere: this is the "played" case -
         //   CardView.OnReleased already reparents itself to the screen root
         //   *before* TryPlayCard mutates the hand, specifically so its own
@@ -262,8 +268,9 @@ public partial class CombatScreen : Control
             if (!IsInstanceValid(view)) continue;
             if (view.GetParent() == _handArea)
             {
-                _handArea.RemoveChild(view);
-                view.QueueFree();
+                bool isExhaust = _combat.Player.Piles.Exhaust.Contains(card);
+                var anchor = isExhaust ? _exhaustPileAnchor : _discardPileAnchor;
+                view.PlayExitTween(anchor.GlobalPosition, isExhaust);
             }
         }
 
@@ -285,11 +292,13 @@ public partial class CombatScreen : Control
         for (int i = 0; i < n; i++)
         {
             var card = hand[i];
+            bool isNew = false;
             if (!_cardViews.TryGetValue(card, out var cardView))
             {
                 cardView = _cardViewScene.Instantiate<CardView>();
                 _handArea.AddChild(cardView);
                 _cardViews[card] = cardView;
+                isNew = true;
             }
             // Always re-set (not just on creation): shown damage numbers
             // depend on live player Strength/Weak, which can change between
@@ -305,6 +314,10 @@ public partial class CombatScreen : Control
             float yOffset = FanArcHeight * (1f - Mathf.Cos(centered * Mathf.Pi));
             var pos = new Vector2(startX + i * spacing, FanBaseY + yOffset);
             cardView.SetHomeTransform(pos, rotationDeg, i);
+            if (isNew)
+            {
+                cardView.PlayDrawTween(_drawPileAnchor.GlobalPosition, i * 0.04f);
+            }
         }
     }
 
