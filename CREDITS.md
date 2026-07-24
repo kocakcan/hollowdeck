@@ -47,3 +47,15 @@ They were recolored (white on transparent) but otherwise unmodified. Icons by au
 
 If this game is distributed, this attribution must ship with it (e.g. in the
 credits/settings screen or an included file).
+
+## Typography — Google Fonts (SIL Open Font License 1.1)
+
+Fonts in `assets/fonts/` are used under the
+[SIL OFL 1.1](https://openfontlicense.org/), which requires the license text
+to ship alongside the font files (see the `*-OFL.txt` files next to each
+font).
+
+| Font | Designer | Use |
+| --- | --- | --- |
+| [Cinzel](https://fonts.google.com/specimen/Cinzel) | Natanael Gama | Display face — card/enemy names, HP/energy numbers, floating damage text |
+| [IM Fell English](https://fonts.google.com/specimen/IM+Fell+English) | Igino Marini | Body face — card descriptions and general UI text |

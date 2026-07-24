@@ -39,6 +39,7 @@ public partial class CardView : Panel
         _nameLabel = GetNode<Label>("VBox/NameLabel");
         _artIcon = GetNode<TextureRect>("VBox/ArtIcon");
         _descriptionLabel = GetNode<Label>("VBox/DescriptionLabel");
+        _nameLabel.ThemeTypeVariation = "CombatDisplayLabel";
         MouseEntered += OnMouseEntered;
         MouseExited += OnMouseExited;
     }

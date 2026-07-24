@@ -65,6 +65,10 @@ public partial class CombatScreen : Control
 
         GetNode<TextureRect>("PlayerSprite").Texture = ArtAssets.PlayerSprite();
 
+        _hpLabel.ThemeTypeVariation = "CombatDisplayLabel";
+        _blockLabel.ThemeTypeVariation = "CombatDisplayLabel";
+        _energyLabel.ThemeTypeVariation = "CombatDisplayLabel";
+
         _endTurnButton.Pressed += () => _combat.TryEndTurn();
         _continueButton.Pressed += OnContinuePressed;
 

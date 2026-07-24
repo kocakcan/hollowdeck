@@ -29,6 +29,8 @@ public partial class EnemyView : Button
         _intentLabel = GetNode<Label>("VBox/IntentRow/IntentLabel");
         _statusRow = GetNode<HBoxContainer>("VBox/StatusRow");
         _sprite.Texture = ArtAssets.EnemySprite(Combatant.Definition.Id);
+        _nameLabel.ThemeTypeVariation = "CombatDisplayLabel";
+        _hpLabel.ThemeTypeVariation = "CombatDisplayLabel";
         Pressed += OnPressed;
         Instances.Add(this);
         Refresh();

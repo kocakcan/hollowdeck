@@ -9,6 +9,7 @@ public partial class FloatingText : Label
 {
     public void Play(string text, Color color, Vector2 position)
     {
+        ThemeTypeVariation = "CombatDisplayLabel";
         Text = text;
         Modulate = color;
         Position = position;
