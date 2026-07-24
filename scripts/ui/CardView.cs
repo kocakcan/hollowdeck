@@ -6,6 +6,23 @@ using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
 
+file static class KeywordHighlights
+{
+    // Blurb + color per keyword that can appear in EffectDescriptionFormatter
+    // output - kept CardView-local (not in EffectDescriptionFormatter itself)
+    // since this is purely a presentation decoration; the formatter's plain-
+    // text output stays the single source of truth other screens (Reward/
+    // Shop/PileViewPopup) read unmodified.
+    public static readonly (string Keyword, Color Color, string Blurb)[] All =
+    {
+        ("Vulnerable", UiTheme.Palette.StatusDebuff, "Takes more damage from attacks. Wears off by 1 each turn."),
+        ("Weak", UiTheme.Palette.StatusDebuff, "Deals less damage with attacks. Wears off by 1 each turn."),
+        ("Poison", UiTheme.Palette.StatusDebuff, "Loses HP each turn, ignoring Block, then drops by 1."),
+        ("Strength", UiTheme.Palette.StatusBuff, "Attacks deal more damage."),
+        ("Block", UiTheme.Palette.Block, "Reduces incoming damage this turn."),
+    };
+}
+
 // Hover (scale tween) + manual drag on a Control-based card. Home position is
 // tracked and laid out manually by whoever spawns this (CombatScreen), rather
 // than via a real Container - that sidesteps the Container-vs-manual-Position
@@ -23,12 +40,32 @@ public partial class CardView : Panel
 {
     private static readonly Vector2 HoverScale = new(1.15f, 1.15f);
     private static readonly Vector2 NormalScale = Vector2.One;
+    private static readonly Color UnaffordableTint = new(0.55f, 0.55f, 0.55f);
+
+    // Derived from the fixed 224x308 card layout (VBox 8px inset, 6px
+    // separation x2 gaps, NameBanner 32px, ArtWindow 84px, DescriptionPanel's
+    // own 4px/2px content margins) rather than read live from
+    // DescriptionPanel.Size - SetCardInstance runs synchronously right after
+    // AddChild, before the VBoxContainer's deferred sort pass has actually
+    // sized DescriptionPanel, so a live read would measure a stale/zero box
+    // on a card's first render. Same fixed-constant approach CombatScreen's
+    // FanSafeWidth and PileViewPopup's EntryContentWidth already use to
+    // avoid this class of Container-timing bug.
+    private static readonly Vector2 DescriptionBoxSize = new(200, 160);
+    private static readonly int[] DescriptionFontSizes = { 15, 14, 13, 12, 11 };
 
     public CardInstance? CardInstance { get; private set; }
 
     private Label _nameLabel = null!;
     private TextureRect _artIcon = null!;
-    private Label _descriptionLabel = null!;
+    private TextureRect _artIconShadow = null!;
+    private RichTextLabel _descriptionLabel = null!;
+    private PanelContainer _nameBanner = null!;
+    private Panel _artWindow = null!;
+    private PanelContainer _descriptionPanel = null!;
+    private PanelContainer _costBadge = null!;
+    private Label _costLabel = null!;
+    private PanelContainer _exhaustBadge = null!;
     private bool _dragging;
     private Vector2 _homePosition;
     private float _homeRotation;
@@ -39,10 +76,25 @@ public partial class CardView : Panel
     {
         PivotOffset = Size / 2f;
         _homePosition = Position;
-        _nameLabel = GetNode<Label>("VBox/NameLabel");
-        _artIcon = GetNode<TextureRect>("VBox/ArtIcon");
-        _descriptionLabel = GetNode<Label>("VBox/DescriptionLabel");
+        _nameBanner = GetNode<PanelContainer>("VBox/NameBanner");
+        _nameLabel = GetNode<Label>("VBox/NameBanner/NameLabel");
+        _artWindow = GetNode<Panel>("VBox/ArtWindow");
+        _artIconShadow = GetNode<TextureRect>("VBox/ArtWindow/ArtIconShadow");
+        _artIcon = GetNode<TextureRect>("VBox/ArtWindow/ArtIcon");
+        _descriptionPanel = GetNode<PanelContainer>("VBox/DescriptionPanel");
+        _descriptionLabel = GetNode<RichTextLabel>("VBox/DescriptionPanel/DescriptionLabel");
+        _costBadge = GetNode<PanelContainer>("CostBadge");
+        _costLabel = GetNode<Label>("CostBadge/CostLabel");
+        _exhaustBadge = GetNode<PanelContainer>("ExhaustBadge");
         _nameLabel.ThemeTypeVariation = "CombatDisplayLabel";
+
+        var inset = ChromeStyles.InsetPanelStyle();
+        _nameBanner.AddThemeStyleboxOverride("panel", inset);
+        _artWindow.AddThemeStyleboxOverride("panel", inset);
+        _descriptionPanel.AddThemeStyleboxOverride("panel", ChromeStyles.InsetPanelStyle());
+        _costBadge.AddThemeStyleboxOverride("panel", ChromeStyles.BadgeStyle(UiTheme.Palette.AccentGoldBright, UiTheme.Palette.AccentGold));
+        _exhaustBadge.AddThemeStyleboxOverride("panel", ChromeStyles.BadgeStyle(UiTheme.Palette.BgPanel, UiTheme.Palette.ExhaustAccent));
+
         MouseEntered += OnMouseEntered;
         MouseExited += OnMouseExited;
     }
@@ -51,12 +103,66 @@ public partial class CardView : Panel
     {
         CardInstance = card;
         if (_nameLabel is null) return;
-        _nameLabel.Text = $"{card.Definition.Name} ({card.Definition.Cost})";
-        _artIcon.Texture = ArtAssets.CardIcon(card.Definition.Id);
-        AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(card.Definition.Type, card.Definition.Rarity, hovered: false));
+
+        var def = card.Definition;
+        _nameLabel.Text = def.Name;
+        _costLabel.Text = def.Cost.ToString();
+        _exhaustBadge.Visible = def.Exhaust;
+
+        var icon = ArtAssets.CardIcon(def.Id);
+        _artIcon.Texture = icon;
+        _artIconShadow.Texture = icon;
+
+        bool affordable = CombatManager.Instance?.Player is not { } player || player.CurrentEnergy >= def.Cost;
+        Modulate = affordable ? Colors.White : UnaffordableTint;
+
+        AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(def.Type, def.Rarity, hovered: false, CardUpgrade.IsUpgraded(def)));
+
         // Live player context (Strength/Weak) so the shown damage number is
         // always what would actually land, not stale hand-authored prose.
-        _descriptionLabel.Text = EffectDescriptionFormatter.Describe(card.Definition.Effects, CombatManager.Instance?.Player);
+        string plain = EffectDescriptionFormatter.Describe(def.Effects, CombatManager.Instance?.Player);
+        SetDescriptionText(plain);
+    }
+
+    private void SetDescriptionText(string plain)
+    {
+        var font = _descriptionLabel.GetThemeFont("normal_font") ?? ThemeDB.FallbackFont;
+        int fontSize = DescriptionFontSizes[^1];
+        string fitted = plain;
+        bool fits = false;
+        foreach (int size in DescriptionFontSizes)
+        {
+            if (font.GetMultilineStringSize(plain, HorizontalAlignment.Center, DescriptionBoxSize.X, size).Y > DescriptionBoxSize.Y) continue;
+            fontSize = size;
+            fits = true;
+            break;
+        }
+        if (!fits) fitted = TruncateToFit(plain, font, fontSize);
+
+        _descriptionLabel.Text = $"[center][font_size={fontSize}]{HighlightKeywords(fitted)}[/font_size][/center]";
+    }
+
+    private static string TruncateToFit(string text, Font font, int fontSize)
+    {
+        for (int len = text.Length - 1; len > 0; len--)
+        {
+            string candidate = text[..len].TrimEnd() + "…";
+            if (font.GetMultilineStringSize(candidate, HorizontalAlignment.Center, DescriptionBoxSize.X, fontSize).Y <= DescriptionBoxSize.Y)
+            {
+                return candidate;
+            }
+        }
+        return "…";
+    }
+
+    private static string HighlightKeywords(string plain)
+    {
+        string result = plain;
+        foreach (var (keyword, color, blurb) in KeywordHighlights.All)
+        {
+            result = result.Replace(keyword, $"[color=#{color.ToHtml(false)}][hint={blurb}]{keyword}[/hint][/color]");
+        }
+        return result;
     }
 
     // pos/rotationDeg are this card's resting slot in the fan (CombatScreen
@@ -82,7 +188,7 @@ public partial class CardView : Panel
         tween.SetParallel(true);
         tween.TweenProperty(this, "scale", HoverScale, 0.12);
         tween.TweenProperty(this, "rotation_degrees", 0f, 0.12); // "stands up straight"
-        if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: true));
+        if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: true, CardUpgrade.IsUpgraded(CardInstance.Definition)));
     }
 
     private void OnMouseExited()
@@ -93,7 +199,7 @@ public partial class CardView : Panel
         tween.SetParallel(true);
         tween.TweenProperty(this, "scale", NormalScale, 0.12);
         tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.12);
-        if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: false));
+        if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: false, CardUpgrade.IsUpgraded(CardInstance.Definition)));
     }
 
     // Cards animate in from the draw pile when newly added to hand -

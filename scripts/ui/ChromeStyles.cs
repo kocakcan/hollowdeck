@@ -58,32 +58,35 @@ public static class ChromeStyles
         return style;
     }
 
-    // Attack/Skill get distinct frame colors so card type reads at a glance,
-    // matching the genre convention of color-coded card frames - kept as the
-    // dominant signal so a second color dimension (rarity) never fights it.
-    // Hovered adds a thicker, brighter border plus a native StyleBoxFlat
-    // drop-shadow for the "glow outline" - no shader needed. Rare cards get
-    // an additional gold glow layered on top even at rest; Common/Uncommon
-    // get no extra treatment yet - a real bordered-ring-per-rarity frame is
-    // Phase 2 work, this just wires the parameter through.
-    public static StyleBoxFlat CardFrameStyle(CardType type, Rarity rarity, bool hovered)
+    // Two independent color channels rather than one fighting a second
+    // painted on top of it: fill reads CardType (Attack/Skill), border reads
+    // Rarity (Common/Uncommon/Rare). Hover brightens whichever border color
+    // is already showing (a pure brightness signal, not a hue swap), Rare
+    // keeps its gold glow at rest, and an upgraded card blends its border
+    // toward green independent of rarity - an upgraded Rare card reads as
+    // gold-with-a-green-cast rather than one signal replacing the other.
+    public static StyleBoxFlat CardFrameStyle(CardType type, Rarity rarity, bool hovered, bool isUpgraded = false)
     {
-        var isAttack = type == CardType.Attack;
+        var borderColor = rarity switch
+        {
+            Rarity.Uncommon => UiTheme.Palette.RarityUncommon,
+            Rarity.Rare => UiTheme.Palette.RarityRare,
+            _ => UiTheme.Palette.RarityCommon,
+        };
+        if (isUpgraded) borderColor = borderColor.Lerp(UiTheme.Palette.UpgradeAccent, 0.35f);
+        if (hovered) borderColor = borderColor.Lerp(Colors.White, 0.4f);
+
         var style = new StyleBoxFlat
         {
-            BgColor = isAttack ? UiTheme.Palette.AttackFill : UiTheme.Palette.SkillFill,
-            BorderColor = hovered
-                ? (isAttack ? UiTheme.Palette.AttackBorderHover : UiTheme.Palette.SkillBorderHover)
-                : (isAttack ? UiTheme.Palette.AttackBorder : UiTheme.Palette.SkillBorder),
+            BgColor = type == CardType.Attack ? UiTheme.Palette.AttackFill : UiTheme.Palette.SkillFill,
+            BorderColor = borderColor,
         };
         style.SetBorderWidthAll(hovered ? UiTheme.BorderWidth.Thick : UiTheme.BorderWidth.Normal);
         style.SetCornerRadiusAll((int)UiTheme.Radius.Card);
 
         if (hovered)
         {
-            style.ShadowColor = isAttack
-                ? new Color(0.9f, 0.4f, 0.25f, 0.65f)
-                : new Color(0.35f, 0.8f, 0.6f, 0.65f);
+            style.ShadowColor = new Color(borderColor.R, borderColor.G, borderColor.B, 0.65f);
             style.ShadowSize = 10;
         }
         else if (rarity == Rarity.Rare)
@@ -92,6 +95,33 @@ public static class ChromeStyles
             style.ShadowSize = 6;
         }
 
+        return style;
+    }
+
+    // Circular badge (cost pip, Exhaust pip) - a large corner radius always
+    // rounds to a full circle regardless of the node's actual size, so no
+    // per-size radius math is needed at the call site.
+    public static StyleBoxFlat BadgeStyle(Color fill, Color ring)
+    {
+        var style = new StyleBoxFlat { BgColor = fill, BorderColor = ring };
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
+        style.SetCornerRadiusAll(999);
+        return style;
+    }
+
+    // Subtle darker overlay shared by the card's name banner, art window,
+    // and description box - semi-transparent black alpha-blends over
+    // whatever's already painted beneath it (the card's type-colored fill),
+    // so all three zones read as distinct insets without introducing a
+    // third hue that would compete with type (fill) and rarity (border).
+    public static StyleBoxFlat InsetPanelStyle()
+    {
+        var style = new StyleBoxFlat { BgColor = new Color(0f, 0f, 0f, 0.28f) };
+        style.SetCornerRadiusAll((int)UiTheme.Radius.Panel);
+        style.ContentMarginLeft = 4;
+        style.ContentMarginRight = 4;
+        style.ContentMarginTop = 2;
+        style.ContentMarginBottom = 2;
         return style;
     }
 }

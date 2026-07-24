@@ -77,17 +77,15 @@ public partial class StyleReferenceScreen : Control
             ("AccentGold", UiTheme.Palette.AccentGold),
             ("AccentGoldBright", UiTheme.Palette.AccentGoldBright),
             ("AttackFill", UiTheme.Palette.AttackFill),
-            ("AttackBorder", UiTheme.Palette.AttackBorder),
-            ("AttackBorderHover", UiTheme.Palette.AttackBorderHover),
             ("SkillFill", UiTheme.Palette.SkillFill),
-            ("SkillBorder", UiTheme.Palette.SkillBorder),
-            ("SkillBorderHover", UiTheme.Palette.SkillBorderHover),
             ("Damage", UiTheme.Palette.Damage),
             ("Heal", UiTheme.Palette.Heal),
             ("Block", UiTheme.Palette.Block),
             ("RarityCommon", UiTheme.Palette.RarityCommon),
             ("RarityUncommon", UiTheme.Palette.RarityUncommon),
             ("RarityRare", UiTheme.Palette.RarityRare),
+            ("UpgradeAccent", UiTheme.Palette.UpgradeAccent),
+            ("ExhaustAccent", UiTheme.Palette.ExhaustAccent),
             ("StatusBuff", UiTheme.Palette.StatusBuff),
             ("StatusDebuff", UiTheme.Palette.StatusDebuff),
         };
@@ -128,28 +126,48 @@ public partial class StyleReferenceScreen : Control
 
         foreach (var rarity in new[] { Rarity.Common, Rarity.Uncommon, Rarity.Rare })
         {
-            AddCard(row, cardScene, baseAttack, rarity);
-            AddCard(row, cardScene, baseSkill, rarity);
+            AddCard(row, cardScene, Clone(baseAttack, $"{baseAttack.Name} ({rarity})", rarity));
+            AddCard(row, cardScene, Clone(baseSkill, $"{baseSkill.Name} ({rarity})", rarity));
         }
+
+        // Exhaust/upgraded/unaffordable aren't reachable via rarity alone -
+        // CardUpgrade.Apply gives the real "+" treatment (not faked), while
+        // Exhaust is forced on a clone purely for this reference screen
+        // (bash/strike aren't Exhaust cards in the real data). Unaffordable
+        // can't be demoed by wiring a live CombatManager energy check here -
+        // this debug scene has no running combat/player - so it's faked by
+        // setting Modulate directly, the same property SetCardInstance's
+        // real affordability check would set from live energy in combat.
+        var exhaustExample = Clone(baseAttack, "Exhaust Example", Rarity.Common);
+        exhaustExample.Exhaust = true;
+        AddCard(row, cardScene, exhaustExample);
+
+        var upgradedExample = CardUpgrade.Apply(Clone(baseAttack, baseAttack.Name, Rarity.Rare));
+        AddCard(row, cardScene, upgradedExample);
+
+        var unaffordableView = AddCard(row, cardScene, Clone(baseAttack, "Unaffordable Example", Rarity.Common));
+        unaffordableView.Modulate = new Color(0.55f, 0.55f, 0.55f);
     }
 
-    private static void AddCard(HBoxContainer row, PackedScene cardScene, CardDefinition template, Rarity rarity)
+    private static CardDefinition Clone(CardDefinition template, string name, Rarity rarity) => new()
     {
-        var clone = new CardDefinition
-        {
-            Id = template.Id,
-            Name = $"{template.Name} ({rarity})",
-            Cost = template.Cost,
-            Type = template.Type,
-            Target = template.Target,
-            Exhaust = template.Exhaust,
-            Rarity = rarity,
-            Effects = template.Effects,
-        };
+        Id = template.Id,
+        Name = name,
+        Cost = template.Cost,
+        Type = template.Type,
+        Target = template.Target,
+        Exhaust = template.Exhaust,
+        Rarity = rarity,
+        Effects = template.Effects,
+    };
+
+    private static CardView AddCard(HBoxContainer row, PackedScene cardScene, CardDefinition definition)
+    {
         var view = cardScene.Instantiate<CardView>();
         view.CustomMinimumSize = new Vector2(180, 248);
         row.AddChild(view);
-        view.SetCardInstance(new CardInstance(clone));
+        view.SetCardInstance(new CardInstance(definition));
+        return view;
     }
 
     private static HBoxContainer BuildStatusIconRow()
