@@ -35,9 +35,20 @@ public partial class CombatScreen : Control
 
     // Previous HP/Block per combatant, so Refresh() can diff and pop up
     // floating combat text - CombatManager only tells us "something
-    // changed," not what, and EnemyView gets torn down/rebuilt on every
-    // refresh (see RefreshEnemies), so this has to live here, not there.
+    // changed," not what.
     private readonly Dictionary<Combatant, (int Hp, int Block)> _lastStats = new();
+
+    // RefreshHand()/RefreshEnemies() used to destroy and reinstantiate every
+    // CardView/EnemyView on every single Refresh() call (which fires on any
+    // state/hand/combatant/potion event, not just ones relevant to that
+    // node) - fatal to any continuous per-node animation (idle bob, hit-
+    // shake, draw/discard motion), since the node holding that animation
+    // state kept getting destroyed out from under it. These dictionaries
+    // let both methods diff against what's already on screen and update
+    // existing views in place instead of rebuilding, so a view's identity
+    // (and any animation state on it) survives across refreshes.
+    private readonly Dictionary<CardInstance, CardView> _cardViews = new();
+    private readonly Dictionary<EnemyCombatant, EnemyView> _enemyViews = new();
 
     public override void _Ready()
     {
@@ -162,39 +173,80 @@ public partial class CombatScreen : Control
 
     private void RefreshHand()
     {
-        // RemoveChild (not just QueueFree) so the removal is immediate -
-        // Refresh() can run multiple times in the same frame (state/hand/
-        // combatant events all fire synchronously), and QueueFree alone
-        // defers removal until frame end, letting rebuilds stack duplicates.
-        foreach (var child in _handArea.GetChildren())
+        var hand = _combat.Player.Piles.Hand;
+        var handSet = new HashSet<CardInstance>(hand);
+
+        // Drop tracking for any card no longer in hand. Two distinct cases:
+        // - Still parented under _handArea: nobody's handled its exit yet
+        //   (e.g. a bulk end-of-turn discard) - remove it now (Phase 6 adds
+        //   an exit animation here instead of this plain free).
+        // - Already reparented elsewhere: this is the "played" case -
+        //   CardView.OnReleased already reparents itself to the screen root
+        //   *before* TryPlayCard mutates the hand, specifically so its own
+        //   PlayResolveTween survives this Refresh() - just drop the dict
+        //   entry and leave the node alone.
+        foreach (var (card, view) in _cardViews.ToList())
         {
-            _handArea.RemoveChild(child);
-            child.QueueFree();
+            if (handSet.Contains(card)) continue;
+            _cardViews.Remove(card);
+            if (!IsInstanceValid(view)) continue;
+            if (view.GetParent() == _handArea)
+            {
+                _handArea.RemoveChild(view);
+                view.QueueFree();
+            }
         }
 
-        var hand = _combat.Player.Piles.Hand;
+        // Add newly-drawn cards, update everyone's slot/live description.
         for (int i = 0; i < hand.Count; i++)
         {
-            var cardView = _cardViewScene.Instantiate<CardView>();
-            _handArea.AddChild(cardView);
-            cardView.SetCardInstance(hand[i]);
+            var card = hand[i];
+            if (!_cardViews.TryGetValue(card, out var cardView))
+            {
+                cardView = _cardViewScene.Instantiate<CardView>();
+                _handArea.AddChild(cardView);
+                _cardViews[card] = cardView;
+            }
+            // Always re-set (not just on creation): shown damage numbers
+            // depend on live player Strength/Weak, which can change between
+            // refreshes without this specific card being re-drawn.
+            cardView.SetCardInstance(card);
             cardView.SetHomePosition(new Vector2(i * (CardWidth + CardGap), 0));
         }
     }
 
     private void RefreshEnemies()
     {
-        foreach (var child in _enemyRow.GetChildren())
+        var currentSet = new HashSet<EnemyCombatant>(_combat.Enemies);
+
+        // Death case: still tracked but no longer in Enemies (already
+        // stripped by Enemies.RemoveAll(e => e.IsDead) before
+        // CombatantsChanged fires) - remove now (Phase 7 adds a death tween
+        // here instead of this plain free).
+        foreach (var (enemyCombatant, view) in _enemyViews.ToList())
         {
-            _enemyRow.RemoveChild(child);
-            child.QueueFree();
+            if (currentSet.Contains(enemyCombatant)) continue;
+            _enemyViews.Remove(enemyCombatant);
+            if (!IsInstanceValid(view)) continue;
+            _enemyRow.RemoveChild(view);
+            view.QueueFree();
         }
 
         foreach (var enemy in _combat.Enemies)
         {
-            var enemyView = _enemyViewScene.Instantiate<EnemyView>();
-            enemyView.Combatant = enemy;
-            _enemyRow.AddChild(enemyView);
+            if (!_enemyViews.TryGetValue(enemy, out var enemyView))
+            {
+                enemyView = _enemyViewScene.Instantiate<EnemyView>();
+                enemyView.Combatant = enemy;
+                _enemyRow.AddChild(enemyView);
+                _enemyViews[enemy] = enemyView;
+            }
+            else
+            {
+                // Update in place - never destroy/recreate an existing
+                // enemy's view, so idle/hit animations on it stay continuous.
+                enemyView.Refresh();
+            }
             PopupDelta(enemy, enemyView, new Vector2(30, 4));
         }
     }
