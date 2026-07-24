@@ -26,6 +26,7 @@ public partial class SettingsManager : Node
 
     public float MasterVolume => _data.MasterVolume;
     public bool Fullscreen => _data.Fullscreen;
+    public bool ReduceMotion => _data.ReduceMotion;
 
     public override void _Ready()
     {
@@ -45,6 +46,12 @@ public partial class SettingsManager : Node
     {
         _data.Fullscreen = fullscreen;
         Apply();
+        SaveTo(path ?? SavePath);
+    }
+
+    public void SetReduceMotion(bool reduceMotion, string? path = null)
+    {
+        _data.ReduceMotion = reduceMotion;
         SaveTo(path ?? SavePath);
     }
 

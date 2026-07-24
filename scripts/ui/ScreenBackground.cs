@@ -15,11 +15,17 @@ public static class ScreenBackground
 
         // ShowBehindParent keeps the screen's own _Draw output (e.g.
         // MapScreen's connecting lines) rendering above the backdrop.
+        // TextureFilter=Nearest keeps the pixel-art tile crisp at any tiled
+        // scale - the one place in the project this was still missing (the
+        // enemy/player sprites already set it); the vignette below stays on
+        // the default Linear filter since it's a smooth procedural gradient,
+        // not pixel art, and Nearest would band it.
         var background = new TextureRect
         {
             Texture = tile,
             StretchMode = TextureRect.StretchModeEnum.Tile,
             TextureRepeat = CanvasItem.TextureRepeatEnum.Enabled,
+            TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
             Modulate = tint,
             MouseFilter = Control.MouseFilterEnum.Ignore,
             ShowBehindParent = true,
@@ -54,6 +60,7 @@ public static class ScreenBackground
             Texture = tile,
             StretchMode = TextureRect.StretchModeEnum.Tile,
             TextureRepeat = CanvasItem.TextureRepeatEnum.Enabled,
+            TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
             Modulate = tint,
             MouseFilter = Control.MouseFilterEnum.Ignore,
             ShowBehindParent = true,

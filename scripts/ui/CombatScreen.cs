@@ -28,6 +28,8 @@ public partial class CombatScreen : Control
     private HBoxContainer _potionBelt = null!;
     private HBoxContainer _relicBar = null!;
     private ProgressBar _playerHpBar = null!;
+    private ProgressBar _playerGhostHpBar = null!;
+    private Tween? _playerGhostHpTween;
     private Label _playerHpLabel = null!;
     private HBoxContainer _energyRow = null!;
     private Label _energyLabel = null!;
@@ -42,6 +44,7 @@ public partial class CombatScreen : Control
     private Control _discardPileAnchor = null!;
     private Control _exhaustPileAnchor = null!;
     private TextureRect _playerSprite = null!;
+    private Label _turnBannerLabel = null!;
 
     private PackedScene _cardViewScene = null!;
     private PackedScene _enemyViewScene = null!;
@@ -53,11 +56,18 @@ public partial class CombatScreen : Control
     private Vector2 _playerSpriteRestPos;
     private Tween? _playerIdleTween;
     private Tween? _screenShakeTween;
+    private Vector2 _turnBannerRestPos;
+    private Tween? _turnBannerTween;
+    private CombatState _lastKnownState = CombatState.Start;
+    private bool _pulseEnergyPipsOnNextRefresh;
+    private Tween? _endTurnPulseTween;
+    private bool _endTurnPulsing;
 
     // Previous HP/Block per combatant, so Refresh() can diff and pop up
     // floating combat text - CombatManager only tells us "something
     // changed," not what.
     private readonly Dictionary<Combatant, (int Hp, int Block)> _lastStats = new();
+    private Dictionary<StatusType, int>? _lastPlayerStatuses;
 
     // RefreshHand()/RefreshEnemies() used to destroy and reinstantiate every
     // CardView/EnemyView on every single Refresh() call (which fires on any
@@ -81,6 +91,7 @@ public partial class CombatScreen : Control
         _potionBelt = GetNode<HBoxContainer>("PotionBelt");
         _relicBar = GetNode<HBoxContainer>("RelicBar");
         _playerHpBar = GetNode<ProgressBar>("PlayerHpFrame/HpBar");
+        _playerGhostHpBar = GetNode<ProgressBar>("PlayerHpFrame/GhostHpBar");
         _playerHpLabel = GetNode<Label>("PlayerHpFrame/HpLabel");
         _energyRow = GetNode<HBoxContainer>("EnergyRow");
         _energyLabel = GetNode<Label>("EnergyLabel");
@@ -90,6 +101,7 @@ public partial class CombatScreen : Control
         _exhaustPileAnchor = GetNode<Control>("ExhaustPileAnchor");
         _playerStatusRow = GetNode<HBoxContainer>("PlayerStatusRow");
         _targetHintLabel = GetNode<Label>("TargetHintLabel");
+        _turnBannerLabel = GetNode<Label>("TurnBannerLabel");
         _endTurnButton = GetNode<Button>("EndTurnButton");
         _combatEndPanel = GetNode<Control>("CombatEndPanel");
         _outcomeLabel = GetNode<Label>("CombatEndPanel/OutcomeLabel");
@@ -105,9 +117,12 @@ public partial class CombatScreen : Control
         _playerSpriteRestPos = _playerSprite.Position;
         StartPlayerIdleBob();
 
-        ChromeStyles.ApplyHpBarStyle(_playerHpBar);
+        ChromeStyles.ApplyHpBarStyle(_playerHpBar, _playerGhostHpBar);
         _playerHpLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _energyLabel.ThemeTypeVariation = "CombatDisplayLabel";
+        _turnBannerLabel.ThemeTypeVariation = "CombatDisplayLabel";
+        _turnBannerLabel.AddThemeFontSizeOverride("font_size", 32);
+        _turnBannerRestPos = _turnBannerLabel.Position;
 
         _endTurnButton.AddThemeStyleboxOverride("normal", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_normal.png"));
         _endTurnButton.AddThemeStyleboxOverride("hover", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_hover.png"));
@@ -117,7 +132,7 @@ public partial class CombatScreen : Control
         _endTurnButton.Pressed += () => _combat.TryEndTurn();
         _continueButton.Pressed += OnContinuePressed;
 
-        _combat.StateChanged += _ => Refresh();
+        _combat.StateChanged += OnCombatStateChanged;
         _combat.HandChanged += Refresh;
         _combat.CombatantsChanged += Refresh;
         _combat.PotionsChanged += Refresh;
@@ -230,12 +245,67 @@ public partial class CombatScreen : Control
         }
     }
 
+    // StateChanged only carries the new state - CombatManager.TransitionTo
+    // (CombatManager.cs:108-113) doesn't pass the previous one, and
+    // PlayerTurn is entered from three different places (combat start,
+    // after a card resolves mid-turn, and after the enemy turn ends) but
+    // only the first/last are an actual turn boundary worth a banner - a
+    // card-resolve bounce-back to PlayerTurn should never re-trigger "Your
+    // Turn". Tracking the last-seen state locally is what lets this
+    // distinguish "just started a new turn" from "just finished resolving
+    // one card mid-turn" without CombatManager needing a new event.
+    private void OnCombatStateChanged(CombatState next)
+    {
+        bool enteringPlayerTurn = next == CombatState.PlayerTurn &&
+            _lastKnownState is CombatState.Start or CombatState.ResolvingEnemyIntent;
+        bool enteringEnemyTurn = next == CombatState.EnemyTurn && _lastKnownState == CombatState.PlayerTurn;
+
+        if (enteringPlayerTurn)
+        {
+            PlayTurnBanner("Your Turn");
+            _pulseEnergyPipsOnNextRefresh = true;
+        }
+        else if (enteringEnemyTurn)
+        {
+            PlayTurnBanner("Enemy Turn");
+        }
+
+        _lastKnownState = next;
+        Refresh();
+    }
+
+    // Slides up + fades in, holds briefly, then fades out - a short beat
+    // between turns rather than an instant label swap.
+    private void PlayTurnBanner(string text)
+    {
+        _turnBannerTween?.Kill();
+        _turnBannerLabel.Text = text;
+        _turnBannerLabel.Modulate = new Color(1f, 1f, 1f, 0f);
+        _turnBannerLabel.Position = _turnBannerRestPos + new Vector2(0, 16);
+
+        var tween = CreateTween();
+        _turnBannerTween = tween;
+        tween.SetParallel(true);
+        tween.TweenProperty(_turnBannerLabel, "modulate:a", 1f, 0.18).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenProperty(_turnBannerLabel, "position", _turnBannerRestPos, 0.22).SetTrans(Tween.TransitionType.Back);
+        tween.Chain();
+        tween.TweenInterval(0.5);
+        tween.TweenProperty(_turnBannerLabel, "modulate:a", 0f, 0.25).SetTrans(Tween.TransitionType.Sine);
+    }
+
     // Screen shake: jitters the CombatScreen root itself - safe since it's
     // the scene root, not Container-managed. Kills any shake already in
     // flight first so overlapping hits (e.g. an AOE card) don't leave the
-    // screen stuck off-center from two competing tweens.
-    private void PlayScreenShake(float magnitude = 6f)
+    // screen stuck off-center from two competing tweens. Magnitude scales
+    // with how much HP was actually lost (capped) instead of being a flat
+    // constant regardless of a tickle vs. a near-lethal hit; skipped
+    // entirely under Settings > Reduce Motion.
+    private const float MaxShakeMagnitude = 14f;
+
+    private void PlayScreenShake(int hpDeltaAbs)
     {
+        if (SettingsManager.Instance.ReduceMotion) return;
+        float magnitude = Mathf.Clamp(hpDeltaAbs * 0.6f, 3f, MaxShakeMagnitude);
         _screenShakeTween?.Kill();
         Position = Vector2.Zero;
         var tween = CreateTween();
@@ -267,7 +337,7 @@ public partial class CombatScreen : Control
             Position = ToLocalPoint(globalPos),
             Emitting = false,
             OneShot = true,
-            Amount = 14,
+            Amount = SettingsManager.Instance.ReduceMotion ? 5 : 14,
             Lifetime = 0.35,
             Texture = _sparkTexture,
             Direction = Vector2.Up,
@@ -356,19 +426,24 @@ public partial class CombatScreen : Control
         var player = _combat.Player;
         PopupDelta(player, this, _playerHpBar.GlobalPosition);
         _playerHpBar.MaxValue = player.MaxHp;
-        _playerHpBar.Value = player.CurrentHp;
+        _playerGhostHpBar.MaxValue = player.MaxHp;
+        ChromeStyles.TweenHpBar(_playerHpBar, _playerGhostHpBar, ref _playerGhostHpTween, player.CurrentHp);
         _playerHpLabel.Text = $"{player.CurrentHp}/{player.MaxHp}" +
                                (player.Block > 0 ? $"  🛡{player.Block}" : "");
         _energyLabel.Text = $"{player.CurrentEnergy}/{player.MaxEnergy}";
         RefreshEnergyPips(player.CurrentEnergy, player.MaxEnergy);
         _pileCountsLabel.Text =
             $"Draw {player.Piles.DrawPile.Count} · Discard {player.Piles.Discard.Count} · Exhaust {player.Piles.Exhaust.Count}";
-        StatusRow.Populate(_playerStatusRow, player, 20);
+        StatusRow.Populate(_playerStatusRow, player, 20, _lastPlayerStatuses);
+        _lastPlayerStatuses = new Dictionary<StatusType, int>(player.Statuses);
     }
 
     // Rebuilt fully each refresh, same as the (non-animated) relic/potion
     // bars - unlike hand/enemy views, these pips have no animation state
-    // worth preserving across refreshes yet.
+    // worth preserving across refreshes. _pulseEnergyPipsOnNextRefresh (set
+    // by OnCombatStateChanged only on an actual turn start, not every
+    // refresh) gives filled pips a staggered pop-in for that one call
+    // instead of the usual instant snap.
     private void RefreshEnergyPips(int current, int max)
     {
         foreach (var child in _energyRow.GetChildren())
@@ -377,18 +452,32 @@ public partial class CombatScreen : Control
             child.QueueFree();
         }
 
+        bool pulse = _pulseEnergyPipsOnNextRefresh;
+        _pulseEnergyPipsOnNextRefresh = false;
+
         _energyOrbTexture ??= BuildEnergyOrbTexture();
         for (int i = 0; i < max; i++)
         {
-            _energyRow.AddChild(new TextureRect
+            bool filled = i < current;
+            var pip = new TextureRect
             {
                 Texture = _energyOrbTexture,
                 CustomMinimumSize = new Vector2(24, 24),
                 ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                 StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-                Modulate = i < current ? Colors.White : new Color(1, 1, 1, 0.25f),
+                Modulate = filled ? Colors.White : new Color(1, 1, 1, 0.25f),
                 MouseFilter = MouseFilterEnum.Ignore,
-            });
+                PivotOffset = new Vector2(12, 12),
+            };
+            _energyRow.AddChild(pip);
+
+            if (pulse && filled)
+            {
+                pip.Scale = Vector2.Zero;
+                var tween = pip.CreateTween();
+                tween.TweenInterval(i * 0.05);
+                tween.TweenProperty(pip, "scale", Vector2.One, 0.2).SetTrans(Tween.TransitionType.Back);
+            }
         }
     }
 
@@ -539,38 +628,72 @@ public partial class CombatScreen : Control
     // changed. popupParent/localSpawnPos let this work for both the player
     // (spawned under CombatScreen itself, at the HP label's position) and
     // enemies (spawned as a child of their freshly-rebuilt EnemyView).
+    // hpDelta and blockDelta are correlated (not just branched on
+    // independently) so a hit that Block fully absorbed (blockDelta<0,
+    // hpDelta==0) reads as a distinct "blocked" beat instead of showing
+    // nothing at all, and a hit that broke through remaining Block
+    // (blockDelta<0 and hpDelta<0 together) still just plays the normal hit
+    // reaction - the correlation only changes what visual plays, it never
+    // reads engine state beyond the two fields already being diffed.
     private void PopupDelta(Combatant c, Node popupParent, Vector2 localSpawnPos)
     {
         if (_lastStats.TryGetValue(c, out var prev))
         {
             int hpDelta = c.CurrentHp - prev.Hp;
+            int blockDelta = c.Block - prev.Block;
+
             if (hpDelta < 0)
             {
-                SpawnFloatingText(popupParent, localSpawnPos, $"-{-hpDelta}", new Color(1f, 0.35f, 0.35f));
-                if (popupParent is CanvasItem hitTarget) FlashHit(hitTarget);
-                PlayHitVfx(popupParent);
+                bool bigHit = -hpDelta >= Mathf.Max(10, c.MaxHp * 0.2f);
+                PlayHitReaction(popupParent, localSpawnPos, -hpDelta, bigHit);
             }
             else if (hpDelta > 0)
             {
                 SpawnFloatingText(popupParent, localSpawnPos, $"+{hpDelta}", new Color(0.4f, 1f, 0.4f));
             }
 
-            int blockDelta = c.Block - prev.Block;
             if (blockDelta > 0)
             {
                 SpawnFloatingText(popupParent, localSpawnPos + new Vector2(0, 16),
                     $"+{blockDelta} Block", new Color(0.6f, 0.8f, 1f));
                 if (popupParent is CanvasItem blockTarget) FlashBlock(blockTarget);
             }
+            else if (blockDelta < 0 && hpDelta == 0)
+            {
+                PlayBlockAbsorbVfx(popupParent, localSpawnPos);
+            }
         }
         _lastStats[c] = (c.CurrentHp, c.Block);
+    }
+
+    // On a big hit, hold every reaction (damage number, flash, shake,
+    // lunge/slash/spark) behind a short real-time delay instead of firing
+    // them all the instant the HP diff is seen - a lightweight stand-in for
+    // "hit-stop" that reads as impact anticipation without touching
+    // Engine.TimeScale (which would also affect CombatManager's enemy-turn
+    // pacing delays and every other in-flight tween - too broad a hammer for
+    // this). Small hits stay instant so combat doesn't feel sluggish.
+    private const float HitStopSeconds = 0.06f;
+
+    private void PlayHitReaction(Node popupParent, Vector2 localSpawnPos, int hpLost, bool bigHit)
+    {
+        void Fire()
+        {
+            if (popupParent is Node n && !IsInstanceValid(n)) return;
+            SpawnFloatingText(popupParent, localSpawnPos, $"-{hpLost}", new Color(1f, 0.35f, 0.35f), bigHit);
+            if (popupParent is CanvasItem hitTarget) FlashHit(hitTarget);
+            PlayHitVfx(popupParent, hpLost);
+        }
+
+        if (bigHit) GetTree().CreateTimer(HitStopSeconds).Timeout += Fire;
+        else Fire();
     }
 
     // Damage-direction VFX: player-attacks-enemy gets a lunge + slash trail
     // in addition to the target's recoil; enemy-attacks-player gets a
     // camera-shake-style hit on the player sprite instead. Both get a spark
-    // burst and a screen shake.
-    private void PlayHitVfx(Node popupParent)
+    // burst and a screen shake scaled to how much HP was actually lost.
+    private void PlayHitVfx(Node popupParent, int hpLost)
     {
         if (popupParent is EnemyView enemyView)
         {
@@ -579,22 +702,39 @@ public partial class CombatScreen : Control
             PlayPlayerLungeToward(center);
             PlaySlashTrail(_playerSprite.GlobalPosition + _playerSprite.Size / 2f, center);
             SpawnHitSpark(center, new Color(1f, 0.5f, 0.35f));
-            PlayScreenShake();
+            PlayScreenShake(hpLost);
         }
         else if (popupParent == this)
         {
             var center = _playerSprite.GlobalPosition + _playerSprite.Size / 2f;
             PlayPlayerHitShake();
             SpawnHitSpark(center, new Color(1f, 0.5f, 0.35f));
-            PlayScreenShake();
+            PlayScreenShake(hpLost);
         }
     }
 
-    private void SpawnFloatingText(Node parent, Vector2 localPos, string text, Color color)
+    // Block absorbed the hit entirely (no HP lost) - previously silent; a
+    // "Blocked" text plus a metallic-blue flash/spark gives it the same
+    // "something happened" feedback a landed hit already gets.
+    private void PlayBlockAbsorbVfx(Node popupParent, Vector2 localSpawnPos)
+    {
+        SpawnFloatingText(popupParent, localSpawnPos, "Blocked!", new Color(0.6f, 0.8f, 1f));
+        if (popupParent is CanvasItem target) FlashBlock(target);
+
+        Vector2? center = popupParent switch
+        {
+            EnemyView enemyView => enemyView.GlobalPosition + enemyView.Size / 2f,
+            CombatScreen => _playerSprite.GlobalPosition + _playerSprite.Size / 2f,
+            _ => null,
+        };
+        if (center is { } c) SpawnHitSpark(c, new Color(0.5f, 0.75f, 1f));
+    }
+
+    private void SpawnFloatingText(Node parent, Vector2 localPos, string text, Color color, bool bigHit = false)
     {
         var floatingText = _floatingTextScene.Instantiate<FloatingText>();
         parent.AddChild(floatingText);
-        floatingText.Play(text, color, localPos);
+        floatingText.Play(text, color, localPos, bigHit);
     }
 
     // A brief red tint pulse rather than a positional shake - EnemyView
@@ -627,7 +767,12 @@ public partial class CombatScreen : Control
     private void RefreshStateUi()
     {
         _targetHintLabel.Visible = _combat.State == CombatState.AwaitingTarget;
-        _endTurnButton.Disabled = _combat.State != CombatState.PlayerTurn;
+        bool isPlayerTurn = _combat.State == CombatState.PlayerTurn;
+        _endTurnButton.Disabled = !isPlayerTurn;
+
+        bool nothingPlayable = isPlayerTurn &&
+            _combat.Player.Piles.Hand.All(c => c.Definition.Cost > _combat.Player.CurrentEnergy);
+        SetEndTurnPulsing(nothingPlayable);
 
         if (_combat.State == CombatState.CombatEnd)
         {
@@ -649,6 +794,30 @@ public partial class CombatScreen : Control
         {
             _combatEndPanel.Visible = false;
         }
+    }
+
+    // Only starts/stops on an actual true<->false transition (tracked via
+    // _endTurnPulsing) rather than every RefreshStateUi() call, so the
+    // breathing loop doesn't visibly reset its phase on every single card
+    // played while the condition stays true.
+    private void SetEndTurnPulsing(bool shouldPulse)
+    {
+        if (shouldPulse == _endTurnPulsing) return;
+        _endTurnPulsing = shouldPulse;
+        _endTurnPulseTween?.Kill();
+
+        if (!shouldPulse)
+        {
+            _endTurnButton.Modulate = Colors.White;
+            return;
+        }
+
+        var tween = _endTurnButton.CreateTween();
+        _endTurnPulseTween = tween;
+        tween.SetLoops();
+        tween.SetTrans(Tween.TransitionType.Sine);
+        tween.TweenProperty(_endTurnButton, "modulate", new Color(1f, 0.85f, 0.5f), 0.6);
+        tween.TweenProperty(_endTurnButton, "modulate", Colors.White, 0.6);
     }
 
     private void OnContinuePressed()

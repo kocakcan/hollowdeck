@@ -34,6 +34,16 @@ offset_right = 220.0
 offset_bottom = 470.0
 mouse_filter = 2
 
+[node name="GhostHpBar" type="ProgressBar" parent="PlayerHpFrame"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+show_percentage = false
+
 [node name="HpBar" type="ProgressBar" parent="PlayerHpFrame"]
 layout_mode = 1
 anchors_preset = 15
@@ -148,6 +158,22 @@ offset_bottom = -50.0
 horizontal_alignment = 1
 text = "Choose a target (right-click to cancel)"
 visible = false
+
+[node name="TurnBannerLabel" type="Label" parent="."]
+layout_mode = 0
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -220.0
+offset_right = 160.0
+offset_bottom = -170.0
+mouse_filter = 2
+horizontal_alignment = 1
+text = "Your Turn"
+modulate = Color(1, 1, 1, 0)
 
 [node name="HandArea" type="Control" parent="."]
 layout_mode = 0

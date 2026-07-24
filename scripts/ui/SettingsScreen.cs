@@ -16,6 +16,10 @@ public partial class SettingsScreen : Control
         fullscreenToggle.ButtonPressed = SettingsManager.Instance.Fullscreen;
         fullscreenToggle.Toggled += pressed => SettingsManager.Instance.SetFullscreen(pressed);
 
+        var reduceMotionToggle = GetNode<CheckButton>("CenterContainer/VBoxContainer/ReduceMotionToggle");
+        reduceMotionToggle.ButtonPressed = SettingsManager.Instance.ReduceMotion;
+        reduceMotionToggle.Toggled += pressed => SettingsManager.Instance.SetReduceMotion(pressed);
+
         GetNode<Button>("CenterContainer/VBoxContainer/BackButton").Pressed += OnBackPressed;
     }
 

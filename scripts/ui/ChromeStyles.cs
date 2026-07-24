@@ -35,11 +35,57 @@ public static class ChromeStyles
         return style;
     }
 
-    public static void ApplyHpBarStyle(ProgressBar bar)
+    // Amber, distinct from the main bar's red, so the lagging "damage you
+    // just took" zone reads as a separate layer rather than a paler version
+    // of the same bar.
+    public static StyleBoxFlat HpGhostBarFill()
+    {
+        var style = new StyleBoxFlat { BgColor = new Color(0.9f, 0.5f, 0.25f, 0.85f) };
+        style.SetCornerRadiusAll(3);
+        return style;
+    }
+
+    // GhostHpBar (behind) draws the bezel background + a lagging fill; the
+    // real HpBar (in front) draws its normal fill but with an EMPTY
+    // background, so the ghost's background/fill actually shows through in
+    // the gap between the two values instead of being fully occluded by an
+    // opaque background HpBar would otherwise paint every frame regardless
+    // of its own fill percentage.
+    public static void ApplyHpBarStyle(ProgressBar bar, ProgressBar ghostBar)
     {
         bar.Modulate = Colors.White; // clear the old placeholder tint hack
-        bar.AddThemeStyleboxOverride("background", HpBarBackground());
+        ghostBar.Modulate = Colors.White;
+
+        ghostBar.AddThemeStyleboxOverride("background", HpBarBackground());
+        ghostBar.AddThemeStyleboxOverride("fill", HpGhostBarFill());
+
+        bar.AddThemeStyleboxOverride("background", new StyleBoxEmpty());
         bar.AddThemeStyleboxOverride("fill", HpBarFill());
+    }
+
+    // Main bar always tweens to the new value quickly; the ghost bar only
+    // lags behind on a HP loss (a heal or no-op change just snaps the ghost
+    // along so it never looks like an inverted "future healing" preview).
+    // ghostTween is a ref to the caller's stored Tween field so a rapid
+    // second hit can kill the still-draining ghost tween instead of two
+    // tweens fighting over the same Value property.
+    public static void TweenHpBar(ProgressBar bar, ProgressBar ghostBar, ref Tween? ghostTween, double newValue)
+    {
+        double oldValue = bar.Value;
+        bar.CreateTween().TweenProperty(bar, "value", newValue, 0.25).SetTrans(Tween.TransitionType.Sine);
+
+        ghostTween?.Kill();
+        if (newValue >= oldValue)
+        {
+            ghostBar.Value = newValue;
+            return;
+        }
+
+        ghostBar.Value = oldValue;
+        var tween = ghostBar.CreateTween();
+        ghostTween = tween;
+        tween.TweenInterval(0.15);
+        tween.TweenProperty(ghostBar, "value", newValue, 0.4).SetTrans(Tween.TransitionType.Sine);
     }
 
     // NinePatch-style stretch: TextureMargin preserves the ~22px ornate
