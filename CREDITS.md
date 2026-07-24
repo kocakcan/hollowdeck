@@ -59,3 +59,9 @@ font).
 | --- | --- | --- |
 | [Cinzel](https://fonts.google.com/specimen/Cinzel) | Natanael Gama | Display face — card/enemy names, HP/energy numbers, floating damage text |
 | [IM Fell English](https://fonts.google.com/specimen/IM+Fell+English) | Igino Marini | Body face — card descriptions and general UI text |
+
+## UI chrome — OpenGameArt (CC0 / public domain)
+
+The End Turn button's ornate frame textures in `assets/ui/` come from
+[Fantasy UI Box](https://opengameart.org/content/fantasy-ui-box) by
+**StumpyStrust**, released under CC0.

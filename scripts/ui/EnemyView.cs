@@ -35,10 +35,7 @@ public partial class EnemyView : Button
         _sprite.PivotOffset = _sprite.Size / 2f;
         _nameLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _hpLabel.ThemeTypeVariation = "CombatDisplayLabel";
-        // Placeholder tint until Phase 8 supplies a real ornate-frame/fill
-        // texture - reads as a health bar (red fill) rather than the
-        // default theme color in the meantime.
-        _hpBar.Modulate = new Color(0.82f, 0.24f, 0.22f);
+        ChromeStyles.ApplyHpBarStyle(_hpBar);
         Pressed += OnPressed;
         Instances.Add(this);
         Refresh();

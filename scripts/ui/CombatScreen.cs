@@ -104,11 +104,14 @@ public partial class CombatScreen : Control
         _playerSpriteRestPos = _playerSprite.Position;
         StartPlayerIdleBob();
 
-        // Placeholder tint until Phase 8 supplies a real ornate-frame/fill
-        // texture, matching EnemyView's HP bar treatment.
-        _playerHpBar.Modulate = new Color(0.82f, 0.24f, 0.22f);
+        ChromeStyles.ApplyHpBarStyle(_playerHpBar);
         _playerHpLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _energyLabel.ThemeTypeVariation = "CombatDisplayLabel";
+
+        _endTurnButton.AddThemeStyleboxOverride("normal", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_normal.png"));
+        _endTurnButton.AddThemeStyleboxOverride("hover", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_hover.png"));
+        _endTurnButton.AddThemeStyleboxOverride("pressed", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_pressed.png"));
+        _endTurnButton.AddThemeStyleboxOverride("disabled", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_normal.png"));
 
         _endTurnButton.Pressed += () => _combat.TryEndTurn();
         _continueButton.Pressed += OnContinuePressed;
