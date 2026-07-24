@@ -3,6 +3,7 @@ using System.Linq;
 using Godot;
 using Hollowdeck.Data;
 using Hollowdeck.Run;
+using Hollowdeck.UI;
 
 namespace Hollowdeck.Debug;
 
@@ -59,18 +60,17 @@ public partial class ScreenSmokeTest : Node
         };
 
         var screen = LoadScene("res://scenes/RewardScreen.tscn");
-        var goldLabel = screen.GetNode<Label>("CenterContainer/VBoxContainer/GoldLabel");
-        var choicesList = screen.GetNode<VBoxContainer>("CenterContainer/VBoxContainer/ChoicesList");
-        var firstRow = choicesList.GetChild(0);
-        var card0Button = firstRow.GetChild<Button>(0);
-        var card0Description = firstRow.GetChild<Label>(1);
-        var skip = screen.GetNode<Button>("CenterContainer/VBoxContainer/SkipButton");
+        var goldLabel = screen.GetNode<Label>("TitleBlock/GoldLabel");
+        var choicesArea = screen.GetNode<Control>("CardChoicesArea");
+        var cardViews = choicesArea.GetChildren().OfType<CardView>().ToList();
+        var skip = screen.GetNode<Button>("SkipButton");
 
         Check("reward_gold_label_shows_awarded_amount", goldLabel.Text.Contains("25"), $"text='{goldLabel.Text}'");
-        Check("reward_has_a_row_per_choice", choicesList.GetChildCount() == 3, $"rows={choicesList.GetChildCount()}");
-        Check("reward_card_button_shows_real_name", card0Button.Text.Contains("Strike"), $"text='{card0Button.Text}'");
-        Check("reward_card_shows_mechanical_description", card0Description.Text.Contains("Deal 6 damage"),
-            $"text='{card0Description.Text}'");
+        Check("reward_has_a_card_view_per_choice", cardViews.Count == 3, $"cards={cardViews.Count}");
+        Check("reward_card_views_are_non_interactive", cardViews.All(c => !c.Interactive),
+            "a reward CardView still has Interactive=true (would try to drag-to-play)");
+        Check("reward_first_card_is_strike", cardViews.Count > 0 && cardViews[0].CardInstance?.Definition.Id == "strike",
+            $"id='{cardViews.ElementAtOrDefault(0)?.CardInstance?.Definition.Id}'");
         Check("reward_skip_button_has_a_handler", skip.GetSignalConnectionList("pressed").Count > 0, "no pressed connections");
         screen.QueueFree();
     }
@@ -100,10 +100,15 @@ public partial class ScreenSmokeTest : Node
 
         var screen = LoadScene("res://scenes/ShopScreen.tscn");
         var goldLabel = screen.GetNode<Label>("GoldLabel");
-        var offers = screen.GetNode<VBoxContainer>("OffersList");
+        var cardRow = screen.GetNode<HBoxContainer>("CardOffersRow");
+        var offers = screen.GetNode<VBoxContainer>("OffersScroll/OffersList");
 
         Check("shop_gold_label_shows_current_gold", goldLabel.Text.Contains("200"), $"text='{goldLabel.Text}'");
-        Check("shop_has_offer_rows", offers.GetChildCount() == 8, $"rows={offers.GetChildCount()}");
+        var cardViews = cardRow.GetChildren().SelectMany(c => c.GetChildren()).OfType<CardView>().ToList();
+        Check("shop_has_a_card_view_per_card_offer", cardViews.Count == 4, $"cards={cardViews.Count}");
+        Check("shop_card_offers_are_non_interactive", cardViews.All(c => !c.Interactive),
+            "a shop CardView still has Interactive=true (would try to drag-to-play)");
+        Check("shop_has_relic_and_potion_offer_rows", offers.GetChildCount() == 4, $"rows={offers.GetChildCount()}");
 
         var firstRowDescription = offers.GetChild(0).GetChild<Label>(1);
         Check("shop_offer_shows_description", firstRowDescription.Text.Length > 0,

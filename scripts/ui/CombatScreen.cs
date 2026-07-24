@@ -27,6 +27,7 @@ public partial class CombatScreen : Control
     private Control _handArea = null!;
     private HBoxContainer _potionBelt = null!;
     private HBoxContainer _relicBar = null!;
+    private Label _goldLabel = null!;
     private ProgressBar _playerHpBar = null!;
     private ProgressBar _playerGhostHpBar = null!;
     private Tween? _playerGhostHpTween;
@@ -88,8 +89,9 @@ public partial class CombatScreen : Control
         _combat = GetNode<CombatManager>("CombatManager");
         _enemyRow = GetNode<HBoxContainer>("EnemyRow");
         _handArea = GetNode<Control>("HandArea");
-        _potionBelt = GetNode<HBoxContainer>("PotionBelt");
-        _relicBar = GetNode<HBoxContainer>("RelicBar");
+        _potionBelt = GetNode<HBoxContainer>("PotionPanel/PotionBelt");
+        _relicBar = GetNode<HBoxContainer>("RelicPanel/RelicBar");
+        _goldLabel = GetNode<Label>("GoldPanel/GoldLabel");
         _playerHpBar = GetNode<ProgressBar>("PlayerHpFrame/HpBar");
         _playerGhostHpBar = GetNode<ProgressBar>("PlayerHpFrame/GhostHpBar");
         _playerHpLabel = GetNode<Label>("PlayerHpFrame/HpLabel");
@@ -114,10 +116,14 @@ public partial class CombatScreen : Control
 
         _playerSprite = GetNode<TextureRect>("PlayerSprite");
         _playerSprite.Texture = ArtAssets.PlayerSprite();
+        GetNode<TextureRect>("PlayerSprite/Shadow").Texture = BuildShadowTexture();
         _playerSpriteRestPos = _playerSprite.Position;
         StartPlayerIdleBob();
 
         ChromeStyles.ApplyHpBarStyle(_playerHpBar, _playerGhostHpBar);
+        GetNode<PanelContainer>("GoldPanel").AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
+        GetNode<PanelContainer>("RelicPanel").AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
+        GetNode<PanelContainer>("PotionPanel").AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
         _playerHpLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _energyLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _turnBannerLabel.ThemeTypeVariation = "CombatDisplayLabel";
@@ -374,6 +380,27 @@ public partial class CombatScreen : Control
         };
     }
 
+    // Soft elliptical contact shadow beneath the player sprite - same
+    // technique EnemyView.BuildShadowTexture uses for enemy sprites (a
+    // non-square radial gradient reads as an ellipse, not a circle).
+    private static Texture2D BuildShadowTexture()
+    {
+        var gradient = new Gradient
+        {
+            Offsets = new float[] { 0f, 1f },
+            Colors = new Color[] { new(0f, 0f, 0f, 0.55f), new(0f, 0f, 0f, 0f) },
+        };
+        return new GradientTexture2D
+        {
+            Gradient = gradient,
+            Fill = GradientTexture2D.FillEnum.Radial,
+            FillFrom = new Vector2(0.5f, 0.5f),
+            FillTo = new Vector2(1f, 0.5f),
+            Width = 64,
+            Height = 20,
+        };
+    }
+
     // Tapering stroke from attacker to target, fading fast - reads as a
     // directional slash better than a particle cloud would for a melee hit.
     private void PlaySlashTrail(Vector2 fromGlobal, Vector2 toGlobal)
@@ -424,6 +451,7 @@ public partial class CombatScreen : Control
     private void RefreshPlayerInfo()
     {
         var player = _combat.Player;
+        _goldLabel.Text = $"Gold: {RunState.Gold}";
         PopupDelta(player, this, _playerHpBar.GlobalPosition);
         _playerHpBar.MaxValue = player.MaxHp;
         _playerGhostHpBar.MaxValue = player.MaxHp;

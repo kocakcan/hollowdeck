@@ -57,9 +57,24 @@ public partial class ArtScreenshot : Node
         combat.QueueFree();
 
         RunState.MapNodes = Hollowdeck.Map.MapGenerator.Generate(new System.Random(7));
-        RunState.CurrentNodeId = "";
-        AddChild(GD.Load<PackedScene>("res://scenes/MapScreen.tscn").Instantiate());
+        // A real (not empty) CurrentNodeId so Phase 4's current-node ring
+        // and "choosable path" highlighting actually show up in the shot -
+        // an empty CurrentNodeId (the pre-run state) never draws a ring.
+        RunState.CurrentNodeId = RunState.MapNodes.Find(n => n.Floor == 0)!.Id;
+        var map = GD.Load<PackedScene>("res://scenes/MapScreen.tscn").Instantiate();
+        AddChild(map);
         await Snapshot("user://art_screenshot_map.png");
+        RemoveChild(map);
+        map.QueueFree();
+
+        RewardContext.GoldAwarded = 35;
+        RewardContext.GuaranteedRelic = null;
+        RewardContext.CardChoices = new List<CardDefinition>
+        {
+            CardDatabase.Get("strike"), CardDatabase.Get("bash"), CardDatabase.Get("shrug_it_off"),
+        };
+        AddChild(GD.Load<PackedScene>("res://scenes/RewardScreen.tscn").Instantiate());
+        await Snapshot("user://art_screenshot_reward.png");
 
         GetTree().Quit();
     }

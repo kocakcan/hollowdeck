@@ -22,12 +22,24 @@ offset_left = 24.0
 offset_top = 48.0
 text = "Gold: 0"
 
-[node name="OffersList" type="VBoxContainer" parent="."]
+[node name="CardOffersRow" type="HBoxContainer" parent="."]
 layout_mode = 0
 offset_left = 24.0
 offset_top = 88.0
+offset_right = 1000.0
+offset_bottom = 434.0
+
+[node name="OffersScroll" type="ScrollContainer" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 444.0
 offset_right = 500.0
 offset_bottom = 600.0
+horizontal_scroll_mode = 0
+
+[node name="OffersList" type="VBoxContainer" parent="OffersScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
 
 [node name="LeaveButton" type="Button" parent="."]
 layout_mode = 0

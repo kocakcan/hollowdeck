@@ -15,23 +15,29 @@ public partial class ShopScreen : Control
 
     private Label _goldLabel = null!;
     private VBoxContainer _offersList = null!;
+    private HBoxContainer _cardOffersRow = null!;
 
     public override void _Ready()
     {
         ScreenBackground.Attach(this, "cobble", new Color(0.7f, 0.7f, 0.75f));
         DeckViewButtons.Attach(this);
         _goldLabel = GetNode<Label>("GoldLabel");
-        _offersList = GetNode<VBoxContainer>("OffersList");
+        _offersList = GetNode<VBoxContainer>("OffersScroll/OffersList");
+        _cardOffersRow = GetNode<HBoxContainer>("CardOffersRow");
         GetNode<Button>("LeaveButton").Pressed += OnLeavePressed;
 
         var rng = RngStreams.Shop;
 
-        // All cards unlocked from the start; see MetaProgressionManager.LockedRelicIds
-        // - only relics are lockable at this content scale.
+        // Cards get the real CardView renderer ("one card component
+        // everywhere") with a separate gold-price Buy button beneath, since
+        // the card's own cost badge shows its Energy cost, not its Gold
+        // price - those are two different numbers that would be confusing
+        // conflated into a single badge. Relics/potions have no CardView
+        // equivalent, so they stay on the generic offer-row treatment.
+        var cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
         foreach (var card in Sample(CardDatabase.All.ToList(), 4, rng))
         {
-            AddOfferRow($"{card.Name} (card) - {CardPrice}g", EffectDescriptionFormatter.Describe(card.Effects),
-                CardPrice, () => RunState.Deck.Add(card), ArtAssets.CardIcon(card.Id));
+            AddCardOffer(card, cardScene);
         }
 
         var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
@@ -68,6 +74,28 @@ public partial class ShopScreen : Control
             (copy[i], copy[j]) = (copy[j], copy[i]);
         }
         return copy.Take(count).ToList();
+    }
+
+    private void AddCardOffer(CardDefinition card, PackedScene cardScene)
+    {
+        var column = new VBoxContainer();
+        _cardOffersRow.AddChild(column);
+
+        var view = cardScene.Instantiate<CardView>();
+        column.AddChild(view);
+        view.Interactive = false;
+        view.SetCardInstance(new CardInstance(card));
+
+        var buyButton = new Button { Text = $"Buy ({CardPrice}g)" };
+        column.AddChild(buyButton);
+        buyButton.Pressed += () =>
+        {
+            if (RunState.Gold < CardPrice) return;
+            RunState.Deck.Add(card);
+            RunState.Gold -= CardPrice;
+            buyButton.Disabled = true;
+            RefreshGoldLabel();
+        };
     }
 
     private void AddOfferRow(string label, string description, int price, System.Action onBuy, Texture2D? icon = null) =>

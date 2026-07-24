@@ -1,3 +1,4 @@
+using System;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
@@ -55,6 +56,15 @@ public partial class CardView : Panel
     private static readonly int[] DescriptionFontSizes = { 15, 14, 13, 12, 11 };
 
     public CardInstance? CardInstance { get; private set; }
+
+    // Combat hand cards drag-to-play (the default, and the only mode this
+    // class supported before Phase 4). Reward/shop/deck-view screens set
+    // this false to reuse the exact same frame/art/text rendering with a
+    // plain click instead - no position tracking, no target highlighting,
+    // no TryPlayCard. Interactive=true's _GuiInput branch is untouched from
+    // before this flag existed, so combat behavior is byte-for-byte the same.
+    public bool Interactive { get; set; } = true;
+    public event Action<CardInstance>? Clicked;
 
     private Label _nameLabel = null!;
     private TextureRect _artIcon = null!;
@@ -258,6 +268,16 @@ public partial class CardView : Panel
 
     public override void _GuiInput(InputEvent @event)
     {
+        if (!Interactive)
+        {
+            if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false })
+            {
+                GetViewport().SetInputAsHandled();
+                if (CardInstance is not null) Clicked?.Invoke(CardInstance);
+            }
+            return;
+        }
+
         switch (@event)
         {
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } mb:

@@ -1,9 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
-using Hollowdeck.Combat;
 using Hollowdeck.Data;
-using Hollowdeck.Effects;
+using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
 
@@ -19,19 +18,17 @@ public partial class PileViewPopup : Control
     // win/loss (before the player clicks Continue) still renders on top.
     private const int ZIndexAboveCombatEnd = 2000;
 
-    // Fixed per-entry size (rather than letting GridContainer size each
-    // column to its widest cell's natural content) - without this, a single
-    // long description in one column stretches that whole column wider than
-    // its neighbors, so the "cards" read as different sizes. Both the entry
-    // box AND the wrapped Labels inside it need the same fixed width: a
-    // WordSmart Label with no width of its own reports its full unwrapped
-    // text as its minimum size, which would blow the column out regardless
-    // of the box's CustomMinimumSize.
-    private const float EntryWidth = 200f;
-    private const float EntryHeight = 260f;
-    private const float EntryContentWidth = EntryWidth - 16f;
+    private GridContainer _grid = null!;
+    private PackedScene _cardScene = null!;
+    private IReadOnlyList<CardDefinition> _cards = null!;
+    private bool _sortByName;
 
-    public static void Open(Node screenRoot, string title, IReadOnlyList<CardDefinition> cards, Combatant? liveContext = null)
+    // CardView.SetCardInstance already reads CombatManager.Instance.Player
+    // for live Strength/Weak context itself, so unlike the old bespoke
+    // entry rendering here, this popup no longer needs a caller-supplied
+    // liveContext to pass through - it was only ever used to hand that same
+    // value to EffectDescriptionFormatter.Describe manually.
+    public static void Open(Node screenRoot, string title, IReadOnlyList<CardDefinition> cards)
     {
         foreach (var child in screenRoot.GetChildren())
         {
@@ -40,11 +37,14 @@ public partial class PileViewPopup : Control
 
         var popup = new PileViewPopup();
         screenRoot.AddChild(popup);
-        popup.Build(title, cards, liveContext);
+        popup.Build(title, cards);
     }
 
-    private void Build(string title, IReadOnlyList<CardDefinition> cards, Combatant? liveContext)
+    private void Build(string title, IReadOnlyList<CardDefinition> cards)
     {
+        _cards = cards;
+        _cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
+
         SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
         ZIndex = ZIndexAboveCombatEnd;
         MouseFilter = MouseFilterEnum.Stop;
@@ -74,6 +74,14 @@ public partial class PileViewPopup : Control
         var titleLabel = new Label { Text = title, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         titleLabel.AddThemeFontSizeOverride("font_size", 22);
         header.AddChild(titleLabel);
+        var sortButton = new Button { Text = "Sort: Cost" };
+        sortButton.Pressed += () =>
+        {
+            _sortByName = !_sortByName;
+            sortButton.Text = _sortByName ? "Sort: Name" : "Sort: Cost";
+            RepopulateGrid();
+        };
+        header.AddChild(sortButton);
         var closeButton = new Button { Text = "Close (Esc)" };
         closeButton.Pressed += QueueFree;
         header.AddChild(closeButton);
@@ -85,70 +93,35 @@ public partial class PileViewPopup : Control
             VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
         };
         vbox.AddChild(scroll);
-        var grid = new GridContainer { Columns = 4 };
-        grid.AddThemeConstantOverride("h_separation", 14);
-        grid.AddThemeConstantOverride("v_separation", 14);
-        scroll.AddChild(grid);
+        // 3 columns of full-size (224x308) CardView instances - the same
+        // renderer combat hands use - fits the 960-wide panel with room to
+        // spare; 4 columns of full-size cards would overflow it.
+        _grid = new GridContainer { Columns = 3 };
+        _grid.AddThemeConstantOverride("h_separation", 14);
+        _grid.AddThemeConstantOverride("v_separation", 14);
+        scroll.AddChild(_grid);
 
-        foreach (var card in cards.OrderBy(c => c.Cost).ThenBy(c => c.Name))
-        {
-            grid.AddChild(BuildCardEntry(card, liveContext));
-        }
+        RepopulateGrid();
     }
 
-    private static Control BuildCardEntry(CardDefinition card, Combatant? liveContext)
+    private void RepopulateGrid()
     {
-        var box = new PanelContainer { CustomMinimumSize = new Vector2(EntryWidth, EntryHeight) };
-        box.AddThemeStyleboxOverride("panel", EntryFrameStyle());
-
-        var vbox = new VBoxContainer();
-        box.AddChild(vbox);
-
-        if (ArtAssets.CardIcon(card.Id) is { } icon)
+        foreach (var child in _grid.GetChildren())
         {
-            vbox.AddChild(new TextureRect
-            {
-                Texture = icon,
-                CustomMinimumSize = new Vector2(0, 60),
-                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-            });
+            _grid.RemoveChild(child);
+            child.QueueFree();
         }
 
-        vbox.AddChild(new Label
+        var ordered = _sortByName
+            ? _cards.OrderBy(c => c.Name)
+            : _cards.OrderBy(c => c.Cost).ThenBy(c => c.Name);
+        foreach (var card in ordered)
         {
-            Text = $"{card.Name} ({card.Cost})",
-            HorizontalAlignment = HorizontalAlignment.Center,
-            AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            CustomMinimumSize = new Vector2(EntryContentWidth, 0),
-        });
-
-        // Live context (Strength/Weak) so a pile viewed mid-combat shows the
-        // same actually-would-land numbers as the hand does, not stale prose.
-        var descriptionLabel = new Label
-        {
-            Text = EffectDescriptionFormatter.Describe(card.Effects, liveContext),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            CustomMinimumSize = new Vector2(EntryContentWidth, 0),
-        };
-        descriptionLabel.AddThemeFontSizeOverride("font_size", 13);
-        vbox.AddChild(descriptionLabel);
-
-        return box;
-    }
-
-    private static StyleBoxFlat EntryFrameStyle()
-    {
-        var style = new StyleBoxFlat
-        {
-            BgColor = new Color(0.12f, 0.12f, 0.16f, 0.9f),
-            BorderColor = new Color(0.45f, 0.45f, 0.5f),
-        };
-        style.SetBorderWidthAll(2);
-        style.SetCornerRadiusAll(8);
-        style.SetContentMarginAll(8);
-        return style;
+            var view = _cardScene.Instantiate<CardView>();
+            _grid.AddChild(view);
+            view.Interactive = false;
+            view.SetCardInstance(new CardInstance(card));
+        }
     }
 
     // Click anywhere outside the panel (the panel itself has its own Stop

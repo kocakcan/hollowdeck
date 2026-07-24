@@ -49,11 +49,27 @@ public static class DeckViewButtons
         screen.AddChild(new DeckViewKeybindListener(screen, includeCombatPiles));
     }
 
+    private static Texture2D? _stackIconTexture;
+
     private static Button MakeButton(string text, System.Action onPressed)
     {
-        var button = new Button { Text = text };
+        var button = new Button { Text = text, Icon = _stackIconTexture ??= BuildStackIcon(), IconAlignment = HorizontalAlignment.Left };
         button.Pressed += onPressed;
         return button;
+    }
+
+    // Three overlapping tinted rectangles baked into one small texture - a
+    // "stack of cards" read at a glance, replacing the plain text-only
+    // button these piles used to be. Procedural (no sourced asset) via
+    // Image.FillRect, same "generate it once, cache it" approach
+    // CombatScreen's spark/energy-orb textures already use.
+    private static Texture2D BuildStackIcon()
+    {
+        var image = Image.CreateEmpty(20, 20, false, Image.Format.Rgba8);
+        image.FillRect(new Rect2I(5, 1, 12, 12), new Color(0.35f, 0.28f, 0.16f));
+        image.FillRect(new Rect2I(3, 4, 12, 12), new Color(0.55f, 0.44f, 0.24f));
+        image.FillRect(new Rect2I(1, 7, 12, 12), new Color(0.78f, 0.62f, 0.28f));
+        return ImageTexture.CreateFromImage(image);
     }
 
     // Mid-combat, the "real" deck is whatever's actually rotating through
@@ -68,7 +84,7 @@ public static class DeckViewButtons
             var piles = combat.Player.Piles;
             var all = piles.DrawPile.Concat(piles.Hand).Concat(piles.Discard).Concat(piles.Exhaust)
                 .Select(c => c.Definition).ToList();
-            PileViewPopup.Open(screenRoot, $"Deck ({all.Count})", all, combat.Player);
+            PileViewPopup.Open(screenRoot, $"Deck ({all.Count})", all);
         }
         else
         {
@@ -79,7 +95,7 @@ public static class DeckViewButtons
     internal static void OpenPile(Node screenRoot, string label, List<CardInstance> pile)
     {
         var defs = pile.Select(c => c.Definition).ToList();
-        PileViewPopup.Open(screenRoot, $"{label} ({defs.Count})", defs, CombatManager.Instance?.Player);
+        PileViewPopup.Open(screenRoot, $"{label} ({defs.Count})", defs);
     }
 }
 

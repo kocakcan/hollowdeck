@@ -37,6 +37,8 @@ public partial class EnemyView : Button
     public EnemyCombatant Combatant { get; set; } = null!;
 
     private TextureRect _sprite = null!;
+    private TextureRect _shadow = null!;
+    private static Texture2D? _shadowTexture;
     private Label _nameLabel = null!;
     private ProgressBar _hpBar = null!;
     private ProgressBar _ghostHpBar = null!;
@@ -54,6 +56,8 @@ public partial class EnemyView : Button
     public override void _Ready()
     {
         _sprite = GetNode<TextureRect>("VBox/Sprite");
+        _shadow = GetNode<TextureRect>("VBox/Sprite/Shadow");
+        _shadow.Texture = _shadowTexture ??= BuildShadowTexture();
         _nameLabel = GetNode<Label>("VBox/NameLabel");
         _hpBar = GetNode<ProgressBar>("VBox/HpFrame/HpBar");
         _ghostHpBar = GetNode<ProgressBar>("VBox/HpFrame/GhostHpBar");
@@ -72,6 +76,28 @@ public partial class EnemyView : Button
         Refresh();
         StartIdleBob();
         StartIntentPulse();
+    }
+
+    // Soft elliptical contact shadow - a non-square radial gradient reads as
+    // an ellipse rather than a circle. Purely a per-sprite decoration (not
+    // tied to a shared floor line with the player's own sprite, which uses
+    // a different positioning mechanism entirely - see Phase 4 plan notes).
+    private static Texture2D BuildShadowTexture()
+    {
+        var gradient = new Gradient
+        {
+            Offsets = new float[] { 0f, 1f },
+            Colors = new Color[] { new(0f, 0f, 0f, 0.55f), new(0f, 0f, 0f, 0f) },
+        };
+        return new GradientTexture2D
+        {
+            Gradient = gradient,
+            Fill = GradientTexture2D.FillEnum.Radial,
+            FillFrom = new Vector2(0.5f, 0.5f),
+            FillTo = new Vector2(1f, 0.5f),
+            Width = 64,
+            Height = 20,
+        };
     }
 
     // Subtle continuous "breathing" loop - scale/rotation only, since

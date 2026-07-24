@@ -26,6 +26,22 @@ texture_filter = 1
 expand_mode = 1
 stretch_mode = 5
 
+[node name="Shadow" type="TextureRect" parent="PlayerSprite"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -34.0
+offset_top = -10.0
+offset_right = 34.0
+offset_bottom = 10.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+z_index = -1
+
 [node name="PlayerHpFrame" type="Control" parent="."]
 layout_mode = 0
 offset_left = 40.0
@@ -83,12 +99,15 @@ offset_bottom = 534.0
 horizontal_alignment = 1
 text = "Energy 0/0"
 
-[node name="PotionBelt" type="HBoxContainer" parent="."]
+[node name="PotionPanel" type="PanelContainer" parent="."]
 layout_mode = 0
-offset_left = 40.0
-offset_top = 540.0
-offset_right = 260.0
-offset_bottom = 584.0
+offset_left = 36.0
+offset_top = 536.0
+offset_right = 264.0
+offset_bottom = 588.0
+
+[node name="PotionBelt" type="HBoxContainer" parent="PotionPanel"]
+layout_mode = 2
 
 [node name="EnemyRow" type="HBoxContainer" parent="."]
 layout_mode = 0
@@ -98,50 +117,64 @@ offset_right = 976.0
 offset_bottom = 330.0
 alignment = 1
 
-[node name="RelicBar" type="HBoxContainer" parent="."]
+[node name="GoldPanel" type="PanelContainer" parent="."]
 layout_mode = 0
 offset_left = 20.0
 offset_top = 16.0
 offset_right = 300.0
-offset_bottom = 46.0
+offset_bottom = 40.0
+
+[node name="GoldLabel" type="Label" parent="GoldPanel"]
+layout_mode = 2
+text = "Gold: 0"
+
+[node name="RelicPanel" type="PanelContainer" parent="."]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 44.0
+offset_right = 300.0
+offset_bottom = 78.0
+
+[node name="RelicBar" type="HBoxContainer" parent="RelicPanel"]
+layout_mode = 2
 
 [node name="PlayerStatusRow" type="HBoxContainer" parent="."]
 layout_mode = 0
 offset_left = 20.0
-offset_top = 50.0
+offset_top = 82.0
 offset_right = 300.0
-offset_bottom = 72.0
+offset_bottom = 104.0
 
 [node name="PileCountsLabel" type="Label" parent="."]
 layout_mode = 0
 offset_left = 20.0
-offset_top = 76.0
+offset_top = 108.0
 offset_right = 300.0
-offset_bottom = 94.0
+offset_bottom = 126.0
 theme_override_font_sizes/font_size = 13
 
 [node name="DrawPileAnchor" type="Control" parent="."]
 layout_mode = 0
 offset_left = 30.0
-offset_top = 85.0
+offset_top = 117.0
 offset_right = 30.0
-offset_bottom = 85.0
+offset_bottom = 117.0
 mouse_filter = 2
 
 [node name="DiscardPileAnchor" type="Control" parent="."]
 layout_mode = 0
 offset_left = 130.0
-offset_top = 85.0
+offset_top = 117.0
 offset_right = 130.0
-offset_bottom = 85.0
+offset_bottom = 117.0
 mouse_filter = 2
 
 [node name="ExhaustPileAnchor" type="Control" parent="."]
 layout_mode = 0
 offset_left = 230.0
-offset_top = 85.0
+offset_top = 117.0
 offset_right = 230.0
-offset_bottom = 85.0
+offset_bottom = 117.0
 mouse_filter = 2
 
 [node name="TargetHintLabel" type="Label" parent="."]

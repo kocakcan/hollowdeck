@@ -46,12 +46,35 @@ public partial class MapScreen : Control
         foreach (var node in RunState.MapNodes)
         {
             var from = _nodeCenters[node.Id];
+            bool isChoosableNow = node.Id == RunState.CurrentNodeId;
             foreach (var nextId in node.NextNodeIds)
             {
-                var to = _nodeCenters[nextId];
-                DrawLine(from, to, new Color(0.6f, 0.6f, 0.6f), 2f);
+                DrawCurvedPath(from, _nodeCenters[nextId], isChoosableNow);
             }
         }
+    }
+
+    // Gentle bow through an offset midpoint instead of a straight line, for
+    // a hand-drawn feel - a real Bezier curve (via Curve2D) rather than a
+    // sharp two-segment kink. The offset is derived from the endpoints
+    // themselves (not RNG) so it's stable across the repeated QueueRedraw()
+    // calls a Control naturally gets, instead of jittering every redraw.
+    // Paths leading out of the player's current node get a brighter/thicker
+    // stroke; everything else dims, matching "available vs. unreachable."
+    private void DrawCurvedPath(Vector2 from, Vector2 to, bool highlighted)
+    {
+        var direction = (to - from).Normalized();
+        var perpendicular = new Vector2(-direction.Y, direction.X);
+        float wobbleSeed = Mathf.Sin(from.X * 0.07f + from.Y * 0.05f + to.X * 0.03f);
+        var control = (from + to) / 2f + perpendicular * (wobbleSeed * 12f);
+
+        var curve = new Curve2D();
+        curve.AddPoint(from, @out: (control - from) * 0.5f);
+        curve.AddPoint(to, @in: (control - to) * 0.5f);
+        var points = curve.Tessellate();
+
+        var color = highlighted ? new Color(0.85f, 0.7f, 0.35f, 0.9f) : new Color(0.45f, 0.45f, 0.47f, 0.45f);
+        DrawPolyline(points, color, highlighted ? 3f : 1.5f, antialiased: true);
     }
 
     private void BuildLayout()
@@ -69,6 +92,12 @@ public partial class MapScreen : Control
         }
     }
 
+    // Boss reads as visually dominant/ominous - bigger footprint (grown
+    // around the same center so the layout/path math above is untouched)
+    // plus an always-on glow, instead of relying solely on its icon/"BOSS"
+    // text to carry that weight like every other node type does.
+    private const float BossNodeSize = NodeSize + 18f;
+
     private void BuildButtons()
     {
         var reachable = ReachableIds();
@@ -76,14 +105,22 @@ public partial class MapScreen : Control
         {
             var center = _nodeCenters[node.Id];
             bool isReachable = reachable.Contains(node.Id);
+            bool isBoss = node.Type == MapNodeType.Boss;
+            float size = isBoss ? BossNodeSize : NodeSize;
             var button = new Button
             {
-                Position = center - new Vector2(NodeSize / 2f, NodeSize / 2f),
-                Size = new Vector2(NodeSize, NodeSize),
+                Position = center - new Vector2(size / 2f, size / 2f),
+                Size = new Vector2(size, size),
                 Disabled = !isReachable,
                 Modulate = RunState.VisitedNodeIds.Contains(node.Id) ? new Color(0.6f, 0.6f, 0.6f) : Colors.White,
                 TooltipText = NodeLabel(node.Type),
             };
+            if (isBoss)
+            {
+                button.AddThemeStyleboxOverride("normal", ChromeStyles.BossNodeGlowStyle());
+                button.AddThemeStyleboxOverride("hover", ChromeStyles.BossNodeGlowStyle());
+                button.AddThemeStyleboxOverride("disabled", ChromeStyles.BossNodeGlowStyle());
+            }
             // Icon-only node buttons when art exists; text label fallback.
             var icon = ArtAssets.MapIcon(node.Type);
             if (icon is not null)
@@ -102,6 +139,37 @@ public partial class MapScreen : Control
             }
             _nodeButtons.AddChild(button);
         }
+
+        BuildCurrentNodeRing();
+    }
+
+    // A pulsing gold ring at the player's current position - previously
+    // there was no rendering tied to RunState.CurrentNodeId at all, only
+    // enabled/disabled buttons implied where the player was by elimination.
+    private void BuildCurrentNodeRing()
+    {
+        if (string.IsNullOrEmpty(RunState.CurrentNodeId)) return;
+        if (!_nodeCenters.TryGetValue(RunState.CurrentNodeId, out var center)) return;
+
+        const float ringSize = NodeSize + 20f;
+        var ring = new Panel
+        {
+            Position = center - new Vector2(ringSize / 2f, ringSize / 2f),
+            Size = new Vector2(ringSize, ringSize),
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        var style = new StyleBoxFlat { BgColor = Colors.Transparent, BorderColor = UiTheme.Palette.AccentGoldBright };
+        style.SetBorderWidthAll(3);
+        style.SetCornerRadiusAll(999);
+        ring.AddThemeStyleboxOverride("panel", style);
+        _nodeButtons.AddChild(ring);
+        _nodeButtons.MoveChild(ring, 0);
+
+        var tween = ring.CreateTween();
+        tween.SetLoops();
+        tween.SetTrans(Tween.TransitionType.Sine);
+        tween.TweenProperty(ring, "modulate:a", 0.35f, 0.7);
+        tween.TweenProperty(ring, "modulate:a", 1f, 0.7);
     }
 
     private HashSet<string> ReachableIds()

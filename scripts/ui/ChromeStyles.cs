@@ -170,4 +170,43 @@ public static class ChromeStyles
         style.ContentMarginBottom = 2;
         return style;
     }
+
+    // Generic bronze-bordered HUD row panel - same visual language as the
+    // HP bar bezel (HpBarBackground), reused for any row that currently
+    // paints straight onto the fog/vignette backdrop with no framing at all
+    // (relic bar, potion belt, gold display).
+    public static StyleBoxFlat PanelStyle()
+    {
+        var style = new StyleBoxFlat
+        {
+            BgColor = UiTheme.Palette.BgPanel,
+            BorderColor = new Color(0.5f, 0.4f, 0.22f),
+        };
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
+        style.SetCornerRadiusAll((int)UiTheme.Radius.Panel);
+        style.ContentMarginLeft = UiTheme.Spacing.Sm;
+        style.ContentMarginRight = UiTheme.Spacing.Sm;
+        style.ContentMarginTop = UiTheme.Spacing.Xs;
+        style.ContentMarginBottom = UiTheme.Spacing.Xs;
+        return style;
+    }
+
+    // Always-on glow for the boss map node - same drop-shadow trick
+    // CardFrameStyle uses for a Rare card's glow, keyed to the existing
+    // "Damage" semantic red token (danger/ominous) rather than Rarity's
+    // gold, since this isn't a rarity signal.
+    public static StyleBoxFlat BossNodeGlowStyle()
+    {
+        var accent = UiTheme.Palette.Damage;
+        var style = new StyleBoxFlat
+        {
+            BgColor = new Color(0.2f, 0.05f, 0.05f, 0.9f),
+            BorderColor = accent,
+        };
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
+        style.SetCornerRadiusAll(999);
+        style.ShadowColor = new Color(accent.R, accent.G, accent.B, 0.75f);
+        style.ShadowSize = 12;
+        return style;
+    }
 }

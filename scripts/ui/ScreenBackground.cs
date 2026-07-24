@@ -1,4 +1,5 @@
 using Godot;
+using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
 
@@ -74,6 +75,18 @@ public static class ScreenBackground
             MouseFilter = Control.MouseFilterEnum.Ignore,
             ShowBehindParent = true,
         };
+        // Dark gradient band anchored to the bottom third - gives combatants
+        // something to visually "stand on" instead of floating on an
+        // undifferentiated tiled floor, without needing a real 3D ground
+        // plane or matching player/enemy positioning (which use two
+        // different layout mechanisms - see Phase 4 plan's scope notes).
+        var groundPlane = new TextureRect
+        {
+            Texture = BuildGroundPlane(),
+            StretchMode = TextureRect.StretchModeEnum.Scale,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            ShowBehindParent = true,
+        };
         var vignette = new TextureRect
         {
             Texture = BuildVignette(0.68f),
@@ -83,12 +96,17 @@ public static class ScreenBackground
 
         screen.AddChild(background);
         screen.AddChild(fog);
+        screen.AddChild(groundPlane);
         screen.AddChild(vignette);
         screen.MoveChild(background, 0);
         screen.MoveChild(fog, 1);
-        screen.MoveChild(vignette, 2);
+        screen.MoveChild(groundPlane, 2);
+        screen.MoveChild(vignette, 3);
         background.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        groundPlane.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         vignette.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+
+        AddDustMotes(screen);
 
         // Oversize + offset the fog layer relative to full-rect so it has
         // room to drift without exposing an edge, then let it wander slowly.
@@ -108,6 +126,72 @@ public static class ScreenBackground
         tween.TweenProperty(fog, "position", basePos + new Vector2(24, 14), 14.0);
         tween.TweenProperty(fog, "position", basePos + new Vector2(-18, 10), 16.0);
         tween.TweenProperty(fog, "position", basePos, 12.0);
+    }
+
+    private static Texture2D BuildGroundPlane()
+    {
+        var gradient = new Gradient
+        {
+            Offsets = new float[] { 0f, 0.6f, 1f },
+            Colors = new Color[] { new(0, 0, 0, 0), new(0, 0, 0, 0), new(0, 0, 0, 0.45f) },
+        };
+        return new GradientTexture2D
+        {
+            Gradient = gradient,
+            Fill = GradientTexture2D.FillEnum.Linear,
+            FillFrom = new Vector2(0.5f, 0f),
+            FillTo = new Vector2(0.5f, 1f),
+            Width = 4,
+            Height = 512,
+        };
+    }
+
+    // Slow-drifting motes for ambient depth - continuous (not one-shot like
+    // CombatScreen's hit sparks), low-opacity, and skipped entirely under
+    // Settings > Reduce Motion, same gating the hit-spark particle count
+    // already respects.
+    private static void AddDustMotes(Control screen)
+    {
+        if (SettingsManager.Instance.ReduceMotion) return;
+
+        var particles = new CpuParticles2D
+        {
+            Position = new Vector2(576, 300),
+            Emitting = true,
+            Amount = 22,
+            Lifetime = 9.0,
+            Texture = BuildDustTexture(),
+            EmissionShape = CpuParticles2D.EmissionShapeEnum.Rectangle,
+            EmissionRectExtents = new Vector2(560, 300),
+            Direction = Vector2.Up,
+            Spread = 25f,
+            InitialVelocityMin = 3f,
+            InitialVelocityMax = 10f,
+            ScaleAmountMin = 0.4f,
+            ScaleAmountMax = 1.1f,
+            Color = new Color(1f, 1f, 1f, 0.22f),
+            Gravity = Vector2.Zero,
+        };
+        screen.AddChild(particles);
+        screen.MoveChild(particles, 3);
+    }
+
+    private static Texture2D BuildDustTexture()
+    {
+        var gradient = new Gradient
+        {
+            Offsets = new float[] { 0f, 1f },
+            Colors = new Color[] { Colors.White, new Color(1, 1, 1, 0) },
+        };
+        return new GradientTexture2D
+        {
+            Gradient = gradient,
+            Fill = GradientTexture2D.FillEnum.Radial,
+            FillFrom = new Vector2(0.5f, 0.5f),
+            FillTo = new Vector2(1f, 0.5f),
+            Width = 8,
+            Height = 8,
+        };
     }
 
     private static Texture2D BuildVignette(float edgeAlpha)

@@ -180,7 +180,7 @@ public partial class MetaProgressionSmokeTest : Node
         var instance = packed.Instantiate();
         AddChild(instance);
 
-        var offers = instance.GetNode<VBoxContainer>("OffersList");
+        var offers = instance.GetNode<VBoxContainer>("OffersScroll/OffersList");
         bool anyLockedRelicOffered = false;
         foreach (var row in offers.GetChildren())
         {
