@@ -25,6 +25,7 @@ public static class ArtAssets
         MapNodeType.Shop => "shop",
         MapNodeType.Treasure => "treasure",
         MapNodeType.Boss => "boss",
+        MapNodeType.Event => "event",
         _ => "unknown",
     }}.svg");
 

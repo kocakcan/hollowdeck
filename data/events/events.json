@@ -1,0 +1,47 @@
+[
+  {
+    "id": "quiet_shrine",
+    "title": "A Quiet Shrine",
+    "description": "A weathered shrine sits at a crossroads, half-swallowed by moss.",
+    "choices": [
+      { "label": "Pray a moment (heal 10 HP)", "outcome": "heal", "amount": 10, "resultText": "You feel steadier." },
+      { "label": "Keep walking", "outcome": "none", "amount": 0, "resultText": "You continue on your way." }
+    ]
+  },
+  {
+    "id": "desperate_traveler",
+    "title": "A Desperate Traveler",
+    "description": "A stranger, gaunt and shaking, begs for help.",
+    "choices": [
+      { "label": "Share your rations (lose 5 HP)", "outcome": "lose_hp", "amount": 5, "resultText": "It costs you, but they'll live." },
+      { "label": "Take their coin instead (gain 20 gold)", "outcome": "gain_gold", "amount": 20, "resultText": "Not proud, but pragmatic." }
+    ]
+  },
+  {
+    "id": "overgrown_library",
+    "title": "An Overgrown Library",
+    "description": "Shelves of rotted books, one still legible.",
+    "choices": [
+      { "label": "Study the technique (gain a random card)", "outcome": "gain_random_card", "amount": 0, "resultText": "You add a new trick to your deck." },
+      { "label": "Leave it be", "outcome": "none", "amount": 0, "resultText": "Some knowledge isn't worth the risk." }
+    ]
+  },
+  {
+    "id": "sealed_reliquary",
+    "title": "A Sealed Reliquary",
+    "description": "A stone case, sealed shut, hums faintly.",
+    "choices": [
+      { "label": "Force it open (gain a relic)", "outcome": "gain_relic", "amount": 0, "resultText": "Power hums within, now yours." },
+      { "label": "Pay the toll to pass safely (lose 15 gold)", "outcome": "lose_gold", "amount": 15, "resultText": "You leave it undisturbed." }
+    ]
+  },
+  {
+    "id": "grasping_shade",
+    "title": "A Grasping Shade",
+    "description": "A translucent hand reaches from the dark, feeling for your belongings.",
+    "choices": [
+      { "label": "Let it take what it wants (lose a relic)", "outcome": "lose_relic", "amount": 0, "resultText": "Something of yours is gone." },
+      { "label": "Bribe it with gold instead (lose 20 gold)", "outcome": "lose_gold", "amount": 20, "resultText": "It fades, satisfied." }
+    ]
+  }
+]

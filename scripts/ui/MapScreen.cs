@@ -118,6 +118,7 @@ public partial class MapScreen : Control
         MapNodeType.Shop => "Shop",
         MapNodeType.Treasure => "Chest",
         MapNodeType.Boss => "BOSS",
+        MapNodeType.Event => "Event",
         _ => "?",
     };
 
@@ -196,6 +197,9 @@ public partial class MapScreen : Control
                 break;
             case MapNodeType.Treasure:
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Treasure);
+                break;
+            case MapNodeType.Event:
+                RunManager.Instance.ChangeScreen(RunManager.ScreenState.Event);
                 break;
         }
     }

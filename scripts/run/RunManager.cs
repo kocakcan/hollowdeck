@@ -31,9 +31,8 @@ public partial class RunManager : Node
         { ScreenState.Defeat, "res://scenes/RunEndScreen.tscn" },
         { ScreenState.MetaProgression, "res://scenes/MetaProgressionScreen.tscn" },
         { ScreenState.Settings, "res://scenes/SettingsScreen.tscn" },
-        // TODO(Phase 4+): Event. Elite fights reuse the Combat scene (see
-        // MapScreen) rather than needing their own ScreenState/scene.
-        // RunSetup deliberately stays unregistered too - no pre-run choices
+        { ScreenState.Event, "res://scenes/EventScreen.tscn" },
+        // RunSetup deliberately stays unregistered - no pre-run choices
         // exist yet (all content unlocked, no character/class selection) to
         // justify a pause screen between MainMenu and Map.
     };
@@ -46,7 +45,7 @@ public partial class RunManager : Node
     private static readonly HashSet<ScreenState> AutoSaveScreens = new()
     {
         ScreenState.Map, ScreenState.Rest, ScreenState.Shop,
-        ScreenState.Treasure, ScreenState.Reward,
+        ScreenState.Treasure, ScreenState.Reward, ScreenState.Event,
     };
 
     public ScreenState CurrentScreen { get; private set; } = ScreenState.MainMenu;
@@ -59,6 +58,7 @@ public partial class RunManager : Node
         EnemyDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
+        EventDatabase.LoadAll();
     }
 
     public void ChangeScreen(ScreenState next)

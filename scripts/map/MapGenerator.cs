@@ -78,6 +78,7 @@ public static class MapGenerator
             (MapNodeType.Shop, 12),
             (MapNodeType.Treasure, 12),
             (MapNodeType.Rest, 12),
+            (MapNodeType.Event, 10),
         };
         weights.Add(floor >= 2 ? (MapNodeType.Elite, 14) : (MapNodeType.Combat, 14));
 
