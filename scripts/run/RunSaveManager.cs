@@ -76,10 +76,15 @@ public static class RunSaveManager
         RunState.PlayerCurrentHp = data.PlayerCurrentHp;
         // Stale ids (content removed/renamed post-save) are dropped, never
         // thrown on - same membership-check discipline documented on
-        // MetaProgressionManager.IsRelicUnlocked.
+        // MetaProgressionManager.IsRelicUnlocked. Upgraded cards round-trip
+        // as "<baseId>+" (CardUpgrade.Apply's naming) rather than their own
+        // CardDatabase entry - resolve the base id and re-derive the
+        // upgraded definition instead of a direct lookup.
         RunState.Deck = data.DeckCardIds
-            .Where(id => CardDatabase.All.Any(c => c.Id == id))
-            .Select(CardDatabase.Get).ToList();
+            .Select(ResolveSavedCardId)
+            .Where(card => card is not null)
+            .Select(card => card!)
+            .ToList();
         RunState.Relics = data.RelicIds
             .Where(id => RelicDatabase.All.Any(r => r.Id == id))
             .Select(id => new RelicInstance(RelicDatabase.Get(id))).ToList();
@@ -91,6 +96,14 @@ public static class RunSaveManager
         RunState.VisitedNodeIds = data.VisitedNodeIds.ToHashSet();
 
         return data.RunSeed;
+    }
+
+    private static CardDefinition? ResolveSavedCardId(string id)
+    {
+        var baseId = id.EndsWith("+") ? id[..^1] : id;
+        var baseCard = CardDatabase.All.FirstOrDefault(c => c.Id == baseId);
+        if (baseCard is null) return null;
+        return id.EndsWith("+") ? CardUpgrade.Apply(baseCard) : baseCard;
     }
 
     public static void Delete(string? path = null)

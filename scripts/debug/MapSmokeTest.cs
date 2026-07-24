@@ -95,6 +95,8 @@ public partial class MapSmokeTest : Node
     private void TestMapScreenRendersGraph()
     {
         RunState.Gold = 0;
+        RunState.PlayerMaxHp = 50;
+        RunState.PlayerCurrentHp = 33;
         RunState.Relics = new List<RelicInstance>();
         RunState.MapNodes = MapGenerator.Generate(new Random(7));
         RunState.CurrentNodeId = "";
@@ -103,6 +105,10 @@ public partial class MapSmokeTest : Node
         var packed = GD.Load<PackedScene>("res://scenes/MapScreen.tscn");
         var instance = packed.Instantiate();
         AddChild(instance);
+
+        var hpLabel = instance.GetNode<Label>("HpLabel");
+        Check("map_screen_shows_current_hp", hpLabel.Text.Contains("33") && hpLabel.Text.Contains("50"),
+            $"text='{hpLabel.Text}'");
 
         var nodeButtons = instance.GetNode<Control>("NodeButtons");
         int floor0Count = RunState.MapNodes.Count(n => n.Floor == 0);

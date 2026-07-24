@@ -59,7 +59,10 @@ public partial class RunSaveSmokeTest : Node
         RunState.Gold = 42;
         RunState.PlayerMaxHp = 60;
         RunState.PlayerCurrentHp = 35;
-        RunState.Deck = new List<CardDefinition> { CardDatabase.Get("strike"), CardDatabase.Get("bash") };
+        RunState.Deck = new List<CardDefinition>
+        {
+            CardDatabase.Get("strike"), CardDatabase.Get("bash"), CardUpgrade.Apply(CardDatabase.Get("defend")),
+        };
         RunState.Relics = new List<RelicInstance> { new(RelicDatabase.Get(RelicDatabase.All.First().Id)) };
         RunState.Potions = new List<PotionInstance> { new(PotionDatabase.Get(PotionDatabase.All.First().Id)) };
         RunState.MapNodes = new List<MapNode>
@@ -89,8 +92,17 @@ public partial class RunSaveSmokeTest : Node
         Check("round_trip_gold", RunState.Gold == 42, $"gold={RunState.Gold}");
         Check("round_trip_max_hp", RunState.PlayerMaxHp == 60, $"maxHp={RunState.PlayerMaxHp}");
         Check("round_trip_current_hp", RunState.PlayerCurrentHp == 35, $"currentHp={RunState.PlayerCurrentHp}");
-        Check("round_trip_deck", RunState.Deck.Count == 2 && RunState.Deck.Any(c => c.Id == "strike") && RunState.Deck.Any(c => c.Id == "bash"),
+        Check("round_trip_deck", RunState.Deck.Count == 3 && RunState.Deck.Any(c => c.Id == "strike") && RunState.Deck.Any(c => c.Id == "bash"),
             $"deck=[{string.Join(",", RunState.Deck.Select(c => c.Id))}]");
+        // An upgraded card round-trips as "<baseId>+" (CardUpgrade's naming),
+        // not its own CardDatabase entry - RunSaveManager has to resolve the
+        // base id and re-derive the upgrade, not look it up directly.
+        var reloadedUpgraded = RunState.Deck.FirstOrDefault(c => c.Id == "defend+");
+        Check("round_trip_upgraded_card_survives", reloadedUpgraded is not null,
+            $"deck=[{string.Join(",", RunState.Deck.Select(c => c.Id))}]");
+        Check("round_trip_upgraded_card_keeps_boosted_effect",
+            reloadedUpgraded is not null && reloadedUpgraded.Effects[0].Amount > CardDatabase.Get("defend").Effects[0].Amount,
+            $"amount={reloadedUpgraded?.Effects[0].Amount}");
         Check("round_trip_relics", RunState.Relics.Count == 1, $"relics={RunState.Relics.Count}");
         Check("round_trip_potions", RunState.Potions.Count == 1, $"potions={RunState.Potions.Count}");
         Check("round_trip_map_nodes", RunState.MapNodes.Count == 2 && RunState.MapNodes.Any(n => n.Id == "n0" && n.Type == MapNodeType.Combat),

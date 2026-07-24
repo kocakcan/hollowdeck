@@ -29,7 +29,11 @@ public static class RunState
         PlayerMaxHp = 50;
         PlayerCurrentHp = 50;
         Deck = StartingDeck();
-        Relics = new List<RelicInstance>();
+        // Every run starts with one guaranteed relic (Second Wind: heal 6 HP
+        // on winning a fight) rather than an empty relic bar - Shop/
+        // Treasure/Elite reward pools already dedupe against RunState
+        // .Relics, so this can't also be rolled as a "new" pick later.
+        Relics = new List<RelicInstance> { new(RelicDatabase.Get("second_wind")) };
         Potions = new List<PotionInstance>();
 
         MapNodes = MapGenerator.Generate(RngStreams.Map);

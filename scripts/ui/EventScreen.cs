@@ -22,6 +22,7 @@ public partial class EventScreen : Control
     public override void _Ready()
     {
         ScreenBackground.Attach(this, "demonic", new Color(0.7f, 0.65f, 0.75f));
+        DeckViewButtons.Attach(this);
 
         var events = EventDatabase.All.ToList();
         var picked = events[RngStreams.Shop.Next(events.Count)];

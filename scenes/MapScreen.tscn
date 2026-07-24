@@ -16,6 +16,12 @@ offset_left = 24.0
 offset_top = 16.0
 text = "Gold: 0"
 
+[node name="HpLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 160.0
+offset_top = 16.0
+text = "HP: 0/0"
+
 [node name="RelicsRow" type="HBoxContainer" parent="."]
 layout_mode = 0
 offset_left = 24.0

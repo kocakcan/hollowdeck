@@ -10,6 +10,12 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
 
+[node name="HpLabel" type="Label" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 16.0
+text = "HP: 0/0"
+
 [node name="CenterContainer" type="CenterContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
@@ -30,6 +36,39 @@ text = "A quiet place to rest."
 layout_mode = 2
 text = "Rest - Heal"
 
+[node name="SmithButton" type="Button" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+text = "Smith - Upgrade a Card"
+
 [node name="LeaveButton" type="Button" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "Leave"
+
+[node name="UpgradeCenterContainer" type="CenterContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="UpgradeVBox" type="VBoxContainer" parent="UpgradeCenterContainer"]
+layout_mode = 2
+
+[node name="UpgradeTitleLabel" type="Label" parent="UpgradeCenterContainer/UpgradeVBox"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "Choose a card to upgrade."
+
+[node name="ScrollContainer" type="ScrollContainer" parent="UpgradeCenterContainer/UpgradeVBox"]
+custom_minimum_size = Vector2(700, 460)
+layout_mode = 2
+
+[node name="UpgradeList" type="VBoxContainer" parent="UpgradeCenterContainer/UpgradeVBox/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CancelButton" type="Button" parent="UpgradeCenterContainer/UpgradeVBox"]
+layout_mode = 2
+text = "Cancel"

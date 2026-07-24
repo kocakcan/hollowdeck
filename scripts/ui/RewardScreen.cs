@@ -10,6 +10,7 @@ public partial class RewardScreen : Control
     public override void _Ready()
     {
         ScreenBackground.Attach(this, "crypt", new Color(0.6f, 0.6f, 0.65f));
+        DeckViewButtons.Attach(this);
         GetNode<Label>("CenterContainer/VBoxContainer/GoldLabel").Text =
             $"You found {RewardContext.GoldAwarded} gold.";
 

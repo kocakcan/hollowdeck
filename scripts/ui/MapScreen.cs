@@ -21,14 +21,17 @@ public partial class MapScreen : Control
 
     private Control _nodeButtons = null!;
     private Label _goldLabel = null!;
+    private Label _hpLabel = null!;
     private HBoxContainer _relicsRow = null!;
     private readonly Dictionary<string, Vector2> _nodeCenters = new();
 
     public override void _Ready()
     {
         ScreenBackground.Attach(this, "black_cobalt", new Color(0.85f, 0.85f, 0.9f));
+        DeckViewButtons.Attach(this);
         _nodeButtons = GetNode<Control>("NodeButtons");
         _goldLabel = GetNode<Label>("GoldLabel");
+        _hpLabel = GetNode<Label>("HpLabel");
         _relicsRow = GetNode<HBoxContainer>("RelicsRow");
         GetNode<Button>("BackButton").Pressed += OnBackPressed;
 
@@ -128,6 +131,7 @@ public partial class MapScreen : Control
     private void RefreshInfo()
     {
         _goldLabel.Text = $"Gold: {RunState.Gold}";
+        _hpLabel.Text = $"HP: {RunState.PlayerCurrentHp}/{RunState.PlayerMaxHp}";
 
         if (RunState.Relics.Count == 0)
         {

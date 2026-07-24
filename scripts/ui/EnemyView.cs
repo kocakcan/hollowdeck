@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
@@ -40,6 +41,7 @@ public partial class EnemyView : Button
     private Label _hpLabel = null!;
     private TextureRect _intentIcon = null!;
     private Label _intentLabel = null!;
+    private TextureRect _debuffIcon = null!;
     private HBoxContainer _statusRow = null!;
     private Tween? _idleTween;
 
@@ -51,6 +53,7 @@ public partial class EnemyView : Button
         _hpLabel = GetNode<Label>("VBox/HpFrame/HpLabel");
         _intentIcon = GetNode<TextureRect>("VBox/IntentRow/IntentIcon");
         _intentLabel = GetNode<Label>("VBox/IntentRow/IntentLabel");
+        _debuffIcon = GetNode<TextureRect>("VBox/IntentRow/DebuffIcon");
         _statusRow = GetNode<HBoxContainer>("VBox/StatusRow");
         _sprite.Texture = ArtAssets.EnemySprite(Combatant.Definition.Id);
         _sprite.PivotOffset = _sprite.Size / 2f;
@@ -152,6 +155,17 @@ public partial class EnemyView : Button
         _intentIcon.Texture = intent is null ? null : ArtAssets.IntentIcon(intent.Type);
         _intentIcon.Visible = _intentIcon.Texture is not null;
         _intentLabel.Text = FormatIntent(intent);
+
+        // Attack moves that also debuff the player (Acid Slime's corrode,
+        // the boss's shadow_lash, etc.) otherwise looked identical to a
+        // plain attack until it landed - a small badge of the actual status
+        // icon telegraphs it up front, same as the main intent icon does
+        // for damage/block/buff.
+        var debuffStatus = IncomingDebuffStatus(Combatant.CurrentMove);
+        _debuffIcon.Texture = debuffStatus is null ? null : ArtAssets.StatusIcon(debuffStatus.Value);
+        _debuffIcon.Visible = _debuffIcon.Texture is not null;
+        _debuffIcon.TooltipText = debuffStatus is null ? "" : $"Also inflicts {debuffStatus}";
+
         StatusRow.Populate(_statusRow, Combatant, 16);
     }
 
@@ -165,6 +179,17 @@ public partial class EnemyView : Button
             IntentType.Buff => $"+{intent.DisplayAmount} Str",
             _ => "",
         };
+    }
+
+    private static readonly HashSet<string> DebuffStatusNames = new() { "Weak", "Vulnerable", "Poison" };
+
+    private static StatusType? IncomingDebuffStatus(EnemyMove? move)
+    {
+        var effect = move?.Effects.FirstOrDefault(e =>
+            e.Action == "apply_status" && e.Scope == EffectScope.Target &&
+            e.Status is not null && DebuffStatusNames.Contains(e.Status));
+        if (effect?.Status is null) return null;
+        return System.Enum.Parse<StatusType>(effect.Status);
     }
 
     private void OnPressed() => CombatManager.Instance.TryTargetEnemy(Combatant);

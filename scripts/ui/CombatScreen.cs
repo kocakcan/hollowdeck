@@ -74,6 +74,7 @@ public partial class CombatScreen : Control
     public override void _Ready()
     {
         ScreenBackground.AttachCombat(this, "crypt", new Color(0.6f, 0.58f, 0.62f));
+        DeckViewButtons.Attach(this, includeCombatPiles: true);
         _combat = GetNode<CombatManager>("CombatManager");
         _enemyRow = GetNode<HBoxContainer>("EnemyRow");
         _handArea = GetNode<Control>("HandArea");
@@ -446,11 +447,18 @@ public partial class CombatScreen : Control
         // Add newly-drawn cards, update everyone's slot/live description.
         int n = hand.Count;
         // Target a total fan width that stays clear of the player HP/energy
-        // column on the left and the End Turn button on the right (empirically
-        // ~760px reads clean at this layout's proportions), while keeping
-        // per-card spacing within a readable-but-still-overlapping range and
-        // never exceeding what actually fits in the hand area.
-        const float FanSafeWidth = 760f;
+        // column on the left and the End Turn button on the right, while
+        // keeping per-card spacing within a readable-but-still-overlapping
+        // range and never exceeding what actually fits in the hand area.
+        // 760 (the original value here) undershoots this for the common
+        // 4-5 card hand: outer cards rotate up to MaxFanRotationDeg, and a
+        // rotated 224x308 card's bounding box is measurably wider than its
+        // unrotated rect (~283 vs 224 at 12deg), so the leftmost card's
+        // visual edge lands well left of its unrotated x - with 760 that
+        // edge crept into PlayerHpFrame's column (offset_right=220 in the
+        // .tscn). 620 keeps the worst-case (5-card) rotated bounding box
+        // clear of it with margin to spare.
+        const float FanSafeWidth = 620f;
         float spacing = HandFanLayout.ComputeSpacing(n, _handArea.Size.X, CardWidth, FanSafeWidth);
         float totalWidth = CardWidth + (n - 1) * spacing;
         float startX = (_handArea.Size.X - totalWidth) / 2f;
@@ -624,6 +632,17 @@ public partial class CombatScreen : Control
         if (_combat.State == CombatState.CombatEnd)
         {
             _combatEndPanel.Visible = true;
+            // Hand cards carry a per-card ZIndex (CardView.SetHomeTransform)
+            // that's global to the canvas layer, not just tree order - past
+            // the first card that's higher than this panel's default 0, so
+            // without this it paints over (and eats clicks meant for) the
+            // Continue button below. Ignore is permanent for the rest of
+            // this scene's life since CombatEnd never returns to PlayerTurn.
+            _combatEndPanel.ZIndex = 1000;
+            foreach (var view in _cardViews.Values)
+            {
+                if (IsInstanceValid(view)) view.MouseFilter = MouseFilterEnum.Ignore;
+            }
             _outcomeLabel.Text = _combat.Outcome == CombatOutcome.Win ? "Victory!" : "Defeated...";
         }
         else

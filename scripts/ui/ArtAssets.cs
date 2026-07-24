@@ -11,7 +11,9 @@ namespace Hollowdeck.UI;
 // code change. Missing art returns null and views degrade to text-only.
 public static class ArtAssets
 {
-    public static Texture2D? CardIcon(string cardId) => Load($"res://assets/icons/cards/{cardId}.svg");
+    // Upgraded cards (CardUpgrade.Apply appends "+" to the id) reuse their
+    // base card's art - there's no separate "strike+.svg" asset.
+    public static Texture2D? CardIcon(string cardId) => Load($"res://assets/icons/cards/{cardId.TrimEnd('+')}.svg");
     public static Texture2D? RelicIcon(string relicId) => Load($"res://assets/icons/relics/{relicId}.svg");
     public static Texture2D? PotionIcon(string potionId) => Load($"res://assets/icons/potions/{potionId}.svg");
     public static Texture2D? EnemySprite(string enemyId) => Load($"res://assets/sprites/enemies/{enemyId}.png");

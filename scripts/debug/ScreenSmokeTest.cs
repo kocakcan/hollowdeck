@@ -1,13 +1,14 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using Hollowdeck.Data;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.Debug;
 
-// Headless check that the non-combat screens (Reward/Shop/Treasure) load
-// their real .tscn files without throwing and actually populate their UI -
-// this is exactly the class of bug a pure-logic test can't see (a GetNode
+// Headless check that the non-combat screens (Reward/Shop/Treasure/Rest)
+// load their real .tscn files without throwing and actually populate their
+// UI - this is exactly the class of bug a pure-logic test can't see (a GetNode
 // path that doesn't match the scene's actual node nesting throws mid-_Ready
 // and silently aborts everything after it, leaving default placeholder
 // text on screen with no button wired up). Run via
@@ -27,6 +28,7 @@ public partial class ScreenSmokeTest : Node
         TestRewardScreen();
         TestTreasureScreen();
         TestShopScreen();
+        TestRestScreen();
 
         GD.Print($"ScreenSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -106,6 +108,54 @@ public partial class ScreenSmokeTest : Node
         var firstRowDescription = offers.GetChild(0).GetChild<Label>(1);
         Check("shop_offer_shows_description", firstRowDescription.Text.Length > 0,
             $"text='{firstRowDescription.Text}'");
+        screen.QueueFree();
+    }
+
+    private void TestRestScreen()
+    {
+        RunState.PlayerMaxHp = 50;
+        RunState.PlayerCurrentHp = 20;
+        RunState.Deck = new List<CardDefinition> { CardDatabase.Get("strike"), CardDatabase.Get("defend") };
+
+        var screen = LoadScene("res://scenes/RestScreen.tscn");
+        var hpLabel = screen.GetNode<Label>("HpLabel");
+        Check("rest_shows_current_hp", hpLabel.Text.Contains("20") && hpLabel.Text.Contains("50"),
+            $"text='{hpLabel.Text}'");
+
+        var choicesView = screen.GetNode<Control>("CenterContainer");
+        var upgradeView = screen.GetNode<Control>("UpgradeCenterContainer");
+        Check("rest_starts_on_main_choices", choicesView.Visible && !upgradeView.Visible,
+            $"choices visible={choicesView.Visible}, upgrade visible={upgradeView.Visible}");
+
+        var smithButton = screen.GetNode<Button>("CenterContainer/VBoxContainer/SmithButton");
+        Check("rest_smith_button_enabled_with_unupgraded_cards", !smithButton.Disabled, "SmithButton was disabled");
+        smithButton.EmitSignal(Button.SignalName.Pressed);
+        Check("rest_smith_switches_to_upgrade_view", !choicesView.Visible && upgradeView.Visible,
+            $"choices visible={choicesView.Visible}, upgrade visible={upgradeView.Visible}");
+
+        var upgradeList = screen.GetNode<VBoxContainer>("UpgradeCenterContainer/UpgradeVBox/ScrollContainer/UpgradeList");
+        Check("rest_upgrade_list_has_a_row_per_card", upgradeList.GetChildCount() == 2,
+            $"rows={upgradeList.GetChildCount()}");
+
+        var strikeRow = upgradeList.GetChild(0);
+        var strikeButton = strikeRow.GetChild<Button>(0);
+        int deckCountBefore = RunState.Deck.Count;
+        // Picking a card calls OnLeavePressed -> ChangeSceneToFile on the
+        // scene currently on the call stack, which logs one harmless
+        // "parent busy" engine error - same accepted quirk documented on
+        // Phase4ContentSmokeTest's elite-reward Continue-click test. Doesn't
+        // affect RunState.Deck, which is what's actually being checked here.
+        strikeButton.EmitSignal(Button.SignalName.Pressed);
+
+        Check("rest_upgrading_keeps_deck_size", RunState.Deck.Count == deckCountBefore,
+            $"count={RunState.Deck.Count}");
+        Check("rest_upgrading_marks_exactly_one_card_upgraded",
+            RunState.Deck.Count(CardUpgrade.IsUpgraded) == 1,
+            $"upgraded count={RunState.Deck.Count(CardUpgrade.IsUpgraded)}");
+        Check("rest_upgrading_leaves_the_other_card_alone",
+            RunState.Deck.Count(c => !CardUpgrade.IsUpgraded(c)) == 1,
+            $"un-upgraded count={RunState.Deck.Count(c => !CardUpgrade.IsUpgraded(c))}");
+
         screen.QueueFree();
     }
 }
