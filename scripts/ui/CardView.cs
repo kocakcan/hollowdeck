@@ -103,6 +103,7 @@ public partial class CardView : Panel
         _artWindow.AddThemeStyleboxOverride("panel", inset);
         _descriptionPanel.AddThemeStyleboxOverride("panel", ChromeStyles.InsetPanelStyle());
         _costBadge.AddThemeStyleboxOverride("panel", ChromeStyles.BadgeStyle(UiTheme.Palette.AccentGoldBright, UiTheme.Palette.AccentGold));
+        _costLabel.AddThemeColorOverride("font_color", UiTheme.Palette.BgPanel);
         _exhaustBadge.AddThemeStyleboxOverride("panel", ChromeStyles.BadgeStyle(UiTheme.Palette.BgPanel, UiTheme.Palette.ExhaustAccent));
 
         MouseEntered += OnMouseEntered;

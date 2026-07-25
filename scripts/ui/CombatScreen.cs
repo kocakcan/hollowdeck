@@ -46,6 +46,7 @@ public partial class CombatScreen : Control
     private Control _exhaustPileAnchor = null!;
     private TextureRect _playerSprite = null!;
     private Label _turnBannerLabel = null!;
+    private PanelContainer _turnBannerPanel = null!;
 
     private PackedScene _cardViewScene = null!;
     private PackedScene _enemyViewScene = null!;
@@ -103,7 +104,8 @@ public partial class CombatScreen : Control
         _exhaustPileAnchor = GetNode<Control>("ExhaustPileAnchor");
         _playerStatusRow = GetNode<HBoxContainer>("PlayerStatusRow");
         _targetHintLabel = GetNode<Label>("TargetHintLabel");
-        _turnBannerLabel = GetNode<Label>("TurnBannerLabel");
+        _turnBannerLabel = GetNode<Label>("TurnBannerPanel/TurnBannerLabel");
+        _turnBannerPanel = GetNode<PanelContainer>("TurnBannerPanel");
         _endTurnButton = GetNode<Button>("EndTurnButton");
         _combatEndPanel = GetNode<Control>("CombatEndPanel");
         _outcomeLabel = GetNode<Label>("CombatEndPanel/OutcomeLabel");
@@ -128,7 +130,8 @@ public partial class CombatScreen : Control
         _energyLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _turnBannerLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _turnBannerLabel.AddThemeFontSizeOverride("font_size", 32);
-        _turnBannerRestPos = _turnBannerLabel.Position;
+        _turnBannerPanel.AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
+        _turnBannerRestPos = _turnBannerPanel.Position;
 
         _endTurnButton.AddThemeStyleboxOverride("normal", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_normal.png"));
         _endTurnButton.AddThemeStyleboxOverride("hover", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_hover.png"));
@@ -291,17 +294,17 @@ public partial class CombatScreen : Control
     {
         _turnBannerTween?.Kill();
         _turnBannerLabel.Text = text;
-        _turnBannerLabel.Modulate = new Color(1f, 1f, 1f, 0f);
-        _turnBannerLabel.Position = _turnBannerRestPos + new Vector2(0, 16);
+        _turnBannerPanel.Modulate = new Color(1f, 1f, 1f, 0f);
+        _turnBannerPanel.Position = _turnBannerRestPos + new Vector2(0, 16);
 
         var tween = CreateTween();
         _turnBannerTween = tween;
         tween.SetParallel(true);
-        tween.TweenProperty(_turnBannerLabel, "modulate:a", 1f, 0.18).SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(_turnBannerLabel, "position", _turnBannerRestPos, 0.22).SetTrans(Tween.TransitionType.Back);
+        tween.TweenProperty(_turnBannerPanel, "modulate:a", 1f, 0.18).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenProperty(_turnBannerPanel, "position", _turnBannerRestPos, 0.22).SetTrans(Tween.TransitionType.Back);
         tween.Chain();
         tween.TweenInterval(0.5);
-        tween.TweenProperty(_turnBannerLabel, "modulate:a", 0f, 0.25).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenProperty(_turnBannerPanel, "modulate:a", 0f, 0.25).SetTrans(Tween.TransitionType.Sine);
     }
 
     // Screen shake: jitters the CombatScreen root itself - safe since it's
