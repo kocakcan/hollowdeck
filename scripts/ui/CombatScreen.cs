@@ -83,6 +83,15 @@ public partial class CombatScreen : Control
     private readonly Dictionary<CardInstance, CardView> _cardViews = new();
     private readonly Dictionary<EnemyCombatant, EnemyView> _enemyViews = new();
 
+    // Keyboard card-play (Left/Right/number keys to select, Space to play) -
+    // a second input path feeding the exact same CombatManager.TryPlayCard
+    // drag-and-drop already uses, so none of this touches CombatManager's
+    // own state machine. Tracked by instance (not index) so a hand reorder
+    // between key presses can't leave these pointing at the wrong slot.
+    private CardInstance? _keyboardSelectedCard;
+    private CardInstance? _armedCard;
+    private EnemyCombatant? _keyboardTargetEnemy;
+
     public override void _Ready()
     {
         ScreenBackground.AttachCombat(this, "crypt", new Color(0.6f, 0.58f, 0.62f));
@@ -138,11 +147,15 @@ public partial class CombatScreen : Control
         _endTurnButton.AddThemeStyleboxOverride("pressed", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_pressed.png"));
         _endTurnButton.AddThemeStyleboxOverride("disabled", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_normal.png"));
 
-        _endTurnButton.Pressed += () =>
-        {
-            AudioManager.Instance?.PlaySfx("ui_click");
-            _combat.TryEndTurn();
-        };
+        // FocusModeEnum.None on both: Godot's automatic arrow-key focus
+        // navigation (any Button is focusable by default) otherwise fights
+        // the keyboard card/target cycling below - Left/Right would silently
+        // shift focus onto End Turn/Continue instead of only doing what
+        // OnKeyboardCycle expects.
+        _endTurnButton.FocusMode = FocusModeEnum.None;
+        _continueButton.FocusMode = FocusModeEnum.None;
+
+        _endTurnButton.Pressed += OnEndTurnRequested;
         _continueButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         _continueButton.Pressed += OnContinuePressed;
 
@@ -440,11 +453,158 @@ public partial class CombatScreen : Control
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true })
         {
             _combat.CancelTargeting();
+            ClearArmedTarget();
         }
-        else if (@event is InputEventKey { Keycode: Key.Escape, Pressed: true })
+        else if (@event is InputEventKey { Pressed: true } key)
         {
-            _combat.CancelTargeting();
+            switch (key.Keycode)
+            {
+                case Key.Escape:
+                    _combat.CancelTargeting();
+                    ClearArmedTarget();
+                    break;
+                case Key.Left:
+                    OnKeyboardCycle(-1);
+                    break;
+                case Key.Right:
+                    OnKeyboardCycle(1);
+                    break;
+                case Key.Space:
+                    OnKeyboardConfirm();
+                    break;
+                case Key.Enter:
+                case Key.KpEnter:
+                    OnEndTurnRequested();
+                    break;
+                case Key.Key1: OnKeyboardSelectByNumber(0); break;
+                case Key.Key2: OnKeyboardSelectByNumber(1); break;
+                case Key.Key3: OnKeyboardSelectByNumber(2); break;
+                case Key.Key4: OnKeyboardSelectByNumber(3); break;
+                case Key.Key5: OnKeyboardSelectByNumber(4); break;
+                case Key.Key6: OnKeyboardSelectByNumber(5); break;
+                case Key.Key7: OnKeyboardSelectByNumber(6); break;
+                case Key.Key8: OnKeyboardSelectByNumber(7); break;
+                case Key.Key9: OnKeyboardSelectByNumber(8); break;
+                case Key.Key0: OnKeyboardSelectByNumber(9); break;
+            }
         }
+    }
+
+    // Shared by CycleCardSelection and OnKeyboardSelectByNumber - swaps the
+    // CardView highlight (CardView.SetHighlighted) from whatever was
+    // selected before onto the new card, or clears it entirely for null.
+    private void SelectCard(CardInstance? card)
+    {
+        if (_keyboardSelectedCard is { } previous && _cardViews.TryGetValue(previous, out var previousView))
+        {
+            previousView.SetHighlighted(false);
+        }
+        _keyboardSelectedCard = card;
+        if (card is not null && _cardViews.TryGetValue(card, out var view))
+        {
+            view.SetHighlighted(true);
+        }
+    }
+
+    private void CycleCardSelection(int direction)
+    {
+        var hand = _combat.Player.Piles.Hand;
+        if (hand.Count == 0) return;
+
+        int currentIndex = _keyboardSelectedCard is null ? -1 : hand.IndexOf(_keyboardSelectedCard);
+        int nextIndex = currentIndex < 0 ? 0 : Mathf.PosMod(currentIndex + direction, hand.Count);
+        SelectCard(hand[nextIndex]);
+    }
+
+    private void CycleEnemyTarget(int direction)
+    {
+        var enemies = _combat.Enemies;
+        if (enemies.Count == 0) return;
+
+        int currentIndex = _keyboardTargetEnemy is null ? -1 : enemies.IndexOf(_keyboardTargetEnemy);
+        int nextIndex = currentIndex < 0 ? 0 : Mathf.PosMod(currentIndex + direction, enemies.Count);
+
+        if (currentIndex >= 0 && _enemyViews.TryGetValue(enemies[currentIndex], out var previousView))
+        {
+            previousView.SetTargetLocked(false);
+        }
+        _keyboardTargetEnemy = enemies[nextIndex];
+        if (_enemyViews.TryGetValue(_keyboardTargetEnemy, out var view)) view.SetTargetLocked(true);
+    }
+
+    private void OnKeyboardCycle(int direction)
+    {
+        if (_combat.State != CombatState.PlayerTurn) return;
+        if (_armedCard is not null) CycleEnemyTarget(direction);
+        else CycleCardSelection(direction);
+    }
+
+    private void OnKeyboardSelectByNumber(int handIndex)
+    {
+        if (_combat.State != CombatState.PlayerTurn) return;
+        ClearArmedTarget();
+
+        var hand = _combat.Player.Piles.Hand;
+        if (handIndex < hand.Count) SelectCard(hand[handIndex]);
+    }
+
+    private void OnKeyboardConfirm()
+    {
+        if (_combat.State != CombatState.PlayerTurn) return;
+
+        if (_armedCard is { } armed)
+        {
+            if (_keyboardTargetEnemy is { } target && _combat.TryPlayCard(armed, target))
+            {
+                AudioManager.Instance?.PlaySfx("card_play");
+            }
+            ClearArmedTarget();
+            SelectCard(null);
+            return;
+        }
+
+        if (_keyboardSelectedCard is not { } card) return;
+
+        if (card.Definition.Target == CardTargetType.SingleEnemy)
+        {
+            if (_combat.Enemies.Count == 0) return;
+            _armedCard = card;
+            _keyboardTargetEnemy = _combat.Enemies[0];
+            if (_enemyViews.TryGetValue(_keyboardTargetEnemy, out var view)) view.SetTargetLocked(true);
+            return;
+        }
+
+        if (_combat.TryPlayCard(card))
+        {
+            AudioManager.Instance?.PlaySfx("card_play");
+        }
+        SelectCard(null);
+    }
+
+    // Shared by the End Turn button's Pressed signal and the Enter/Kp Enter
+    // keybinding, so ending a keyboard-played turn doesn't require reaching
+    // for the mouse. The button itself is already Disabled outside
+    // PlayerTurn (RefreshStateUi), but the keybinding bypasses that, so this
+    // re-checks state itself.
+    private void OnEndTurnRequested()
+    {
+        if (_combat.State != CombatState.PlayerTurn) return;
+        AudioManager.Instance?.PlaySfx("ui_click");
+        _combat.TryEndTurn();
+    }
+
+    // Un-arms a pending single-enemy target (Escape/right-click, or a
+    // second Space confirming it) without touching _keyboardSelectedCard -
+    // canceling a target keeps the card itself selected.
+    private void ClearArmedTarget()
+    {
+        if (_armedCard is null) return;
+        if (_keyboardTargetEnemy is { } enemy && _enemyViews.TryGetValue(enemy, out var view))
+        {
+            view.SetTargetLocked(false);
+        }
+        _armedCard = null;
+        _keyboardTargetEnemy = null;
     }
 
     private void Refresh()
@@ -547,6 +707,16 @@ public partial class CombatScreen : Control
         var hand = _combat.Player.Piles.Hand;
         var handSet = new HashSet<CardInstance>(hand);
 
+        // A keyboard-selected/armed card removed from hand by something
+        // other than OnKeyboardConfirm (e.g. a relic/effect discard) would
+        // otherwise leave _keyboardSelectedCard/_armedCard pointing at a
+        // CardInstance no CardView tracks anymore.
+        if (_keyboardSelectedCard is not null && !handSet.Contains(_keyboardSelectedCard))
+        {
+            ClearArmedTarget();
+            _keyboardSelectedCard = null;
+        }
+
         // Drop tracking for any card no longer in hand. Two distinct cases:
         // - Still parented under _handArea: nobody's handled its exit yet
         //   (e.g. a bulk end-of-turn discard) - fly it to the matching pile
@@ -603,6 +773,7 @@ public partial class CombatScreen : Control
             // depend on live player Strength/Weak, which can change between
             // refreshes without this specific card being re-drawn.
             cardView.SetCardInstance(card);
+            cardView.SetHotkeyNumber(i < 10 ? (i + 1) % 10 : null);
 
             // Fan: cards rotate outward from center and the outer cards sit
             // higher than the center one, like cards spread from a grip
@@ -623,6 +794,16 @@ public partial class CombatScreen : Control
     private void RefreshEnemies()
     {
         var currentSet = new HashSet<EnemyCombatant>(_combat.Enemies);
+
+        // Defensive: an armed keyboard target that died between key presses
+        // (shouldn't normally happen mid-input, but a relic/effect could
+        // kill something off-turn) shouldn't leave _armedCard/
+        // _keyboardTargetEnemy pointing at a gone EnemyCombatant.
+        if (_keyboardTargetEnemy is not null && !currentSet.Contains(_keyboardTargetEnemy))
+        {
+            _armedCard = null;
+            _keyboardTargetEnemy = null;
+        }
 
         // Death case: still tracked but no longer in Enemies (already
         // stripped by Enemies.RemoveAll(e => e.IsDead) before
@@ -805,6 +986,14 @@ public partial class CombatScreen : Control
         _targetHintLabel.Visible = _combat.State == CombatState.AwaitingTarget;
         bool isPlayerTurn = _combat.State == CombatState.PlayerTurn;
         _endTurnButton.Disabled = !isPlayerTurn;
+
+        // Don't let a keyboard selection/armed target carry a leftover
+        // highlight into the enemy turn (or any other non-PlayerTurn state).
+        if (!isPlayerTurn)
+        {
+            ClearArmedTarget();
+            SelectCard(null);
+        }
 
         bool nothingPlayable = isPlayerTurn &&
             _combat.Player.Piles.Hand.All(c => c.Definition.Cost > _combat.Player.CurrentEnergy);

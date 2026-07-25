@@ -33,6 +33,11 @@ public partial class PotionView : Button
 
     public override void _Ready()
     {
+        // Same reasoning as EnemyView/DeckViewButtons - don't let this
+        // Button participate in Godot's automatic arrow-key focus
+        // navigation, which would otherwise compete with CombatScreen's
+        // arrow-key card/target cycling.
+        FocusMode = FocusModeEnum.None;
         Pressed += OnPressed;
     }
 

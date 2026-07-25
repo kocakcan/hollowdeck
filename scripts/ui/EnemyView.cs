@@ -56,6 +56,14 @@ public partial class EnemyView : Button
 
     public override void _Ready()
     {
+        // This whole card is a Button (for click-to-target), but Button's
+        // default FocusModeEnum.All makes it a target of Godot's automatic
+        // directional (arrow-key) focus navigation - which fights the
+        // combat screen's own arrow-key card/target cycling, silently
+        // shifting focus between enemies as a side effect of Left/Right.
+        // This game has no keyboard-focus/Tab navigation design anywhere
+        // else, so there's nothing lost by opting out of it here.
+        FocusMode = FocusModeEnum.None;
         _sprite = GetNode<TextureRect>("VBox/Sprite");
         _shadow = GetNode<TextureRect>("VBox/Sprite/Shadow");
         _shadow.Texture = _shadowTexture ??= BuildShadowTexture();

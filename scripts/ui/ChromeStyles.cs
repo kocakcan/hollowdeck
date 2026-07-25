@@ -155,6 +155,22 @@ public static class ChromeStyles
         return style;
     }
 
+    // Keyboard-hotkey badge - deliberately a muted slate rounded-square
+    // "keycap" rather than another BadgeStyle circle, so it can never be
+    // mistaken for the gold cost badge or bronze exhaust badge sharing the
+    // same card frame (both of those are circular and gold/bronze).
+    public static StyleBoxFlat HotkeyBadgeStyle()
+    {
+        var style = new StyleBoxFlat
+        {
+            BgColor = new Color(0.16f, 0.18f, 0.22f),
+            BorderColor = new Color(0.55f, 0.6f, 0.68f),
+        };
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
+        style.SetCornerRadiusAll((int)UiTheme.Radius.Panel);
+        return style;
+    }
+
     // Subtle darker overlay shared by the card's name banner, art window,
     // and description box - semi-transparent black alpha-blends over
     // whatever's already painted beneath it (the card's type-colored fill),

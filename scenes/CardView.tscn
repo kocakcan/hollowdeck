@@ -81,10 +81,10 @@ text = "Deal 6 damage."
 [node name="CostBadge" type="PanelContainer" parent="."]
 layout_mode = 1
 anchors_preset = 0
-offset_left = -8.0
-offset_top = -8.0
-offset_right = 28.0
-offset_bottom = 26.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 36.0
+offset_bottom = 34.0
 mouse_filter = 2
 
 [node name="CostLabel" type="Label" parent="CostBadge"]
@@ -100,10 +100,10 @@ layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -28.0
-offset_top = -8.0
-offset_right = 8.0
-offset_bottom = 26.0
+offset_left = -36.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 34.0
 grow_horizontal = 0
 mouse_filter = 2
 tooltip_text = "Exhaust: removed from your deck for the rest of combat after being played."
@@ -114,3 +114,23 @@ mouse_filter = 2
 horizontal_alignment = 1
 vertical_alignment = 1
 text = "X"
+
+[node name="HotkeyBadge" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = -34.0
+offset_right = 34.0
+offset_bottom = 0.0
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="HotkeyLabel" type="Label" parent="HotkeyBadge"]
+layout_mode = 2
+mouse_filter = 2
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "1"

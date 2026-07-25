@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
@@ -76,11 +79,22 @@ public partial class CardView : Panel
     private PanelContainer _costBadge = null!;
     private Label _costLabel = null!;
     private PanelContainer _exhaustBadge = null!;
+    private PanelContainer _hotkeyBadge = null!;
+    private Label _hotkeyLabel = null!;
     private bool _dragging;
     private Vector2 _homePosition;
     private float _homeRotation;
     private int _restZIndex;
     private EnemyView? _targetLockedView;
+
+    // Keywords (Block/Vulnerable/...) this card's own description text
+    // mentions, resolved once in SetCardInstance rather than re-scanned on
+    // every hover - shown/hidden together as one stacked panel, driven by
+    // whichever of OnMouseEntered/OnMouseExited last fired, whether that
+    // came from real mouse hover or CombatScreen's SetHighlighted (arrow-key
+    // selection) - one code path covers both input methods identically.
+    private List<(string Keyword, string ColorHex, string Blurb)> _activeKeywords = new();
+    private Control? _keywordTooltipPanel;
 
     public override void _Ready()
     {
@@ -96,6 +110,8 @@ public partial class CardView : Panel
         _costBadge = GetNode<PanelContainer>("CostBadge");
         _costLabel = GetNode<Label>("CostBadge/CostLabel");
         _exhaustBadge = GetNode<PanelContainer>("ExhaustBadge");
+        _hotkeyBadge = GetNode<PanelContainer>("HotkeyBadge");
+        _hotkeyLabel = GetNode<Label>("HotkeyBadge/HotkeyLabel");
         _nameLabel.ThemeTypeVariation = "CombatDisplayLabel";
 
         var inset = ChromeStyles.InsetPanelStyle();
@@ -105,6 +121,7 @@ public partial class CardView : Panel
         _costBadge.AddThemeStyleboxOverride("panel", ChromeStyles.BadgeStyle(UiTheme.Palette.AccentGoldBright, UiTheme.Palette.AccentGold));
         _costLabel.AddThemeColorOverride("font_color", UiTheme.Palette.BgPanel);
         _exhaustBadge.AddThemeStyleboxOverride("panel", ChromeStyles.BadgeStyle(UiTheme.Palette.BgPanel, UiTheme.Palette.ExhaustAccent));
+        _hotkeyBadge.AddThemeStyleboxOverride("panel", ChromeStyles.HotkeyBadgeStyle());
 
         MouseEntered += OnMouseEntered;
         MouseExited += OnMouseExited;
@@ -133,6 +150,17 @@ public partial class CardView : Panel
         // always what would actually land, not stale hand-authored prose.
         string plain = EffectDescriptionFormatter.Describe(def.Effects, CombatManager.Instance?.Player);
         SetDescriptionText(plain);
+
+        // Recomputed (not appended to) each call - a card view is reused in
+        // place across refreshes (see CombatScreen's _cardViews dict), so a
+        // stale tooltip from whatever this view used to show must go too.
+        HideKeywordTooltip();
+        _activeKeywords = KeywordPattern.Matches(plain)
+            .Select(m => m.Value)
+            .Distinct()
+            .Select(k => KeywordHighlights.All.First(h => h.Keyword == k))
+            .Select(h => (h.Keyword, h.Color.ToHtml(false), h.Blurb))
+            .ToList();
     }
 
     private void SetDescriptionText(string plain)
@@ -166,14 +194,110 @@ public partial class CardView : Panel
         return "…";
     }
 
+    // Single regex pass over the original plain text, rather than a
+    // sequential string.Replace-per-keyword loop - that would re-scan its
+    // own already-substituted output on every pass, so a later keyword
+    // (e.g. "Block") could match text sitting inside an earlier keyword's
+    // just-inserted markup (Poison's blurb literally contains the word
+    // "Block"). Regex.Replace only ever matches against the original
+    // input, so replacement text is never re-scanned. Also reused by
+    // SetCardInstance to find which keywords this card's text mentions, for
+    // the hover/selection tooltip panel below.
+    private static readonly Regex KeywordPattern = new(
+        string.Join("|", KeywordHighlights.All.Select(k => Regex.Escape(k.Keyword))));
+
     private static string HighlightKeywords(string plain)
     {
-        string result = plain;
-        foreach (var (keyword, color, blurb) in KeywordHighlights.All)
+        return KeywordPattern.Replace(plain, match =>
         {
-            result = result.Replace(keyword, $"[color=#{color.ToHtml(false)}][hint={blurb}]{keyword}[/hint][/color]");
+            var (keyword, color, _) = KeywordHighlights.All.First(k => k.Keyword == match.Value);
+            return $"[color=#{color.ToHtml(false)}]{keyword}[/color]";
+        });
+    }
+
+    // Shows every keyword this card's text mentions as a small stacked
+    // panel above the card - triggered from OnMouseEntered/OnMouseExited
+    // below, so it responds identically to real mouse hover and to
+    // CombatScreen's keyboard SetHighlighted (arrow-key card selection).
+    // Deliberately not Godot's built-in per-BBCode-span tooltip system
+    // ([hint=...]/_make_custom_tooltip) - that only ever fires from actual
+    // OS mouse motion, which arrow-key selection has none of.
+    private void ShowKeywordTooltip()
+    {
+        if (_activeKeywords.Count == 0 || _keywordTooltipPanel is not null) return;
+
+        var container = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, ZIndex = 500 };
+        container.AddThemeConstantOverride("separation", 4);
+        foreach (var (keyword, colorHex, blurb) in _activeKeywords)
+        {
+            container.AddChild(BuildKeywordBox(keyword, colorHex, blurb));
         }
-        return result;
+
+        GetTree().CurrentScene.AddChild(container);
+        _keywordTooltipPanel = container;
+
+        // Rough placement now (container's real size isn't known until its
+        // own layout pass runs); RepositionKeywordTooltip corrects it one
+        // idle frame later once Size reflects actual content.
+        container.GlobalPosition = GlobalPosition + new Vector2(0, -40 * _activeKeywords.Count - 8);
+        CallDeferred(nameof(RepositionKeywordTooltip));
+    }
+
+    private void RepositionKeywordTooltip()
+    {
+        if (_keywordTooltipPanel is null || !IsInstanceValid(_keywordTooltipPanel)) return;
+        _keywordTooltipPanel.GlobalPosition = GlobalPosition + new Vector2(0, -_keywordTooltipPanel.Size.Y - 8);
+    }
+
+    private void HideKeywordTooltip()
+    {
+        if (_keywordTooltipPanel is null) return;
+        if (IsInstanceValid(_keywordTooltipPanel)) _keywordTooltipPanel.QueueFree();
+        _keywordTooltipPanel = null;
+    }
+
+    // One small dark bronze-bordered box per keyword: a colored title line
+    // (matching that keyword's inline highlight color in the card text)
+    // plus its description below - stacked by ShowKeywordTooltip when a
+    // card mentions more than one keyword, same as the reference layout.
+    private const float KeywordBoxWidth = 200f;
+
+    private static Control BuildKeywordBox(string keyword, string colorHex, string blurb)
+    {
+        var panel = new PanelContainer
+        {
+            MouseFilter = MouseFilterEnum.Ignore,
+            SizeFlagsHorizontal = SizeFlags.ShrinkBegin,
+            SizeFlagsVertical = SizeFlags.ShrinkBegin,
+        };
+        panel.AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
+
+        var vbox = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+        vbox.AddThemeConstantOverride("separation", 2);
+        panel.AddChild(vbox);
+
+        var title = new Label
+        {
+            Text = keyword,
+            CustomMinimumSize = new Vector2(KeywordBoxWidth, 0),
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        title.AddThemeColorOverride("font_color", Color.FromHtml(colorHex));
+        title.AddThemeFontSizeOverride("font_size", 16);
+        vbox.AddChild(title);
+
+        var body = new Label
+        {
+            Text = blurb,
+            CustomMinimumSize = new Vector2(KeywordBoxWidth, 0),
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        body.AddThemeFontSizeOverride("font_size", 13);
+        body.AddThemeColorOverride("font_color", new Color(0.85f, 0.85f, 0.85f));
+        vbox.AddChild(body);
+
+        return panel;
     }
 
     // pos/rotationDeg are this card's resting slot in the fan (CombatScreen
@@ -191,26 +315,47 @@ public partial class CardView : Panel
         ZIndex = zIndex;
     }
 
+    // Drives the same hover visual (scale/rotation/border) from keyboard
+    // card selection (CombatScreen's arrow-key nav), so a keyboard-selected
+    // card reads identically to a mouse-hovered one with no separate visual
+    // language to maintain.
+    public void SetHighlighted(bool on)
+    {
+        if (on) OnMouseEntered();
+        else OnMouseExited();
+    }
+
+    // Only combat hand cards get a hotkey badge (CombatScreen.RefreshHand
+    // calls this per card); Shop/Reward/PileViewPopup cards never call it,
+    // so HotkeyBadge stays hidden there.
+    public void SetHotkeyNumber(int? number)
+    {
+        _hotkeyBadge.Visible = number is not null;
+        if (number is { } n) _hotkeyLabel.Text = n.ToString();
+    }
+
     private void OnMouseEntered()
     {
-        if (_dragging) return;
+        if (_dragging || !Interactive) return;
         ZIndex = 100;
         var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
         tween.SetParallel(true);
         tween.TweenProperty(this, "scale", HoverScale, 0.12);
         tween.TweenProperty(this, "rotation_degrees", 0f, 0.12); // "stands up straight"
         if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: true, CardUpgrade.IsUpgraded(CardInstance.Definition)));
+        ShowKeywordTooltip();
     }
 
     private void OnMouseExited()
     {
-        if (_dragging) return;
+        if (_dragging || !Interactive) return;
         ZIndex = _restZIndex;
         var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
         tween.SetParallel(true);
         tween.TweenProperty(this, "scale", NormalScale, 0.12);
         tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.12);
         if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: false, CardUpgrade.IsUpgraded(CardInstance.Definition)));
+        HideKeywordTooltip();
     }
 
     // Cards animate in from the draw pile when newly added to hand -
@@ -327,7 +472,11 @@ public partial class CardView : Panel
         _targetLockedView = null;
     }
 
-    public override void _ExitTree() => ClearTargetHighlight();
+    public override void _ExitTree()
+    {
+        ClearTargetHighlight();
+        HideKeywordTooltip();
+    }
 
     private void OnReleased()
     {

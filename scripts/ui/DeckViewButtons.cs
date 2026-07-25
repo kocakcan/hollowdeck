@@ -53,7 +53,17 @@ public static class DeckViewButtons
 
     private static Button MakeButton(string text, System.Action onPressed)
     {
-        var button = new Button { Text = text, Icon = _stackIconTexture ??= BuildStackIcon(), IconAlignment = HorizontalAlignment.Left };
+        // FocusModeEnum.None: same reasoning as EnemyView - these buttons
+        // shouldn't be reachable by Godot's automatic arrow-key focus
+        // navigation, which would otherwise compete with CombatScreen's own
+        // arrow-key card/target cycling.
+        var button = new Button
+        {
+            Text = text,
+            Icon = _stackIconTexture ??= BuildStackIcon(),
+            IconAlignment = HorizontalAlignment.Left,
+            FocusMode = Control.FocusModeEnum.None,
+        };
         button.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         button.Pressed += onPressed;
         return button;
