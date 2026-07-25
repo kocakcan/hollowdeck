@@ -84,18 +84,18 @@ area hitting the same bugs.
 
 ## Phase 7 — Audio & visual polish
 
-Currently zero audio (no `AudioStreamPlayer` nodes, no sound assets, no music —
-the only audio-adjacent code is the volume slider with nothing plugged into
-it) and minimal juice (6 tween call sites total, all in
-`CombatScreen`/`CardView`/`FloatingText`; every other screen and event —
-scene transitions, HP-bar changes, card draw, victory/defeat, shop purchase —
-is an instant state snap with no default Godot theme applied anywhere).
+Audio is done: an `AudioManager` autoload plays procedurally synthesized SFX
+(card play, damage, block, heal, status, draw, energy gain, enemy death,
+reward pickup, UI clicks) and generative music (calm ambient loop, tense
+combat loop, victory/defeat stingers) through a Music/SFX bus split, with
+matching volume sliders in Settings — see `scripts/audio/` and
+`scripts/run/AudioManager.cs`. Remaining visual-polish work: minimal juice
+outside combat (6 tween call sites, all in `CombatScreen`/`CardView`/
+`FloatingText`; every other screen/event — scene transitions, HP-bar changes,
+card draw, victory/defeat, shop purchase — is still an instant state snap).
 
-- Add music (menu/map/combat/boss/victory-defeat) and core SFX (card play,
-  damage, block, potion use, enemy death, UI clicks) via a small
-  `AudioManager` autoload alongside the existing three.
-- Wire the settings audio bus properly — split Master into Music/SFX buses so
-  the two-slider settings surface (Phase 8) has something real to control.
+- ~~Add music (menu/map/combat/boss/victory-defeat) and core SFX~~ Done.
+- ~~Wire the settings audio bus properly — split Master into Music/SFX~~ Done.
 - Apply a Godot `Theme` resource across all screens instead of default gray UI;
   add map-node icons (replace the emoji-as-icon placeholder in `EnemyView`);
   add scene-transition fades in `RunManager.ChangeScreen` instead of the hard

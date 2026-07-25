@@ -4,6 +4,7 @@ using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
 using Hollowdeck.Effects;
+using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
 
@@ -186,6 +187,7 @@ public partial class EnemyView : Button
     // this Button directly since only Position/Size are Container-managed.
     public void PlayDeathTween(System.Action onComplete)
     {
+        AudioManager.Instance?.PlaySfx("enemy_death");
         var tween = CreateTween();
         tween.SetParallel(true);
         tween.TweenProperty(this, "scale", Vector2.One * 0.7f, 0.35).SetTrans(Tween.TransitionType.Sine);

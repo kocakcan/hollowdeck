@@ -21,6 +21,7 @@ public partial class MainMenu : Control
         foreach (var button in new[] { continueButton, startButton, unlocksButton, settingsButton })
         {
             ApplyButtonChrome(button);
+            button.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         }
     }
 

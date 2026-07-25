@@ -50,6 +50,7 @@ public partial class MetaProgressionScreen : Control
             button.Pressed += () =>
             {
                 if (!MetaProgressionManager.Instance.TryUnlockRelic(relicId, RelicUnlockCost)) return;
+                AudioManager.Instance?.PlaySfx("reward_pickup");
                 RefreshShardsLabel();
                 RefreshRelicUnlocks();
             };
@@ -73,5 +74,9 @@ public partial class MetaProgressionScreen : Control
         }
     }
 
-    private void OnBackPressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.MainMenu);
+    private void OnBackPressed()
+    {
+        AudioManager.Instance?.PlaySfx("ui_click");
+        RunManager.Instance.ChangeScreen(RunManager.ScreenState.MainMenu);
+    }
 }

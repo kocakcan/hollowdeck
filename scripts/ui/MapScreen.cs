@@ -235,6 +235,7 @@ public partial class MapScreen : Control
 
     private void OnNodeChosen(MapNode node)
     {
+        AudioManager.Instance?.PlaySfx("ui_click");
         RunState.CurrentNodeId = node.Id;
         RunState.VisitedNodeIds.Add(node.Id);
 
@@ -276,5 +277,9 @@ public partial class MapScreen : Control
         }
     }
 
-    private void OnBackPressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.MainMenu);
+    private void OnBackPressed()
+    {
+        AudioManager.Instance?.PlaySfx("ui_click");
+        RunManager.Instance.ChangeScreen(RunManager.ScreenState.MainMenu);
+    }
 }

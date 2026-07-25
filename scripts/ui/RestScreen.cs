@@ -31,10 +31,16 @@ public partial class RestScreen : Control
 
         var smithButton = GetNode<Button>("CenterContainer/VBoxContainer/SmithButton");
         smithButton.Disabled = !RunState.Deck.Any(c => !CardUpgrade.IsUpgraded(c));
+        smithButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         smithButton.Pressed += ShowUpgradeChoices;
 
-        GetNode<Button>("CenterContainer/VBoxContainer/LeaveButton").Pressed += OnLeavePressed;
-        GetNode<Button>("UpgradeCenterContainer/UpgradeVBox/CancelButton").Pressed += ShowMainChoices;
+        var leaveButton = GetNode<Button>("CenterContainer/VBoxContainer/LeaveButton");
+        leaveButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
+        leaveButton.Pressed += OnLeavePressed;
+
+        var cancelButton = GetNode<Button>("UpgradeCenterContainer/UpgradeVBox/CancelButton");
+        cancelButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
+        cancelButton.Pressed += ShowMainChoices;
     }
 
     // Rest sites offer exactly one action (heal, upgrade, or neither) before
@@ -79,7 +85,11 @@ public partial class RestScreen : Control
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Modulate = new Color(0.65f, 1f, 0.65f),
             };
-            button.Pressed += () => OnCardUpgraded(index);
+            button.Pressed += () =>
+            {
+                AudioManager.Instance?.PlaySfx("reward_pickup");
+                OnCardUpgraded(index);
+            };
             row.AddChild(button);
             row.AddChild(before);
             row.AddChild(after);
@@ -109,6 +119,7 @@ public partial class RestScreen : Control
 
     private void OnHealPressed(int amount)
     {
+        AudioManager.Instance?.PlaySfx("heal");
         RunState.PlayerCurrentHp = Mathf.Min(RunState.PlayerMaxHp, RunState.PlayerCurrentHp + amount);
         OnLeavePressed();
     }

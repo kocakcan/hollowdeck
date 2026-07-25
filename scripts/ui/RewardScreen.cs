@@ -28,7 +28,9 @@ public partial class RewardScreen : Control
         }
 
         BuildCardChoices();
-        GetNode<Button>("SkipButton").Pressed += OnSkipPressed;
+        var skipButton = GetNode<Button>("SkipButton");
+        skipButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
+        skipButton.Pressed += OnSkipPressed;
     }
 
     // Real CardView instances (the same frame combat hands/deck-view use)
@@ -85,6 +87,7 @@ public partial class RewardScreen : Control
 
     private void OnCardChosen(CardInstance card)
     {
+        AudioManager.Instance?.PlaySfx("reward_pickup");
         RunState.Deck.Add(card.Definition);
         Advance();
     }

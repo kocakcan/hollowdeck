@@ -37,6 +37,7 @@ public partial class EventScreen : Control
         foreach (var choice in picked.Choices)
         {
             var button = new Button { Text = choice.Label };
+            button.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
             button.Pressed += () => OnChoiceChosen(choice);
             _choicesList.AddChild(button);
         }

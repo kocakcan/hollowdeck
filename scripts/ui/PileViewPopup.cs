@@ -77,12 +77,14 @@ public partial class PileViewPopup : Control
         var sortButton = new Button { Text = "Sort: Cost" };
         sortButton.Pressed += () =>
         {
+            AudioManager.Instance?.PlaySfx("ui_click");
             _sortByName = !_sortByName;
             sortButton.Text = _sortByName ? "Sort: Name" : "Sort: Cost";
             RepopulateGrid();
         };
         header.AddChild(sortButton);
         var closeButton = new Button { Text = "Close (Esc)" };
+        closeButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         closeButton.Pressed += QueueFree;
         header.AddChild(closeButton);
 

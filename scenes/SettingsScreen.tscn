@@ -38,6 +38,28 @@ max_value = 1.0
 step = 0.05
 value = 1.0
 
+[node name="MusicVolumeLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+text = "Music Volume"
+
+[node name="MusicVolumeSlider" type="HSlider" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="SfxVolumeLabel" type="Label" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+text = "SFX Volume"
+
+[node name="SfxVolumeSlider" type="HSlider" parent="CenterContainer/VBoxContainer"]
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 1.0
+
 [node name="FullscreenToggle" type="CheckButton" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "Fullscreen"

@@ -135,7 +135,12 @@ public partial class CombatScreen : Control
         _endTurnButton.AddThemeStyleboxOverride("pressed", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_pressed.png"));
         _endTurnButton.AddThemeStyleboxOverride("disabled", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_normal.png"));
 
-        _endTurnButton.Pressed += () => _combat.TryEndTurn();
+        _endTurnButton.Pressed += () =>
+        {
+            AudioManager.Instance?.PlaySfx("ui_click");
+            _combat.TryEndTurn();
+        };
+        _continueButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         _continueButton.Pressed += OnContinuePressed;
 
         _combat.StateChanged += OnCombatStateChanged;

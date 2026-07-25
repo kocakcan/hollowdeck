@@ -24,7 +24,9 @@ public partial class ShopScreen : Control
         _goldLabel = GetNode<Label>("GoldLabel");
         _offersList = GetNode<VBoxContainer>("OffersScroll/OffersList");
         _cardOffersRow = GetNode<HBoxContainer>("CardOffersRow");
-        GetNode<Button>("LeaveButton").Pressed += OnLeavePressed;
+        var leaveButton = GetNode<Button>("LeaveButton");
+        leaveButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
+        leaveButton.Pressed += OnLeavePressed;
 
         var rng = RngStreams.Shop;
 
@@ -91,6 +93,7 @@ public partial class ShopScreen : Control
         buyButton.Pressed += () =>
         {
             if (RunState.Gold < CardPrice) return;
+            AudioManager.Instance?.PlaySfx("reward_pickup");
             RunState.Deck.Add(card);
             RunState.Gold -= CardPrice;
             buyButton.Disabled = true;
@@ -124,6 +127,7 @@ public partial class ShopScreen : Control
         {
             if (RunState.Gold < price) return;
             if (!onBuy()) return;
+            AudioManager.Instance?.PlaySfx("reward_pickup");
             RunState.Gold -= price;
             button.Disabled = true;
             RefreshGoldLabel();

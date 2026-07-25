@@ -70,6 +70,7 @@ public partial class RunManager : Node
         }
         if (AutoSaveScreens.Contains(next)) RunSaveManager.Save(RunSeed);
         CurrentScreen = next;
+        AudioManager.Instance?.PlayMusicForState(next);
         GetTree().ChangeSceneToFile(path);
     }
 

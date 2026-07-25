@@ -54,6 +54,7 @@ public static class DeckViewButtons
     private static Button MakeButton(string text, System.Action onPressed)
     {
         var button = new Button { Text = text, Icon = _stackIconTexture ??= BuildStackIcon(), IconAlignment = HorizontalAlignment.Left };
+        button.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         button.Pressed += onPressed;
         return button;
     }

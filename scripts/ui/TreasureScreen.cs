@@ -26,9 +26,12 @@ public partial class TreasureScreen : Control
             var picked = available[RngStreams.Shop.Next(available.Count)];
             RunState.Relics.Add(new RelicInstance(picked));
             label.Text = $"You found: {picked.Name}\n{picked.Description}";
+            AudioManager.Instance?.PlaySfx("reward_pickup");
         }
 
-        GetNode<Button>("CenterContainer/VBoxContainer/ContinueButton").Pressed += OnContinuePressed;
+        var continueButton = GetNode<Button>("CenterContainer/VBoxContainer/ContinueButton");
+        continueButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
+        continueButton.Pressed += OnContinuePressed;
     }
 
     private void OnContinuePressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.Map);

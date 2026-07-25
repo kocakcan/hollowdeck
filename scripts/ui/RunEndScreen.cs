@@ -22,8 +22,13 @@ public partial class RunEndScreen : Control
         outcomeLabel.Text = (won ? "Victory! You cleared the run." : "Defeated...") +
                              $"\nSeed: {RunManager.Instance.RunSeed}  (+{shards} Shards)";
 
-        GetNode<Button>("CenterContainer/VBoxContainer/RestartButton").Pressed += OnRestartPressed;
-        GetNode<Button>("CenterContainer/VBoxContainer/ViewUnlocksButton").Pressed += OnViewUnlocksPressed;
+        var restartButton = GetNode<Button>("CenterContainer/VBoxContainer/RestartButton");
+        restartButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
+        restartButton.Pressed += OnRestartPressed;
+
+        var viewUnlocksButton = GetNode<Button>("CenterContainer/VBoxContainer/ViewUnlocksButton");
+        viewUnlocksButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
+        viewUnlocksButton.Pressed += OnViewUnlocksPressed;
     }
 
     private void OnRestartPressed() => RunManager.Instance.StartNewRun();

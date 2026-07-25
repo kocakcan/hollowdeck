@@ -65,3 +65,10 @@ font).
 The End Turn button's ornate frame textures in `assets/ui/` come from
 [Fantasy UI Box](https://opengameart.org/content/fantasy-ui-box) by
 **StumpyStrust**, released under CC0.
+
+## Audio — procedurally generated, no sourced material
+
+Every sound in the game (SFX and music) is synthesized in-engine at runtime
+from raw oscillators/envelopes/filters (`scripts/audio/AudioSynth.cs`,
+`AudioCues.cs`, `AudioMusic.cs`) - no samples, recordings, or third-party
+audio assets were used. No attribution is required.

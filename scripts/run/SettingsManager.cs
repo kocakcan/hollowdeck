@@ -25,6 +25,8 @@ public partial class SettingsManager : Node
     private SettingsData _data = new();
 
     public float MasterVolume => _data.MasterVolume;
+    public float MusicVolume => _data.MusicVolume;
+    public float SfxVolume => _data.SfxVolume;
     public bool Fullscreen => _data.Fullscreen;
     public bool ReduceMotion => _data.ReduceMotion;
 
@@ -38,6 +40,20 @@ public partial class SettingsManager : Node
     public void SetMasterVolume(float linear, string? path = null)
     {
         _data.MasterVolume = Math.Clamp(linear, 0f, 1f);
+        Apply();
+        SaveTo(path ?? SavePath);
+    }
+
+    public void SetMusicVolume(float linear, string? path = null)
+    {
+        _data.MusicVolume = Math.Clamp(linear, 0f, 1f);
+        Apply();
+        SaveTo(path ?? SavePath);
+    }
+
+    public void SetSfxVolume(float linear, string? path = null)
+    {
+        _data.SfxVolume = Math.Clamp(linear, 0f, 1f);
         Apply();
         SaveTo(path ?? SavePath);
     }
@@ -57,14 +73,25 @@ public partial class SettingsManager : Node
 
     private void Apply()
     {
-        int masterBus = AudioServer.GetBusIndex("Master");
-        bool muted = _data.MasterVolume <= 0.0001f;
-        AudioServer.SetBusMute(masterBus, muted);
-        if (!muted) AudioServer.SetBusVolumeDb(masterBus, Mathf.LinearToDb(_data.MasterVolume));
+        ApplyBusVolume("Master", _data.MasterVolume);
+        ApplyBusVolume("Music", _data.MusicVolume);
+        ApplyBusVolume("SFX", _data.SfxVolume);
 
         DisplayServer.WindowSetMode(_data.Fullscreen
             ? DisplayServer.WindowMode.Fullscreen
             : DisplayServer.WindowMode.Windowed);
+    }
+
+    // Guarded on GetBusIndex != -1 since "Music"/"SFX" are created at
+    // runtime by AudioManager, not authored in a bus layout resource -
+    // this keeps Apply() safe even if autoload order is ever changed.
+    private static void ApplyBusVolume(string busName, float linear)
+    {
+        int idx = AudioServer.GetBusIndex(busName);
+        if (idx == -1) return;
+        bool muted = linear <= 0.0001f;
+        AudioServer.SetBusMute(idx, muted);
+        if (!muted) AudioServer.SetBusVolumeDb(idx, Mathf.LinearToDb(linear));
     }
 
     public void LoadFrom(string path)

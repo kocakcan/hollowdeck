@@ -273,7 +273,11 @@ public partial class CardView : Panel
             if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false })
             {
                 GetViewport().SetInputAsHandled();
-                if (CardInstance is not null) Clicked?.Invoke(CardInstance);
+                if (CardInstance is not null)
+                {
+                    AudioManager.Instance?.PlaySfx("ui_click");
+                    Clicked?.Invoke(CardInstance);
+                }
             }
             return;
         }
@@ -357,6 +361,7 @@ public partial class CardView : Panel
         bool resolved = CombatManager.Instance.TryPlayCard(CardInstance, target);
         if (resolved)
         {
+            AudioManager.Instance?.PlaySfx("card_play");
             PlayResolveTween();
         }
         else
