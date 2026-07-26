@@ -23,6 +23,7 @@ public partial class ScreenSmokeTest : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
@@ -118,6 +119,12 @@ public partial class ScreenSmokeTest : Node
 
     private void TestRestScreen()
     {
+        // Picking a card to upgrade leaves the screen (ChangeScreen(Map)), and
+        // Map is an auto-save screen - so without this, running this test writes
+        // this test's 2-card fixture over the developer's real in-progress run
+        // save. That is exactly what used to happen on every suite run.
+        using var saveGuard = RunSaveGuard.Protect();
+
         RunState.PlayerMaxHp = 50;
         RunState.PlayerCurrentHp = 20;
         RunState.Deck = new List<CardDefinition> { CardDatabase.Get("strike"), CardDatabase.Get("defend") };

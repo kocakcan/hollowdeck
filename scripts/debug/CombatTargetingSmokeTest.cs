@@ -23,6 +23,7 @@ public partial class CombatTargetingSmokeTest : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 

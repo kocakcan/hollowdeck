@@ -20,6 +20,7 @@ public partial class RelicSmokeTest : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 

@@ -28,6 +28,7 @@ public partial class MetaProgressionSmokeTest : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 

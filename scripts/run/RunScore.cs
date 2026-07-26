@@ -8,10 +8,12 @@ namespace Hollowdeck.Run;
 // (https://slaythespire.wiki.gg/wiki/Score). Only categories Hollowdeck
 // actually has a mechanic for are implemented - there's no ascension level,
 // no curse cards, no run timer and no Heart fight, so Ascension/Curses!/
-// Speedster/Heartbreaker have nothing to read. Thresholds are scaled to
+// Speedster/Heartbreaker have nothing to read. Thresholds were scaled to
 // Hollowdeck's much smaller numbers (50 max HP, ~45g per fight, a 30-card
-// pool, 22 relics, one act) - the StS value each was scaled from is noted
-// per-category below.
+// pool, 22 relics) - the StS value each was scaled from is noted per-category
+// below. They were set when a run was a single act; a full three-act run now
+// banks three bosses' worth of points and climbs further up the unlock track,
+// so they want a pass alongside the act balance pass (see ROADMAP.md).
 //
 // Pauper (no rare cards) is deliberately absent: every entry in cards.json
 // is currently Rarity.Common, so it would award unconditionally. Add it once
@@ -43,7 +45,7 @@ public static class RunScore
         (250, 25, "Money Money"),
     };
 
-    // StS: 25 relics. Hollowdeck only has 14 in total.
+    // StS: 25 relics. Hollowdeck only has 22 in total.
     public const int ShinyRelics = 8;
     public const int ShinyPoints = 50;
 
@@ -57,8 +59,8 @@ public static class RunScore
     public const int HighlanderPoints = 100;
     public const int CollectorPoints = 25;
 
-    // StS: 15 unknown rooms across three acts. Hollowdeck's single act only
-    // generates a handful of Event nodes.
+    // StS: 15 unknown rooms across three acts. Hollowdeck generates only a
+    // handful of Event nodes per act.
     public const int MysteryRooms = 5;
     public const int MysteryPoints = 25;
 

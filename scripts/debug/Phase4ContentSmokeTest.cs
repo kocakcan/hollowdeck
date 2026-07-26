@@ -29,6 +29,7 @@ public partial class Phase4ContentSmokeTest : Node
 
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
@@ -125,6 +126,12 @@ public partial class Phase4ContentSmokeTest : Node
 
     private async Task TestEliteRewardGrantsGuaranteedRelic()
     {
+        // The simulated Continue click below routes through
+        // RunManager.ChangeScreen(Reward), and Reward is an auto-save screen -
+        // so without this, running this test overwrites the developer's real
+        // in-progress run save with this test's fixture state.
+        using var saveGuard = RunSaveGuard.Protect();
+
         RunState.Gold = 0;
         RunState.PlayerMaxHp = 50;
         RunState.PlayerCurrentHp = 50;

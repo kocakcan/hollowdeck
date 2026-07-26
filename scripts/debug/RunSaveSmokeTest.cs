@@ -22,10 +22,12 @@ public partial class RunSaveSmokeTest : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
         TestSaveThenLoadRoundTrip();
+        TestActIndexToleratesOldAndOutOfRangeSaves();
         TestCorruptedFileFallsBackToNull();
         TestStaleCardRelicPotionIdsAreDropped();
         TestDeleteRemovesFile();
@@ -72,6 +74,7 @@ public partial class RunSaveSmokeTest : Node
         };
         RunState.CurrentNodeId = "n0";
         RunState.VisitedNodeIds = new HashSet<string> { "n0" };
+        RunState.ActIndex = 1;
 
         RunSaveManager.Save(runSeed: 12345, path: ScratchPath);
 
@@ -86,6 +89,7 @@ public partial class RunSaveSmokeTest : Node
         RunState.MapNodes = new List<MapNode>();
         RunState.CurrentNodeId = "";
         RunState.VisitedNodeIds = new HashSet<string>();
+        RunState.ActIndex = 0;
 
         var seed = RunSaveManager.TryLoad(ScratchPath);
         Check("round_trip_seed", seed == 12345, $"seed={seed}");
@@ -111,6 +115,39 @@ public partial class RunSaveSmokeTest : Node
             "expected n0's EnemyIds to survive the round trip (MapNode uses fields, needs IncludeFields)");
         Check("round_trip_current_node", RunState.CurrentNodeId == "n0", $"currentNodeId={RunState.CurrentNodeId}");
         Check("round_trip_visited_nodes", RunState.VisitedNodeIds.Contains("n0"), $"visited={string.Join(",", RunState.VisitedNodeIds)}");
+        Check("round_trip_act_index", RunState.ActIndex == 1, $"actIndex={RunState.ActIndex}");
+    }
+
+    // Save v2 predates acts. Its ActIndex is absent, which must deserialize as
+    // act 0 - every such save is a single-act run and its MapNodes are already
+    // act 1's graph, so there is nothing to migrate. An index past the end (a
+    // save from a build with more acts) has to clamp instead of throwing when
+    // RunState.CurrentAct is read.
+    private void TestActIndexToleratesOldAndOutOfRangeSaves()
+    {
+        ResetScratch();
+        WriteScratchRaw("""
+            { "saveVersion": 2, "runSeed": 7, "gold": 10, "playerMaxHp": 50, "playerCurrentHp": 50,
+              "deckCardIds": ["strike"], "relicIds": [], "potions": [],
+              "mapNodes": [], "currentNodeId": "", "visitedNodeIds": [] }
+            """);
+        RunState.ActIndex = 2;
+        var seed = RunSaveManager.TryLoad(ScratchPath);
+        Check("v2_save_loads", seed == 7, $"seed={seed}");
+        Check("v2_save_without_act_index_is_act_one", RunState.ActIndex == 0, $"actIndex={RunState.ActIndex}");
+
+        ResetScratch();
+        WriteScratchRaw("""
+            { "saveVersion": 3, "runSeed": 8, "gold": 10, "playerMaxHp": 50, "playerCurrentHp": 50,
+              "actIndex": 99, "deckCardIds": ["strike"], "relicIds": [], "potions": [],
+              "mapNodes": [], "currentNodeId": "", "visitedNodeIds": [] }
+            """);
+        RunSaveManager.TryLoad(ScratchPath);
+        Check("out_of_range_act_index_clamps_to_last_act",
+            RunState.ActIndex == ActDatabase.Count - 1 && RunState.CurrentAct is not null,
+            $"actIndex={RunState.ActIndex}, acts={ActDatabase.Count}");
+
+        RunState.ActIndex = 0;
     }
 
     private void TestCorruptedFileFallsBackToNull()

@@ -56,14 +56,26 @@ public partial class ScreenShot : Node
         "user://run_save.json",
     };
 
-    private record Fixture(string ScenePath, Action Seed);
+    // AfterReady runs once the screen's _Ready has finished building itself,
+    // for state that only exists after that point - CombatScreen constructs
+    // its PlayerCombatant/EnemyCombatants in _Ready, so a fixture can't seed
+    // their statuses up front the way it seeds RunState.
+    private record Fixture(string ScenePath, Action Seed, Action? AfterReady = null);
 
     private static readonly Dictionary<string, Fixture> Fixtures = new()
     {
-        ["combat"] = new("res://scenes/CombatScreen.tscn", SeedCombat),
+        ["combat"] = new("res://scenes/CombatScreen.tscn", SeedCombat, AfterCombatReady),
         ["reward"] = new("res://scenes/RewardScreen.tscn", SeedReward),
         ["shop"] = new("res://scenes/ShopScreen.tscn", SeedShop),
         ["map"] = new("res://scenes/MapScreen.tscn", SeedMap),
+        // One map + one boss fight per later act: each act has its own title,
+        // backdrop tint, boss sprites and floor count, and none of that is
+        // visible from act 1's shots. Act 3's map is also the longest (10
+        // floors), which is where node layout runs out of horizontal room first.
+        ["map2"] = new("res://scenes/MapScreen.tscn", () => SeedActMap(1)),
+        ["map3"] = new("res://scenes/MapScreen.tscn", () => SeedActMap(2)),
+        ["combat2"] = new("res://scenes/CombatScreen.tscn", () => SeedActBossCombat(1)),
+        ["combat3"] = new("res://scenes/CombatScreen.tscn", () => SeedActBossCombat(2)),
         ["rest"] = new("res://scenes/RestScreen.tscn", SeedRest),
         ["treasure"] = new("res://scenes/TreasureScreen.tscn", SeedTreasure),
         ["event"] = new("res://scenes/EventScreen.tscn", SeedEvent),
@@ -77,6 +89,7 @@ public partial class ScreenShot : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         EventDatabase.LoadAll();
@@ -125,6 +138,7 @@ public partial class ScreenShot : Node
 
         var screen = GD.Load<PackedScene>(fixture.ScenePath).Instantiate();
         AddChild(screen);
+        fixture.AfterReady?.Invoke();
 
         for (int i = 0; i < SettleFrames; i++)
         {
@@ -157,6 +171,7 @@ public partial class ScreenShot : Node
         RunState.Relics = new List<RelicInstance> { new(RelicDatabase.Get("second_wind")) };
         RunState.Potions = new List<PotionInstance> { new(PotionDatabase.Get("healing_potion")) };
         RunState.Stats = new RunStats();
+        RunState.ActIndex = 0;
         RunState.MapNodes = new List<MapNode>();
         RunState.CurrentNodeId = "";
         RunState.VisitedNodeIds = new HashSet<string>();
@@ -164,12 +179,48 @@ public partial class ScreenShot : Node
 
     private static void SeedNothing() { }
 
+    // Exactly five cards, so DrawHand(5) draws the whole deck and the opening
+    // hand is guaranteed rather than a lucky roll: Flex and Bash for
+    // AfterCombatReady to spend, and Cleave/Whirlwind/Thunderclap left
+    // standing as the cards whose text is being verified. Thunderclap is
+    // deliberately the longest description in the game (it takes the "to ALL
+    // enemies" suffix twice), so the shot also proves the description box
+    // still fits its worst case without truncating. Five is the hand size the
+    // fan layout is tuned for, so this stays a representative layout shot.
     private static void SeedCombat()
     {
         CombatContext.EnemyDefinitionIds = new List<string> { "cultist", "slime" };
         CombatContext.IsElite = false;
         CombatContext.IsBoss = false;
         CombatContext.GoldReward = 30;
+        RunState.Deck = new List<CardDefinition>
+        {
+            CardDatabase.Get("flex"), CardDatabase.Get("bash"), CardDatabase.Get("cleave"),
+            CardDatabase.Get("whirlwind"), CardDatabase.Get("thunderclap"),
+        };
+    }
+
+    // Card text depends on live combat state that a turn-1 fight doesn't have:
+    // the player's Strength, and Vulnerable on the enemy being hit. Reached by
+    // actually playing Flex and Bash through TryPlayCard rather than poking
+    // statuses in directly - that fires the same events gameplay does, so the
+    // hand re-renders exactly as it would mid-fight, and the shot can't show a
+    // state the real game can't produce.
+    //
+    // Leaves: Strength 2 (every damage number buffed), Vulnerable 2 on the
+    // cultist but not the slime (so an AllEnemies card prints a range), and
+    // 1 energy (so Cleave is affordable and Whirlwind is dimmed).
+    private static void AfterCombatReady()
+    {
+        var combat = CombatManager.Instance;
+        if (combat is null) return;
+
+        var hand = combat.Player.Piles.Hand;
+        if (hand.FirstOrDefault(c => c.Definition.Id == "flex") is { } flex) combat.TryPlayCard(flex);
+        if (hand.FirstOrDefault(c => c.Definition.Id == "bash") is { } bash)
+        {
+            combat.TryPlayCard(bash, combat.Enemies.FirstOrDefault());
+        }
     }
 
     private static void SeedReward()
@@ -189,10 +240,39 @@ public partial class ScreenShot : Node
 
     private static void SeedMap()
     {
-        RunState.MapNodes = MapGenerator.Generate(new Random(7));
+        RunState.MapNodes = MapGenerator.Generate(new Random(7), RunState.CurrentAct);
         var start = RunState.MapNodes.First(n => n.Floor == 0);
         RunState.CurrentNodeId = start.Id;
         RunState.VisitedNodeIds = new HashSet<string> { start.Id };
+    }
+
+    // Deep into a run rather than the start of one: a later act, and the
+    // HP/max-HP and gold a run that had already cleared the acts before it
+    // would plausibly have (RunState.AdvanceAct grants +8 max HP per act).
+    private static void SeedActProgress(int actIndex)
+    {
+        RunState.ActIndex = actIndex;
+        RunState.PlayerMaxHp = 50 + 8 * actIndex;
+        RunState.PlayerCurrentHp = RunState.PlayerMaxHp - 19;
+        RunState.Gold = 180 + 66 * actIndex;
+    }
+
+    private static void SeedActMap(int actIndex)
+    {
+        SeedActProgress(actIndex);
+        RunState.MapNodes = MapGenerator.Generate(new Random(7), RunState.CurrentAct);
+        var start = RunState.MapNodes.First(n => n.Floor == 0);
+        RunState.CurrentNodeId = start.Id;
+        RunState.VisitedNodeIds = new HashSet<string> { start.Id };
+    }
+
+    private static void SeedActBossCombat(int actIndex)
+    {
+        SeedActProgress(actIndex);
+        CombatContext.EnemyDefinitionIds = new List<string> { RunState.CurrentAct.BossIds[0] };
+        CombatContext.IsElite = false;
+        CombatContext.IsBoss = true;
+        CombatContext.GoldReward = RunState.CurrentAct.BossGold;
     }
 
     private static void SeedRest() => RunState.PlayerCurrentHp = 21;

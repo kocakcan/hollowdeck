@@ -74,13 +74,14 @@ public partial class RestScreen : Control
             }
             var before = new Label
             {
-                Text = EffectDescriptionFormatter.Describe(card.Effects),
+                Text = EffectDescriptionFormatter.Describe(card.Effects, new DescribeContext(TargetType: card.Target)),
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
             var after = new Label
             {
-                Text = $"Becomes {upgraded.Name}: {EffectDescriptionFormatter.Describe(upgraded.Effects)}",
+                Text = $"Becomes {upgraded.Name}: " +
+                       EffectDescriptionFormatter.Describe(upgraded.Effects, new DescribeContext(TargetType: upgraded.Target)),
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 Modulate = new Color(0.65f, 1f, 0.65f),

@@ -61,7 +61,8 @@ public partial class ShopScreen : Control
         // All potions unlocked too - same reasoning as cards above.
         foreach (var potion in Sample(PotionDatabase.All.ToList(), 2, rng))
         {
-            AddOfferRow($"{potion.Name} (potion) - {PotionPrice}g", EffectDescriptionFormatter.Describe(potion.Effects),
+            AddOfferRow($"{potion.Name} (potion) - {PotionPrice}g",
+                EffectDescriptionFormatter.Describe(potion.Effects, new DescribeContext(TargetType: potion.Target)),
                 PotionPrice, () =>
             {
                 if (RunState.Potions.Count >= RunState.MaxPotionSlots) return false;

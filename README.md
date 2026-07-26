@@ -8,8 +8,9 @@ networking, desktop only (Windows/Mac/Linux).
 ## Status
 
 The core loop is playable end-to-end — new run, map, combat, events, shop, rest, treasure,
-rewards, boss, run-end scoring, unlocks, and mid-run save/resume. Current content is one act:
-**30 cards, 22 relics, 12 potions, 5 enemies, 5 events**. See [ROADMAP.md](ROADMAP.md) for
+rewards, bosses, run-end scoring, unlocks, and mid-run save/resume. Current content is three
+acts: **30 cards, 22 relics, 12 potions, 24 enemies (6 of them bosses), 5 events**. Each act has
+its own enemy pools and a two-boss pool the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
 what's still open.
 
 ## Stack
@@ -48,10 +49,10 @@ scripts/
   data/       Definition classes and the JSON databases that load them, EffectSpec
   ui/         Screen controllers, CardView, EnemyView, theming, layout helpers
   audio/      AudioSynth / AudioCues / AudioMusic — everything is synthesized at runtime
-  debug/      13 smoke-test scenes + the screenshot harness
+  debug/      14 smoke-test scenes + the screenshot harness
 scenes/       11 screens + reusable CardView/EnemyView/PotionView/FloatingText
   debug/      smoke-test and screenshot scenes
-data/         cards / relics / potions / enemies / events — all JSON, the content layer
+data/         acts / cards / relics / potions / enemies / events — all JSON, the content layer
 assets/       sprites, icons, fonts, backgrounds, themes (see CREDITS.md for licensing)
 tools/        run-smoke-tests.sh
 ```
@@ -81,7 +82,13 @@ never mid-combat). Both store instance IDs referencing definitions, never embedd
 so balance tweaks don't invalidate existing saves.
 
 `RngStreams` splits randomness into four seeded streams derived from the run seed — `Combat`,
-`EnemyAI`, `Shop`, `Map` — so drawing an extra card can't shift what the shop stocks.
+`EnemyAI`, `Shop`, `Map` — so drawing an extra card can't shift what the shop stocks. The `Map`
+stream also picks which of an act's bosses a run gets, so that's reproducible from the seed too.
+
+A run is three acts (`data/acts/acts.json`). Each act owns its floor count, encounter pools, boss
+pool, backdrops and gold rewards; clearing a non-final boss calls `RunState.AdvanceAct`, which
+regenerates the map for the next act and carries the deck, relics, gold and (raised) HP across.
+Only the final act's boss ends the run.
 
 [CLAUDE.md](CLAUDE.md) has the full version, including the conventions to follow when changing
 any of this.
@@ -117,6 +124,13 @@ weighted, or phase-threshold). **An event** (`data/events/events.json`) is text 
 each naming one of `EventOutcomeRegistry`'s eight outcomes (`gain_gold`, `lose_gold`, `heal`,
 `lose_hp`, `gain_random_card`, `gain_relic`, `lose_relic`, `none`).
 
+**An act** (`data/acts/acts.json`) is a chapter of a run, in play order: `floorCount`, the
+`normalEncounters` / `eliteEncounters` pools (each entry is one group, so `["slime","slime"]` is a
+single two-slime fight), a `bossIds` pool the run seed picks one from, `mapBackground` /
+`combatBackground` tiles with hex tints, the gold a fight pays, and the max-HP bonus plus heal
+percentage granted for clearing it. Adding a fourth act is a row here plus the enemies it names —
+`MapGenerator` reads all of it and `RunState.AdvanceAct` walks the list, so no code changes.
+
 **A relic** (`data/relics/relics.json`) is data-only when it fires a single effect on
 `OnCombatStart` or `OnTurnStart` — use `"behaviorId": "simple_hook_effect"` with a `hook` and an
 `effect`. Anything else needs a `RelicBehavior` subclass in `scripts/relics/` overriding one of
@@ -126,7 +140,7 @@ the seven hooks (extending `SimpleHookEffectRelic` to the other five hooks is on
 
 There's no test framework. Each `scenes/debug/*SmokeTest.tscn` runs assertions in `_Ready`,
 prints `PASS`/`FAIL` per check and a `<Name>: N passed, M failed` summary, then exits nonzero if
-anything failed. 13 suites, 261 checks:
+anything failed. 14 suites, 332 checks:
 
 ```bash
 tools/run-smoke-tests.sh                 # all of them; builds first, nonzero exit on any failure

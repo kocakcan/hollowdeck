@@ -154,16 +154,16 @@ public partial class CardView : Panel
 
         AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(def.Type, def.Rarity, hovered: false, CardUpgrade.IsUpgraded(def)));
 
-        // Live player context (Strength/Weak) so the shown damage number is
-        // always what would actually land, not stale hand-authored prose.
-        string plain = EffectDescriptionFormatter.Describe(def.Effects, CombatManager.Instance?.Player);
-        SetDescriptionText(plain);
+        // A reused view (see CombatScreen's _cardViews dict) must not inherit
+        // whatever enemy the card it *used* to show was being dragged onto.
+        _liveTarget = null;
+        var described = RefreshDescription();
 
         // Recomputed (not appended to) each call - a card view is reused in
-        // place across refreshes (see CombatScreen's _cardViews dict), so a
-        // stale tooltip from whatever this view used to show must go too.
+        // place across refreshes, so a stale tooltip from whatever this view
+        // used to show must go too.
         HideKeywordTooltip();
-        _activeKeywords = KeywordPattern.Matches(plain)
+        _activeKeywords = KeywordPattern.Matches(described.Text)
             .Select(m => m.Value)
             .Distinct()
             .Select(k => KeywordHighlights.All.First(h => h.Keyword == k))
@@ -171,8 +171,59 @@ public partial class CardView : Panel
             .ToList();
     }
 
-    private void SetDescriptionText(string plain)
+    // The enemy this card would currently hit, when that's knowable: the one
+    // being dragged/arrow-key-aimed at for a SingleEnemy card. AllEnemies
+    // cards don't need it - they hit everyone, so BuildDescribeContext reads
+    // the live enemy list directly.
+    private EnemyCombatant? _liveTarget;
+
+    // Re-renders the description for whichever enemy is being targeted right
+    // now, so dragging onto a Vulnerable enemy shows the damage that will
+    // actually land instead of the generic "(~N vs Vulnerable)" hint. Only
+    // the text is rebuilt, not the keyword tooltip panel: the panel can be
+    // open mid-drag and rebuilding it every time the drag crosses an enemy
+    // would flicker it. It may therefore still list Vulnerable for a beat
+    // after the hint text it came from was replaced by a real number.
+    public void RefreshDescriptionForTarget(EnemyCombatant? target)
     {
+        if (CardInstance is null || _descriptionLabel is null) return;
+        if (ReferenceEquals(_liveTarget, target)) return;
+        _liveTarget = target;
+        RefreshDescription();
+    }
+
+    private DescribedEffects RefreshDescription()
+    {
+        var described = EffectDescriptionFormatter.DescribeDetailed(
+            CardInstance!.Definition.Effects, BuildDescribeContext());
+        SetDescriptionText(described);
+        return described;
+    }
+
+    // Live player context (Strength/Weak) so the shown damage number is
+    // always what would actually land, plus the card's own target type (so
+    // an AllEnemies card says so) and who it would hit (so Vulnerable is
+    // resolved for real). Only an Interactive card is in a combat where
+    // "who would this hit" means anything - a shop/reward/deck-view card
+    // shows base numbers, same reasoning as the affordability tint above.
+    private DescribeContext BuildDescribeContext()
+    {
+        var def = CardInstance!.Definition;
+        var combat = CombatManager.Instance;
+        if (!Interactive || combat is null) return new DescribeContext(TargetType: def.Target);
+
+        IReadOnlyList<Combatant>? targets = def.Target switch
+        {
+            CardTargetType.AllEnemies => combat.Enemies.Cast<Combatant>().ToList(),
+            CardTargetType.SingleEnemy when _liveTarget is not null => new List<Combatant> { _liveTarget },
+            _ => null,
+        };
+        return new DescribeContext(combat.Player, def.Target, targets);
+    }
+
+    private void SetDescriptionText(DescribedEffects described)
+    {
+        string plain = described.Text;
         var font = _descriptionLabel.GetThemeFont("normal_font") ?? ThemeDB.FallbackFont;
         int fontSize = DescriptionFontSizes[^1];
         string fitted = plain;
@@ -184,9 +235,17 @@ public partial class CardView : Panel
             fits = true;
             break;
         }
-        if (!fits) fitted = TruncateToFit(plain, font, fontSize);
+        // A truncated string has had characters cut out of it, so the number
+        // positions the modifier highlight would key off may no longer be
+        // there - fall back to keyword-only highlighting rather than risk
+        // tinting the wrong digits.
+        if (!fits)
+        {
+            fitted = TruncateToFit(plain, font, fontSize);
+            described = new DescribedEffects(fitted, new List<int>(), new List<int>());
+        }
 
-        _descriptionLabel.Text = $"[center][font_size={fontSize}]{HighlightKeywords(fitted)}[/font_size][/center]";
+        _descriptionLabel.Text = $"[center][font_size={fontSize}]{HighlightKeywords(fitted, described)}[/font_size][/center]";
     }
 
     private static string TruncateToFit(string text, Font font, int fontSize)
@@ -214,12 +273,35 @@ public partial class CardView : Panel
     private static readonly Regex KeywordPattern = new(
         string.Join("|", KeywordHighlights.All.Select(k => Regex.Escape(k.Keyword))));
 
-    private static string HighlightKeywords(string plain)
+    // Modified damage numbers (Strength/Weak on the player, Vulnerable on the
+    // enemy being targeted) are tinted so it's visible *that* the number
+    // moved, not just what it moved to - the number alone gives the player no
+    // way to tell 8 from a buffed 6. Folded into the same single Regex pass
+    // as the keywords above rather than a second string.Replace over its
+    // output, for the same no-re-scanning reason.
+    //
+    // The numbers come from EffectDescriptionFormatter (which did the math);
+    // this only matches them as whole words. Known cosmetic limit: if a card
+    // prints the same digits in an unmodified position too ("Deal 8 damage.
+    // Gain 8 Block." with 6 damage buffed to 8), both get tinted.
+    private static string HighlightKeywords(string plain, DescribedEffects described)
     {
-        return KeywordPattern.Replace(plain, match =>
+        var numbers = described.Buffed.Concat(described.Weakened).Distinct().ToList();
+        var pattern = numbers.Count == 0
+            ? KeywordPattern
+            : new Regex($"{KeywordPattern}|{string.Join("|", numbers.Select(n => $@"\b{n}\b"))}");
+
+        return pattern.Replace(plain, match =>
         {
-            var (keyword, color, _) = KeywordHighlights.All.First(k => k.Keyword == match.Value);
-            return $"[color=#{color.ToHtml(false)}]{keyword}[/color]";
+            var keyword = KeywordHighlights.All.FirstOrDefault(k => k.Keyword == match.Value);
+            if (keyword.Keyword is not null)
+            {
+                return $"[color=#{keyword.Color.ToHtml(false)}]{keyword.Keyword}[/color]";
+            }
+
+            int value = int.Parse(match.Value);
+            var color = described.Buffed.Contains(value) ? UiTheme.Palette.StatusBuff : UiTheme.Palette.StatusDebuff;
+            return $"[color=#{color.ToHtml(false)}]{match.Value}[/color]";
         });
     }
 
@@ -472,12 +554,18 @@ public partial class CardView : Panel
         if (GodotObject.IsInstanceValid(_targetLockedView)) _targetLockedView!.SetTargetLocked(false);
         underMouse?.SetTargetLocked(true);
         _targetLockedView = underMouse;
+        // The glow says *which* enemy is locked; this says what the card will
+        // actually do to it (their Vulnerable is now a known fact, not a
+        // hypothetical). Same information EnemyView's intent number has always
+        // shown from the enemy's side.
+        RefreshDescriptionForTarget(underMouse?.Combatant);
     }
 
     private void ClearTargetHighlight()
     {
         if (GodotObject.IsInstanceValid(_targetLockedView)) _targetLockedView!.SetTargetLocked(false);
         _targetLockedView = null;
+        RefreshDescriptionForTarget(null);
     }
 
     public override void _ExitTree()

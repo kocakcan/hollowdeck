@@ -16,6 +16,7 @@ public partial class ArtScreenshot : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
@@ -56,7 +57,7 @@ public partial class ArtScreenshot : Node
         RemoveChild(combat);
         combat.QueueFree();
 
-        RunState.MapNodes = Hollowdeck.Map.MapGenerator.Generate(new System.Random(7));
+        RunState.MapNodes = Hollowdeck.Map.MapGenerator.Generate(new System.Random(7), ActDatabase.At(0));
         // A real (not empty) CurrentNodeId so Phase 4's current-node ring
         // and "choosable path" highlighting actually show up in the shot -
         // an empty CurrentNodeId (the pre-run state) never draws a ring.

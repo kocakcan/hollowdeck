@@ -94,7 +94,10 @@ public partial class CombatScreen : Control
 
     public override void _Ready()
     {
-        ScreenBackground.AttachCombat(this, "crypt", new Color(0.6f, 0.58f, 0.62f));
+        // Per-act backdrop, so a fight in the Ember Reach doesn't look like the
+        // same room as a fight in the Sunken Ward.
+        var act = RunState.CurrentAct;
+        ScreenBackground.AttachCombat(this, act.CombatBackground, Color.FromString(act.CombatTint, Colors.White));
         DeckViewButtons.Attach(this, includeCombatPiles: true);
         _combat = GetNode<CombatManager>("CombatManager");
         _enemyRow = GetNode<HBoxContainer>("EnemyRow");
@@ -523,13 +526,28 @@ public partial class CombatScreen : Control
 
         int currentIndex = _keyboardTargetEnemy is null ? -1 : enemies.IndexOf(_keyboardTargetEnemy);
         int nextIndex = currentIndex < 0 ? 0 : Mathf.PosMod(currentIndex + direction, enemies.Count);
+        SetKeyboardTarget(enemies[nextIndex]);
+    }
 
-        if (currentIndex >= 0 && _enemyViews.TryGetValue(enemies[currentIndex], out var previousView))
+    // The single place _keyboardTargetEnemy changes: moves the target-lock
+    // glow and re-renders the armed card's description for the newly aimed-at
+    // enemy, so arrow-key targeting reads exactly like a mouse drag (which
+    // does both in CardView.UpdateTargetHighlight). Keeping it in one method
+    // is what stops the two input paths from drifting apart, same reasoning
+    // as SetHighlighted covering hover and keyboard selection with one call.
+    private void SetKeyboardTarget(EnemyCombatant? enemy)
+    {
+        if (_keyboardTargetEnemy is { } previous && _enemyViews.TryGetValue(previous, out var previousView))
         {
             previousView.SetTargetLocked(false);
         }
-        _keyboardTargetEnemy = enemies[nextIndex];
-        if (_enemyViews.TryGetValue(_keyboardTargetEnemy, out var view)) view.SetTargetLocked(true);
+        _keyboardTargetEnemy = enemy;
+        if (enemy is not null && _enemyViews.TryGetValue(enemy, out var view)) view.SetTargetLocked(true);
+
+        if (_armedCard is { } armed && _cardViews.TryGetValue(armed, out var cardView) && IsInstanceValid(cardView))
+        {
+            cardView.RefreshDescriptionForTarget(enemy);
+        }
     }
 
     private void OnKeyboardCycle(int direction)
@@ -569,8 +587,7 @@ public partial class CombatScreen : Control
         {
             if (_combat.Enemies.Count == 0) return;
             _armedCard = card;
-            _keyboardTargetEnemy = _combat.Enemies[0];
-            if (_enemyViews.TryGetValue(_keyboardTargetEnemy, out var view)) view.SetTargetLocked(true);
+            SetKeyboardTarget(_combat.Enemies[0]);
             return;
         }
 
@@ -599,12 +616,10 @@ public partial class CombatScreen : Control
     private void ClearArmedTarget()
     {
         if (_armedCard is null) return;
-        if (_keyboardTargetEnemy is { } enemy && _enemyViews.TryGetValue(enemy, out var view))
-        {
-            view.SetTargetLocked(false);
-        }
+        // Before clearing _armedCard, so the card's description reverts from
+        // "what this does to that enemy" back to its untargeted numbers.
+        SetKeyboardTarget(null);
         _armedCard = null;
-        _keyboardTargetEnemy = null;
     }
 
     private void Refresh()
@@ -1085,16 +1100,24 @@ public partial class CombatScreen : Control
             RunState.PlayerMaxHp = _combat.Player.MaxHp;
             RunState.Gold += CombatContext.GoldReward;
 
-            if (CombatContext.IsBoss)
+            // Only the *final* act's boss ends the run. Any earlier boss
+            // advances to the next act and then hands out a boss reward -
+            // AdvanceAct regenerates the map first, so RewardScreen's exit to
+            // Map lands on the new act with no extra screen or flag needed.
+            if (CombatContext.IsBoss && RunState.IsFinalAct)
             {
                 RunEndContext.Outcome = RunEndOutcome.Win;
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Victory);
             }
             else
             {
+                if (CombatContext.IsBoss) RunState.AdvanceAct();
                 RewardContext.CardChoices = SampleCardChoices(3);
                 RewardContext.GoldAwarded = CombatContext.GoldReward;
-                RewardContext.GuaranteedRelic = CombatContext.IsElite ? GrantEliteRelic() : null;
+                // A boss is worth a guaranteed relic too, not just elites.
+                RewardContext.GuaranteedRelic = CombatContext.IsElite || CombatContext.IsBoss
+                    ? GrantRewardRelic()
+                    : null;
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Reward);
             }
         }
@@ -1105,10 +1128,10 @@ public partial class CombatScreen : Control
         }
     }
 
-    // Elite fights guarantee a relic on top of the usual card/gold reward -
-    // same unowned+unlock-filtered pool ShopScreen/TreasureScreen already
-    // draw from, sampled from the dedicated Shop RNG stream.
-    private static RelicDefinition? GrantEliteRelic()
+    // Elite and boss fights guarantee a relic on top of the usual card/gold
+    // reward - same unowned+unlock-filtered pool ShopScreen/TreasureScreen
+    // already draw from, sampled from the dedicated Shop RNG stream.
+    private static RelicDefinition? GrantRewardRelic()
     {
         var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
         var available = RelicDatabase.All
