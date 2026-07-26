@@ -6,9 +6,9 @@ namespace Hollowdeck.Map;
 
 // Builds a small layered DAG (Slay-the-Spire-style branching path), seeded
 // from RngStreams.Map so map shape is reproducible per run seed like combat
-// shuffles/enemy AI already are (hollowdeck.md risk #2). Kept deliberately
-// short (FloorCount = 8) for a single act - see the Phase 4 plan for why
-// full multi-act sprawl isn't in scope yet.
+// shuffles/enemy AI already are (CLAUDE.md risk #2). Kept deliberately
+// short (FloorCount = 8) for a single act - multi-act sprawl is content
+// breadth work, tracked in ROADMAP.md, not a generator limitation.
 public static class MapGenerator
 {
     private const int FloorCount = 8;
