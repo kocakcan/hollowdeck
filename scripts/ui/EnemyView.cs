@@ -23,15 +23,18 @@ public partial class EnemyView : Button
 
     private static StyleBoxFlat BuildTargetLockStyle()
     {
+        // Was a rounded box with a 10px gold bloom, on a slate-blue face left
+        // over from the deleted generic theme - the bloom and the radius are
+        // both illegal in pixels (ART_SPEC section 6), and the slate blue was
+        // off-ramp entirely. Now a hard heavy gold bezel on a warm face: the
+        // lock still reads instantly because 4px of G5 against the ramp's
+        // dark neutrals is the highest-contrast pair in the palette.
         var style = new StyleBoxFlat
         {
-            BgColor = new Color(0.216f, 0.243f, 0.325f, 1f),
-            BorderColor = new Color(1f, 0.85f, 0.3f, 1f),
+            BgColor = PixelSpec.Ramp.N3,
+            BorderColor = PixelSpec.Ramp.G5,
         };
-        style.SetBorderWidthAll(4);
-        style.SetCornerRadiusAll(6);
-        style.ShadowColor = new Color(1f, 0.85f, 0.3f, 0.65f);
-        style.ShadowSize = 10;
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
         return style;
     }
 
@@ -64,6 +67,20 @@ public partial class EnemyView : Button
         // This game has no keyboard-focus/Tab navigation design anywhere
         // else, so there's nothing lost by opting out of it here.
         FocusMode = FocusModeEnum.None;
+
+        // Enemies stand free on the backdrop rather than inside a panel. This
+        // node is a Button (for click-to-target), so it was picking up the
+        // theme's Button stylebox and drawing a filled, bordered box around
+        // every enemy - which is not how the genre composes a fight, and read
+        // especially badly once the box was a slate-blue rectangle beside
+        // bronze bezels. Only the target-lock state paints a background now;
+        // at rest all four states are empty and the sprite sits on the
+        // ground-plane gradient AttachCombat already draws.
+        AddThemeStyleboxOverride("normal", new StyleBoxEmpty());
+        AddThemeStyleboxOverride("hover", new StyleBoxEmpty());
+        AddThemeStyleboxOverride("pressed", new StyleBoxEmpty());
+        AddThemeStyleboxOverride("disabled", new StyleBoxEmpty());
+
         _sprite = GetNode<TextureRect>("VBox/Sprite");
         _shadow = GetNode<TextureRect>("VBox/Sprite/Shadow");
         _shadow.Texture = _shadowTexture ??= BuildShadowTexture();
@@ -210,11 +227,18 @@ public partial class EnemyView : Button
     }
 
     // Toggled continuously by CardView while dragging a SingleEnemy card.
-    public void SetTargetLocked(bool locked)
-    {
-        if (locked) AddThemeStyleboxOverride("normal", TargetLockStyle);
-        else RemoveThemeStyleboxOverride("normal");
-    }
+    //
+    // Unlocking restores the empty box rather than calling
+    // RemoveThemeStyleboxOverride: _Ready installs a StyleBoxEmpty so enemies
+    // stand free on the backdrop, and removing the override would fall back
+    // to the theme's Button stylebox and paint the panel this deliberately
+    // got rid of.
+    public void SetTargetLocked(bool locked) =>
+        AddThemeStyleboxOverride("normal", locked ? TargetLockStyle : new StyleBoxEmpty());
+
+    // For CombatTargetingSmokeTest: the lock state is now a question of which
+    // stylebox is installed, not whether one is, since there is always one.
+    public bool IsTargetLocked => GetThemeStylebox("normal") is not StyleBoxEmpty;
 
     public void Refresh()
     {

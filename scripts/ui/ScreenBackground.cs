@@ -34,6 +34,10 @@ public static class ScreenBackground
         var vignette = new TextureRect
         {
             Texture = BuildVignette(0.5f),
+            // Explicitly Linear: the project default is now Nearest for pixel
+            // art, but this is a smooth procedural gradient, not art, and
+            // Nearest bands it into visible steps.
+            TextureFilter = CanvasItem.TextureFilterEnum.Linear,
             MouseFilter = Control.MouseFilterEnum.Ignore,
             ShowBehindParent = true,
         };
@@ -72,6 +76,7 @@ public static class ScreenBackground
             StretchMode = TextureRect.StretchModeEnum.Tile,
             TextureRepeat = CanvasItem.TextureRepeatEnum.Enabled,
             Modulate = new Color(0.85f, 0.85f, 0.9f, 0.16f),
+            TextureFilter = CanvasItem.TextureFilterEnum.Linear, // smooth noise, see above
             MouseFilter = Control.MouseFilterEnum.Ignore,
             ShowBehindParent = true,
         };
@@ -84,12 +89,14 @@ public static class ScreenBackground
         {
             Texture = BuildGroundPlane(),
             StretchMode = TextureRect.StretchModeEnum.Scale,
+            TextureFilter = CanvasItem.TextureFilterEnum.Linear, // smooth gradient, see above
             MouseFilter = Control.MouseFilterEnum.Ignore,
             ShowBehindParent = true,
         };
         var vignette = new TextureRect
         {
             Texture = BuildVignette(0.68f),
+            TextureFilter = CanvasItem.TextureFilterEnum.Linear, // smooth gradient, see above
             MouseFilter = Control.MouseFilterEnum.Ignore,
             ShowBehindParent = true,
         };
@@ -171,6 +178,7 @@ public static class ScreenBackground
             ScaleAmountMax = 1.1f,
             Color = new Color(1f, 1f, 1f, 0.22f),
             Gravity = Vector2.Zero,
+            TextureFilter = CanvasItem.TextureFilterEnum.Linear, // smooth gradient, see above
         };
         screen.AddChild(particles);
         screen.MoveChild(particles, 3);

@@ -42,4 +42,14 @@ theme/custom="res://assets/theme/hollowdeck_theme.tres"
 [rendering]
 
 rendering_device/driver.windows="d3d12"
-environment/defaults/default_clear_color=Color(0.07, 0.075, 0.095, 1)
+; Warm near-black (PixelSpec.Ramp.N0). Was a cool slate 0.07,0.075,0.095 -
+; the last survivor of the deleted generic blue theme, visible as a cold edge
+; wherever a screen didn't fill the window.
+environment/defaults/default_clear_color=Color(0.027451, 0.023529, 0.039216, 1)
+; Nearest project-wide (docs/ART_SPEC.md section 3). The .tscn sprites set
+; texture_filter=1 individually, but every icon built in code - card art,
+; relics, potions, statuses, intents, map nodes - inherited the Linear default
+; and was being bilinearly blurred. Setting the default is what actually
+; covers them; the two smooth procedural gradients in ScreenBackground opt
+; back to Linear explicitly.
+textures/canvas_textures/default_texture_filter=0

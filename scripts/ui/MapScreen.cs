@@ -199,9 +199,11 @@ public partial class MapScreen : Control
             Size = new Vector2(ringSize, ringSize),
             MouseFilter = MouseFilterEnum.Ignore,
         };
+        // Square, not a 999-radius circle: a radius-rounded box is an
+        // anti-aliased curve (ART_SPEC section 6). The ring still reads as
+        // "you are here" because it is the only pulsing element on the map.
         var style = new StyleBoxFlat { BgColor = Colors.Transparent, BorderColor = UiTheme.Palette.AccentGoldBright };
         style.SetBorderWidthAll(3);
-        style.SetCornerRadiusAll(999);
         ring.AddThemeStyleboxOverride("panel", style);
         _nodeButtons.AddChild(ring);
         _nodeButtons.MoveChild(ring, 0);

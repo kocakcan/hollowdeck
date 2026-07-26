@@ -9,7 +9,8 @@ namespace Hollowdeck.UI;
 
 public partial class CombatScreen : Control
 {
-    private const float CardWidth = 224f;
+    private const float CardWidth = 176f;
+    private const float CardHeight = 240f;
     // Fan layout: cards overlap by up to ~55% of their width (shrinking
     // further if the hand is too wide to fit), rotate up to MaxFanRotationDeg
     // at the outer edges, and arc so the outer cards sit higher than the
@@ -18,9 +19,20 @@ public partial class CombatScreen : Control
     private const float FanArcHeight = 36f;
     // HandArea's own rect only needs to be wide enough for the fan-width
     // math below; its top edge sits well below where cards actually rest -
-    // this pulls the resting fan up so cards (308 tall) stay mostly inside
-    // the 648-tall viewport instead of hanging off the bottom edge.
-    private const float FanBaseY = -140f;
+    // this pulls the resting fan up so cards stay inside the 648-tall
+    // viewport instead of hanging off the bottom edge.
+    //
+    // -72 (was -140) is what stops the hand covering the enemies. HandArea's
+    // top is y=460, so a card rests at 460-72=388 and its top edge clears
+    // EnemyRow's bottom (y=330) by 58px. At the old 224x308 size the card top
+    // landed at 320 - *above* the enemy row - which is why a five-card hand
+    // occluded nearly all of the act-3 boss. The arc lifts outer cards by up
+    // to FanArcHeight, so the true worst case is 388-36=352, still clear.
+    private const float FanBaseY = -72f;
+    // The highest any card's top edge may reach, asserted by
+    // HandLayoutSmokeTest so this cannot silently regress.
+    public const float EnemyRowBottomY = 330f;
+    public static float HighestCardTopY => 460f + FanBaseY - FanArcHeight;
 
     private CombatManager _combat = null!;
     private HBoxContainer _enemyRow = null!;
@@ -140,15 +152,19 @@ public partial class CombatScreen : Control
         GetNode<PanelContainer>("PotionPanel").AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
         _playerHpLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _energyLabel.ThemeTypeVariation = "CombatDisplayLabel";
+        // The energy number sits *on* the orb now rather than under it, and
+        // CombatDisplayLabel's cream-on-dark default is low contrast against
+        // the gem's lit B4/B5 facets. Flip it: near-black glyphs with a pale
+        // outline, which is the highest-contrast pair available on a light
+        // blue field.
+        _energyLabel.AddThemeColorOverride("font_color", PixelSpec.Ramp.N0);
+        _energyLabel.AddThemeColorOverride("font_outline_color", PixelSpec.Ramp.B5);
         _turnBannerLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _turnBannerLabel.AddThemeFontSizeOverride("font_size", 32);
         _turnBannerPanel.AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
         _turnBannerRestPos = _turnBannerPanel.Position;
 
-        _endTurnButton.AddThemeStyleboxOverride("normal", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_normal.png"));
-        _endTurnButton.AddThemeStyleboxOverride("hover", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_hover.png"));
-        _endTurnButton.AddThemeStyleboxOverride("pressed", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_pressed.png"));
-        _endTurnButton.AddThemeStyleboxOverride("disabled", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_normal.png"));
+        ChromeStyles.ApplyEmphasisButtonStyle(_endTurnButton);
 
         // FocusModeEnum.None on both: Godot's automatic arrow-key focus
         // navigation (any Button is focusable by default) otherwise fights
@@ -666,55 +682,87 @@ public partial class CombatScreen : Control
         bool pulse = _pulseEnergyPipsOnNextRefresh;
         _pulseEnergyPipsOnNextRefresh = false;
 
+        // One large orb, not `max` small pips. The pip row encoded the same
+        // number twice - once as pip count, once in the "1/3" label under it -
+        // while reading as neither at a glance. A single orb carrying the
+        // number is the genre's standard and scales to any max energy without
+        // the row re-flowing.
         _energyOrbTexture ??= BuildEnergyOrbTexture();
-        for (int i = 0; i < max; i++)
+        const int orbScale = 5; // 16px gem -> 80px, integer per ART_SPEC section 2
+        var orb = new TextureRect
         {
-            bool filled = i < current;
-            var pip = new TextureRect
-            {
-                Texture = _energyOrbTexture,
-                CustomMinimumSize = new Vector2(24, 24),
-                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-                Modulate = filled ? Colors.White : new Color(1, 1, 1, 0.25f),
-                MouseFilter = MouseFilterEnum.Ignore,
-                PivotOffset = new Vector2(12, 12),
-            };
-            _energyRow.AddChild(pip);
+            Texture = _energyOrbTexture,
+            CustomMinimumSize = PixelSpec.SizeFor(16, orbScale),
+            ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+            StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            TextureFilter = TextureFilterEnum.Nearest,
+            // Dim only when spent, so "no energy left" reads without having
+            // to parse the number.
+            Modulate = current > 0 ? Colors.White : new Color(1, 1, 1, 0.35f),
+            MouseFilter = MouseFilterEnum.Ignore,
+            PivotOffset = PixelSpec.SizeFor(16, orbScale) / 2f,
+        };
+        _energyRow.AddChild(orb);
 
-            if (pulse && filled)
-            {
-                pip.Scale = Vector2.Zero;
-                var tween = pip.CreateTween();
-                tween.TweenInterval(i * 0.05);
-                tween.TweenProperty(pip, "scale", Vector2.One, 0.2).SetTrans(Tween.TransitionType.Back);
-            }
+        if (pulse && current > 0)
+        {
+            orb.Scale = Vector2.Zero;
+            orb.CreateTween()
+                .TweenProperty(orb, "scale", Vector2.One, 0.22)
+                .SetTrans(Tween.TransitionType.Back);
         }
     }
 
     // Procedural radial glow (no external asset needed) standing in for the
     // "glowing blue crystal" energy pips until Phase 8's chrome pass.
+    // A faceted 16x16 pixel gem, drawn pixel by pixel and rendered at 4x.
+    //
+    // Replaces a 48x48 smooth radial GradientTexture2D. That was a soft
+    // anti-aliased blob - fine beside a serif UI, wrong beside 32x32 sprites
+    // and bitmap type (docs/ART_SPEC.md sections 3 and 5). Drawn rather than
+    // sourced because it is the one HUD element with no icon behind it, and
+    // it doubles as a small preview of what tools/artgen will do in bulk.
+    //
+    // Shape is an octagon, not a circle and not a diamond. A pixel circle at
+    // 16px needs hand-tuned edges to avoid looking lumpy. A diamond is exact
+    // at any radius but has very little interior: the energy number sits *on*
+    // the orb, and at a diamond's waist "1/3" overflowed the shape on both
+    // sides. An octagon is equally exact and leaves roughly twice the usable
+    // area at the same footprint.
+    //
+    // Lighting is a single diagonal ramp - upper-left facets catch the light,
+    // lower-right fall into shadow.
     private static Texture2D BuildEnergyOrbTexture()
     {
-        var gradient = new Gradient
+        const int size = 16;
+        var image = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
+        image.Fill(new Color(0f, 0f, 0f, 0f));
+
+        const float centre = (size - 1) / 2f;
+        for (int y = 0; y < size; y++)
         {
-            Offsets = new float[] { 0f, 0.6f, 1f },
-            Colors = new Color[]
+            for (int x = 0; x < size; x++)
             {
-                new(0.75f, 0.9f, 1f, 1f),
-                new(0.25f, 0.55f, 0.95f, 1f),
-                new(0.1f, 0.25f, 0.6f, 0f),
-            },
-        };
-        return new GradientTexture2D
-        {
-            Gradient = gradient,
-            Fill = GradientTexture2D.FillEnum.Radial,
-            FillFrom = new Vector2(0.5f, 0.5f),
-            FillTo = new Vector2(1f, 0.5f),
-            Width = 48,
-            Height = 48,
-        };
+                float dx = x - centre;
+                float dy = y - centre;
+                float square = Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy));
+                float corner = Mathf.Abs(dx) + Mathf.Abs(dy);
+                // Octagon = square with the corners cut off.
+                if (square > 7.5f || corner > 10.5f) continue;
+
+                bool isEdge = square > 6.5f || corner > 9.5f;
+                // diagonal: negative = upper-left (lit), positive = lower-right
+                float diagonal = dx + dy;
+                var colour = isEdge ? PixelSpec.Ramp.N0
+                    : diagonal < -4.5f ? PixelSpec.Ramp.B5
+                    : diagonal < 0.5f ? PixelSpec.Ramp.B4
+                    : diagonal < 5.0f ? PixelSpec.Ramp.B3
+                    : PixelSpec.Ramp.B2;
+                image.SetPixel(x, y, colour);
+            }
+        }
+
+        return ImageTexture.CreateFromImage(image);
     }
 
     private void RefreshHand()
