@@ -16,5 +16,11 @@ obj/
 # OS cruft
 .DS_Store
 
-# Claude Code local state (personal permissions, scratch worktrees)
-.claude/
+# Claude Code local state (personal permissions, scratch worktrees) - but the
+# skills ARE committed: they document this repo's own tooling (the screenshot
+# harness and the smoke-test catalog) and have to stay versioned alongside the
+# code they describe. Note the `.claude/*` glob: git can't re-include a path
+# inside a directory that was itself excluded, so a bare `.claude/` would make
+# the negation below unreachable.
+.claude/*
+!.claude/skills/
