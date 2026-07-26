@@ -7,7 +7,7 @@ namespace Hollowdeck.Run;
 
 // Autoload singleton. Owns top-level run/screen state and drives scene
 // transitions. ScreenState documents the full intended flow from
-// hollowdeck.md; ScenePaths only maps states that have a real scene so far.
+// CLAUDE.md; ScenePaths only maps states that have a real scene so far.
 public partial class RunManager : Node
 {
     public static RunManager Instance { get; private set; } = null!;

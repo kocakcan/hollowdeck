@@ -10,7 +10,7 @@ namespace Hollowdeck.Run;
 // no curse cards, no run timer and no Heart fight, so Ascension/Curses!/
 // Speedster/Heartbreaker have nothing to read. Thresholds are scaled to
 // Hollowdeck's much smaller numbers (50 max HP, ~45g per fight, a 30-card
-// pool, 14 relics, one act) - the StS value each was scaled from is noted
+// pool, 22 relics, one act) - the StS value each was scaled from is noted
 // per-category below.
 //
 // Pauper (no rare cards) is deliberately absent: every entry in cards.json

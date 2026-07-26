@@ -7,45 +7,66 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Hollowdeck is a standalone desktop deckbuilder roguelike in the vein of Slay the Spire:
 node-based map traversal, turn-based card combat with telegraphed enemy intents, relics/potions,
 and cross-run meta-progression. Desktop-only (Windows/Mac/Linux), single-player, no networking.
-Target builder: experienced general-purpose programmer (Rust background) who is new to full game
-engines (scene editors, UI layout systems, tweening) — so the plan front-loads engine-provided UI
-and animation tooling instead of hand-rolling it.
+The builder is an experienced general-purpose programmer (Rust background) who came to this new
+to full game engines — which is why the project leans on engine-provided UI and animation tooling
+rather than hand-rolling it.
+
+See `README.md` for the developer orientation (layout, how to run, how to add content) and
+`ROADMAP.md` for what's still open.
 
 ## Stack
 
-**Godot 4.x with C#.** Scenes/nodes map directly onto the genre's screens (map, combat, shop,
-reward); `Control` nodes with anchors/containers handle card layout/hover/drag; built-in
-`Tween`/`AnimationPlayer` handle animation ("juice") without third-party libraries. GDScript is
-the documented fallback if the C# toolchain proves painful (spend ~1 day validating this in
-Phase 0 before committing).
+**Godot 4.7 with C#** (`Godot.NET.Sdk/4.7.1`, `net8.0`). The Mono/.NET build of the Godot editor
+is required. Scenes/nodes map directly onto the genre's screens (map, combat, shop, reward);
+`Control` nodes with anchors/containers handle card layout/hover/drag; built-in
+`Tween`/`AnimationPlayer` handle animation ("juice") without third-party libraries.
 
-Rejected alternatives (see `hollowdeck.md` for full reasoning): Unity C# (no real advantage over
-Godot 4 here), Rust+Bevy (`bevy_ui`/tweening immature, plus stacks ECS-learning on
-engine-learning), Rust immediate-mode canvas libs (means hand-rolling scene stack/UI/tweening —
-exactly the risk this plan avoids), TypeScript+Electron/Tauri (not an engine; state machine and
-effects still hand-built, plus packaging overhead).
+Rejected alternatives, kept here so the decision isn't relitigated: **Unity C#** — most mature 2D
+UI tooling and the most deckbuilder tutorials, but a heavier editor footprint and no real
+advantage over Godot 4 for a solo desktop project. **Rust + Bevy** — tempting for language
+continuity, but `bevy_ui` and tweening (needs `bevy_tweening`) are the weakest parts of Bevy, and
+they're exactly what this genre leans on; it also stacks learning ECS on top of learning an
+engine. **Rust + macroquad-style immediate mode** — a canvas library, not an engine, so the scene
+stack, UI layout/hit-testing, tweening and drag targeting all get hand-rolled. **TypeScript +
+Electron/Tauri** — React/Framer Motion animate cards well, but it still isn't an engine; the
+combat state machine and effect system get hand-built anyway, plus desktop packaging overhead.
+
+The explicit tradeoff: giving up Rust continuity in exchange for a scene editor, built-in UI
+layout and built-in tweening. Worth it here; would not be for a combat-only prototype.
 
 ## Architecture
 
 **Content is data, effects are code, connected by string keys.** This is the single most
-load-bearing decision. Cards/relics/enemies/potions are authored as JSON (or Godot `.tres`
-Resources); each `CardDefinition` holds a list of `EffectSpec`s (e.g.
-`{action: "deal_damage", amount: 6, ...}`) that key into a code-side `EffectRegistry` of `IEffect`
-implementations (`DealDamageEffect`, `ApplyStatusEffect`, `DrawCardsEffect`, ...). New cards are
-new data rows, not new classes — a one-class-per-card approach becomes unmaintainable at
-hundreds-of-cards scale. Reserve a small `IScriptedEffect` escape hatch for the rare card that
-doesn't decompose into existing effects.
+load-bearing decision. Cards/relics/enemies/potions/events are authored as JSON under `data/`;
+each `CardDefinition` holds a list of `EffectSpec`s (e.g. `{action: "deal_damage", amount: 6,
+scope: "Target"}`) that key into `EffectRegistry`, a dictionary of `IEffect` implementations
+(`DealDamageEffect`, `ApplyStatusEffect`, `DrawCardsEffect`, ...). New cards are new data rows,
+not new classes — a one-class-per-card approach becomes unmaintainable at hundreds-of-cards
+scale. `IScriptedEffect` exists as an escape hatch for the rare card that doesn't decompose into
+existing effects.
 
-**State machine:** `RunManager` (autoload) owns run state and drives scene transitions:
-MainMenu → RunSetup → MapScreen → {Combat, Elite, Event, Rest, Shop, Treasure} → RewardScreen →
-back to MapScreen → Victory/Defeat → MetaProgressionScreen. Meta-progression (unlocks/currency)
-lives in a separate save file/autoload (`MetaProgressionManager`) from in-run save state —
-different lifetimes and versioning needs, don't merge them.
+**Autoloads** (declared in `project.godot`, in this order — `AudioManager` must come before
+`SettingsManager` because the settings sliders address audio bus indices):
 
-**Combat loop** (`CombatManager`) must be an explicit state machine (enum + transitions), not
-loose booleans — sub-states like "awaiting target", "animation playing (input locked)", "enemy
-turn executing" are exactly where these games accumulate input-during-animation bugs if left
-implicit:
+| Autoload | Owns |
+| --- | --- |
+| `RunManager` | run state and scene transitions |
+| `AudioManager` | procedural SFX/music playback, Music/SFX bus split |
+| `MetaProgressionManager` | cross-run unlocks, persisted separately from run state |
+| `SettingsManager` | volumes, fullscreen, reduce-motion |
+
+**Screen flow:** `RunManager` drives MainMenu → MapScreen → {Combat, Elite, Event, Rest, Shop,
+Treasure} → RewardScreen → back to MapScreen → RunEnd → MetaProgressionScreen. Meta-progression
+lives in its own save file (`user://meta_progression.json`) separate from in-run save state
+(`user://run_save.json`) — different lifetimes and versioning needs, don't merge them. The meta
+save carries a schema version and a v1→v2 migration; keep deserialization tolerant of unknown
+fields.
+
+**Combat loop** (`CombatManager`) is an explicit `CombatState` enum machine — `Start`,
+`PlayerTurn`, `AwaitingTarget`, `ResolvingCard`, `EnemyTurn`, `ResolvingEnemyIntent`, `CombatEnd`
+— not loose booleans. Sub-states like "awaiting target" and "animation playing (input locked)"
+are exactly where these games accumulate input-during-animation bugs if left implicit:
+
 1. Combat start → shuffle/draw opening hand → `OnCombatStart` relic triggers → enemies pick and
    **display** their first intents.
 2. Player turn: play cards (targeting sub-state for single-target cards) → resolve `EffectSpec`s
@@ -55,56 +76,103 @@ implicit:
    intent.
 5. Repeat to victory/defeat → RewardScreen.
 
-## Build sequencing
+**RNG** is split into separate seeded streams in `RngStreams` — `Combat`, `EnemyAI`, `Shop`,
+`Map` — all derived from the run seed, so drawing an extra card can't shift what the shop stocks
+and cosmetic jitter can never desync a deterministic run.
 
-Follow this order — each phase's "Done when" is the exit criterion before moving on:
+## Current state
 
-- **Phase 0 — Skeleton.** New Godot project, verify C# support works (try GDScript too before
-  committing), stub `RunManager`/`MetaProgressionManager` autoloads, minimal scene-nav stack, git
-  repo. Done: navigate two empty screens, render one clickable card that responds to hover/drag.
-- **Phase 1 — Vertical slice.** One map, full combat turn loop, ~10 cards (Attack/Skill), 1–2
-  enemy types with simple intent patterns, HP/energy/draw/discard/exhaust piles, win/lose screens.
-  No relics/potions/meta yet. Test a **multi-enemy** fight here so targeting isn't reworked later.
-  Done: play 3 sequential fights start to finish, win or die, restart.
-- **Phase 2 — Relics & potions.** Event-bus relic triggers, ~10–15 relics across different hooks,
-  potions, Shop screen, Treasure rooms. Done: gold economy works and relics measurably change
-  outcomes.
-- **Phase 3 — Meta-progression.** Persistent save (separate from run save, tolerant
-  deserialization), unlock currency/conditions, seed logging, unlock screen. Done: run outcomes
-  change what's available in future runs, persisting across restarts.
-- **Phase 4 — Content breadth & polish.** Expand toward a capped target (~80–120 cards / one
-  class initially — not full 250+ card parity), elite fights, act bosses, branching map
-  complexity, animation/juice pass, settings.
+The originally planned phases are all built, not stubbed: the data-driven effect system, the
+`CombatManager` state machine, the branching map generator, relics/potions/gold, the
+meta-progression save, and a content-and-polish pass. Later passes added mid-run save/resume,
+Event nodes, turn pacing, a themed art/typography pass, and a fully procedural audio layer.
 
-## Genre-specific risks to keep in mind
+- 11 screens, all wired to real data: MainMenu, Map, Combat, Event, Rest, Shop, Treasure, Reward,
+  RunEnd, MetaProgression, Settings.
+- Content: 30 cards (Attack/Skill), 22 relics, 12 potions, 5 enemies, 5 events — one act.
+- Effects: `deal_damage`, `gain_block`, `apply_status`, `draw_cards`, `heal`, `gain_energy`,
+  `lose_hp`. Statuses: Vulnerable, Weak, Strength, Poison.
+- Meta-progression is a **score-driven unlock track** (`RunScore` grades a finished run; the
+  track's 14 rungs unlock 10 cards and 4 relics). An earlier shard *shop* was removed — don't
+  reintroduce shard-purchase language.
+- Audio is synthesized in-engine at runtime, no sampled assets.
 
-1. **Effect system must be composable, not hardcoded per card** — get the `EffectSpec`/
-   `EffectRegistry` pattern right in Phase 1; retrofitting after 50+ hardcoded cards is expensive.
-2. **RNG determinism** — use separate seeded streams for map generation, combat (shuffle/draw),
-   enemy AI, and cosmetic-only effects, so visual jitter never desyncs a deterministic run.
-3. **Save/run-state serialization** — save instance IDs referencing definitions, not embedded
-   definitions, so balance tweaks during dev don't break old saves. Use tolerant deserialization
-   (ignore unknown fields).
-4. **Combat sub-state explicitness** — see state machine above.
-5. **UI drag/targeting feel** — prototype in Phase 0/1, not deferred to polish; reveals
-   Control-node layering/z-index issues early.
-6. **Content scope creep** — cap Phase 4's initial target explicitly rather than chasing full
-   parity with Slay the Spire; treat more content as post-launch/ongoing.
+`ROADMAP.md` tracks what's genuinely still open (CI, packaged export, `InputMap` actions, Power
+card type, rarity in data, more enemies/statuses). Don't treat this section as a to-do list.
 
-## Critical first files (Phase 0–1)
+## Key files
 
 - `scripts/run/RunManager.cs` — autoload, run state + scene-transition orchestration
+- `scripts/run/RunState.cs`, `RunSaveManager.cs` — in-run state and its save/resume
+- `scripts/run/MetaProgressionManager.cs` + `RunScore.cs` — score-driven unlock track, meta save
+- `scripts/run/RngStreams.cs` — the four seeded RNG streams
 - `scripts/combat/CombatManager.cs` — turn loop, intent telegraphing, targeting sub-state
-- `scripts/effects/EffectRegistry.cs` + `scripts/effects/IEffect.cs` — the composable effect
-  system every card/relic/potion definition keys into
-- `data/cards/*.json` schema — establishes the data-vs-code split the whole content pipeline
-  depends on
-- `scenes/CombatScreen.tscn` — where card drag/hover/targeting feel gets prototyped first
+- `scripts/effects/EffectRegistry.cs` + `IEffect.cs` — the composable effect system every
+  card/relic/potion/enemy-move definition keys into
+- `scripts/relics/RelicBehavior.cs` — the 7 relic hooks; `SimpleHookEffectRelic.cs` is the
+  data-only path (currently `OnCombatStart`/`OnTurnStart` only)
+- `scripts/events/EventOutcomeRegistry.cs` — the 8 event outcome keys
+- `scripts/map/MapGenerator.cs` — branching node DAG
+- `data/*/*.json` — the content layer; the schema is the data-vs-code split everything depends on
+- `scenes/CombatScreen.tscn` — card drag/hover/targeting
+
+## Conventions
+
+- **Content changes belong in `data/`, not in new C# classes.** Reach for a new `IEffect` only
+  when a genuinely new mechanic is needed, and register it in `EffectRegistry`.
+- **Save instance IDs referencing definitions, never embedded definitions**, so balance tweaks
+  don't break existing saves (`CardInstance` vs `CardDefinition`). Deserialization ignores
+  unknown fields on purpose.
+- **`dotnet build` before running or testing anything** — C# is compiled ahead of time, so
+  otherwise you exercise the previous binary.
+- Godot is not on `PATH` on this machine; use the full path to the Mono build, or `$GODOT`.
 
 ## Verification
 
-Since this is greenfield, "verification" at each phase means: the game launches from the Godot
-editor and a packaged export, the phase's "Done when" criterion is actually playable end-to-end
-by hand, and no console errors/warnings appear in the Godot debugger during that playthrough. No
-automated test suite is proposed for Phase 0–1; consider adding GUT (Godot Unit Test) coverage
-for the `EffectRegistry` and combat resolution logic once Phase 1's shape stabilizes.
+There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Ready`, prints
+`PASS`/`FAIL` per check plus a `<Name>: N passed, M failed` summary, and exits nonzero on
+failure. 13 suites, 261 checks at the last full green run.
+
+```bash
+tools/run-smoke-tests.sh                 # all 13; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh MapSmokeTest    # a subset
+```
+
+Run these after touching anything under `scripts/` or any `.tscn`, before reporting work done.
+The `smoke-test` skill catalogues which suite covers which subsystem.
+
+For anything visual — a `.tscn`, layout, colours, card/relic rendering, or a bug described as
+"looks dimmed"/"overlaps"/"cut off" — use the `verify-screen` skill to render the real screen and
+look at the PNG. Never `--headless` for screenshots: the dummy renderer returns an empty
+viewport texture.
+
+Expected output that is **not** a regression: `MetaProgressionSmokeTest` prints a JSON parse
+warning with a backtrace (its deliberate corrupt-save case, proving the loader falls back to
+defaults), and `ScreenSmokeTest` and `Phase4ContentSmokeTest` each print one `Parent node is busy
+adding/removing children` engine error from a test clicking a button that changes scene.
+
+Smoke tests are not full coverage. The phase-level bar remains: the game launches from the editor
+and from a packaged export, the loop is playable end-to-end by hand, and no console
+errors/warnings appear in the Godot debugger during that playthrough.
+
+## Genre-specific risks to keep in mind
+
+Code comments cite these by number — keep the numbering stable.
+
+1. **Effect system must be composable, not hardcoded per card** — the `EffectSpec`/
+   `EffectRegistry` pattern is what keeps content authorable as data. Adding a bespoke class per
+   card would undo it.
+2. **RNG determinism** — separate seeded streams for map generation, combat (shuffle/draw),
+   enemy AI, and shop stock, so visual jitter never desyncs a deterministic run. New systems that
+   need randomness get their own stream rather than borrowing an existing one.
+3. **Save/run-state serialization** — save instance IDs referencing definitions, not embedded
+   definitions, so balance tweaks don't break old saves. Deserialization stays tolerant of
+   unknown fields.
+4. **Combat sub-state explicitness** — see the state machine above; new sub-states go in the
+   enum, not into a new boolean flag.
+5. **UI drag/targeting feel** — cards target by drag with a target-lock glow; potions target via
+   `AwaitingTarget` + click. Two interaction models coexist deliberately; changing one means
+   checking the other still reads consistently.
+6. **Content scope creep** — the initial content target is capped (~80–120 cards, one class,
+   one act) rather than chasing full parity with Slay the Spire. More content is
+   post-launch/ongoing.
