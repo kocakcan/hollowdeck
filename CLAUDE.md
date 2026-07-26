@@ -127,8 +127,54 @@ treat this section as a to-do list.
 
 ## Verification
 
-See the `smoke-test` and `verify-screen` skills for commands, suite coverage, and known-noise
-details.
+There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Ready`, prints
+`PASS`/`FAIL` per check plus a `<Name>: N passed, M failed` summary, and exits nonzero on
+failure.
+
+```bash
+tools/run-smoke-tests.sh                 # all 14; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh MapSmokeTest    # a subset
+```
+
+Run these after touching anything under `scripts/` or any `.tscn`, before reporting work done.
+
+| Test | Covers | Run when you touch |
+|---|---|---|
+| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text | `scripts/effects/`, `PileManager`, `cards.json` |
+| `CombatSmokeTest` | `CombatScreen.tscn` boots and wires up | `CombatScreen`, `CombatManager` |
+| `CombatTargetingSmokeTest` | enemy target-lock glow | `EnemyView`, `CardView` drag/targeting |
+| `RelicSmokeTest` | relic hooks fire through combat | `scripts/relics/`, relic hooks, `relics.json` |
+| `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic | intent pickers, statuses, elite rewards |
+| `HandLayoutSmokeTest` | hand fan spacing at 11+ cards, every card's text fits its box | `RefreshHand`, `HandFanLayout`, `CardView` text |
+| `DeckViewSmokeTest` | pile popups, combat-end z-order | `PileViewPopup`, `DeckViewButtons` |
+| `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders and fits | `MapGenerator`, `MapScreen`, `MapNode`, `acts.json` |
+| `EventSmokeTest` | event DB, outcome keys, `EventScreen` | `scripts/events/`, `events.json` |
+| `ScreenSmokeTest` | Reward/Shop/Treasure/Rest load and populate | any non-combat screen or its `.tscn` |
+| `ActSmokeTest` | acts load, act progression, per-act content is distinct | `acts.json`, `ActDefinition`, `RunState.AdvanceAct` |
+| `RunSaveSmokeTest` | in-run save/load round-trip, save v2/v3 tolerance | `RunSaveData`, `RunSaveManager`, `RunState` |
+| `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |
+| `AudioSmokeTest` | stream construction, bus setup, volume round-trip | `scripts/audio/`, `AudioManager`, `SettingsManager` |
+
+When in doubt run everything — the full sweep takes well under a minute. Restructuring a
+`.tscn` will break tests that assert on `GetNode` paths, on purpose — that's the alarm working;
+update the assertion to the new path, never delete the check to get green.
+
+For anything visual — a `.tscn`, layout, colours, card/relic rendering, or a bug described as
+"looks dimmed"/"overlaps"/"cut off" — use the `verify-screen` skill to render the real screen and
+look at the PNG. Never `--headless` for screenshots: the dummy renderer returns an empty
+viewport texture.
+
+Expected output that is **not** a regression: `MetaProgressionSmokeTest` prints a JSON parse
+warning with a backtrace (its deliberate corrupt-save case, proving the loader falls back to
+defaults), and `ScreenSmokeTest` and `Phase4ContentSmokeTest` each print one `Parent node is busy
+adding/removing children` engine error from a test clicking a button that changes scene.
+
+Tests that touch persistence write only to `user://*_test.json` scratch paths, never the real
+save. Any test that drives a screen far enough to change scenes hits `RunManager.ChangeScreen`,
+and Map/Rest/Shop/Treasure/Reward/Event are all in `RunManager.AutoSaveScreens` — so reaching one
+overwrites the real `user://run_save.json` with the test's fixture unless the test wraps the risky
+section in `RunSaveGuard.Protect()` (`scripts/debug/RunSaveGuard.cs`), which snapshots and
+restores both save files on scope exit.
 
 Smoke tests are not full coverage. The phase-level bar remains: the game launches from the editor
 and from a packaged export, the loop is playable end-to-end by hand, and no console
