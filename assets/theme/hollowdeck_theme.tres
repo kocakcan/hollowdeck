@@ -1,93 +1,213 @@
-[gd_resource type="Theme" format=3 uid="uid://dnboqx08j8r64"]
+; The one project-wide theme, set as gui/theme/custom in project.godot.
+;
+; Merged from the two themes that used to fight: this file's own slate-blue
+; generic dark-UI styleboxes (bg 0.165,0.184,0.243, no font at all) and
+; combat_theme.tres's typography, which was attached to only 3 of 13 scenes.
+; That split is why Shop/Rest/Event/Treasure/RunEnd/Settings/Unlocks/Map
+; rendered in stock Godot sans-serif with grey-blue buttons while combat sat
+; in bronze bezels. There are no per-scene theme overrides any more.
+;
+; Every colour below is a PixelSpec.Ramp entry (docs/ART_SPEC.md section 5).
+; Per section 6 there are no corner radii and no shadow blurs anywhere -
+; both are anti-aliased effects that cannot exist in pixels.
 
-[sub_resource type="StyleBoxFlat" id="sb_btn_disabled"]
-content_margin_left = 12.0
-content_margin_top = 6.0
-content_margin_right = 12.0
-content_margin_bottom = 6.0
-bg_color = Color(0.13, 0.14, 0.17, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.2, 0.21, 0.26, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+[gd_resource type="Theme" load_steps=14 format=3]
 
-[sub_resource type="StyleBoxFlat" id="sb_btn_hover"]
-content_margin_left = 12.0
-content_margin_top = 6.0
-content_margin_right = 12.0
-content_margin_bottom = 6.0
-bg_color = Color(0.216, 0.243, 0.325, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.42, 0.46, 0.58, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+[ext_resource type="FontFile" path="res://assets/fonts/Silkscreen-Bold.ttf" id="1"]
+[ext_resource type="FontFile" path="res://assets/fonts/Jersey15-Regular.ttf" id="2"]
+
+; --- Buttons: N2 face, G1 bezel; hover brightens the bezel to G3 rather than
+; swapping hue, the same "hover is a pure brightness signal" rule CardView's
+; frame styling already follows.
 
 [sub_resource type="StyleBoxFlat" id="sb_btn_normal"]
 content_margin_left = 12.0
 content_margin_top = 6.0
 content_margin_right = 12.0
 content_margin_bottom = 6.0
-bg_color = Color(0.165, 0.184, 0.243, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.32, 0.35, 0.45, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+bg_color = Color(0.117647, 0.101961, 0.094118, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.419608, 0.290196, 0.121569, 1)
+
+[sub_resource type="StyleBoxFlat" id="sb_btn_hover"]
+content_margin_left = 12.0
+content_margin_top = 6.0
+content_margin_right = 12.0
+content_margin_bottom = 6.0
+bg_color = Color(0.180392, 0.152941, 0.141176, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.780392, 0.619608, 0.278431, 1)
 
 [sub_resource type="StyleBoxFlat" id="sb_btn_pressed"]
 content_margin_left = 12.0
 content_margin_top = 6.0
 content_margin_right = 12.0
 content_margin_bottom = 6.0
-bg_color = Color(0.12, 0.133, 0.184, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.32, 0.35, 0.45, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
+bg_color = Color(0.070588, 0.062745, 0.058824, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.611765, 0.435294, 0.180392, 1)
+
+[sub_resource type="StyleBoxFlat" id="sb_btn_disabled"]
+content_margin_left = 12.0
+content_margin_top = 6.0
+content_margin_right = 12.0
+content_margin_bottom = 6.0
+bg_color = Color(0.070588, 0.062745, 0.058824, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.180392, 0.152941, 0.141176, 1)
+
+[sub_resource type="StyleBoxFlat" id="sb_btn_focus"]
+content_margin_left = 12.0
+content_margin_top = 6.0
+content_margin_right = 12.0
+content_margin_bottom = 6.0
+draw_center = false
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.921569, 0.780392, 0.4, 1)
+
+; --- Panels
 
 [sub_resource type="StyleBoxFlat" id="sb_panel"]
 content_margin_left = 10.0
 content_margin_top = 10.0
 content_margin_right = 10.0
 content_margin_bottom = 10.0
-bg_color = Color(0.106, 0.114, 0.153, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.24, 0.26, 0.34, 1)
-corner_radius_top_left = 8
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
-corner_radius_bottom_left = 8
+bg_color = Color(0.070588, 0.062745, 0.058824, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.419608, 0.290196, 0.121569, 1)
+
+; --- ProgressBar: the unlocks screen was rendering a stock grey engine bar.
+; Matches ChromeStyles.HpBarBackground/HpBarFill so the meta screen and the
+; combat HP bars read as the same component.
+
+[sub_resource type="StyleBoxFlat" id="sb_progress_bg"]
+bg_color = Color(0.070588, 0.062745, 0.058824, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.419608, 0.290196, 0.121569, 1)
+
+[sub_resource type="StyleBoxFlat" id="sb_progress_fill"]
+bg_color = Color(0.611765, 0.435294, 0.180392, 1)
+
+; --- Sliders (Settings volume) and scrollbars (Shop, Unlocks)
+
+[sub_resource type="StyleBoxFlat" id="sb_slider"]
+content_margin_top = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.070588, 0.062745, 0.058824, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.419608, 0.290196, 0.121569, 1)
+
+[sub_resource type="StyleBoxFlat" id="sb_slider_grabber"]
+bg_color = Color(0.780392, 0.619608, 0.278431, 1)
+
+[sub_resource type="StyleBoxFlat" id="sb_scroll"]
+content_margin_left = 2.0
+content_margin_right = 2.0
+bg_color = Color(0.070588, 0.062745, 0.058824, 1)
+
+[sub_resource type="StyleBoxFlat" id="sb_scroll_grabber"]
+bg_color = Color(0.419608, 0.290196, 0.121569, 1)
+
+[sub_resource type="StyleBoxFlat" id="sb_scroll_grabber_hl"]
+bg_color = Color(0.780392, 0.619608, 0.278431, 1)
 
 [resource]
-Button/colors/font_color = Color(0.92, 0.93, 0.96, 1)
-Button/colors/font_disabled_color = Color(0.5, 0.52, 0.58, 1)
-Button/colors/font_hover_color = Color(1, 1, 1, 1)
-Button/colors/font_pressed_color = Color(0.85, 0.87, 0.92, 1)
-Button/styles/disabled = SubResource("sb_btn_disabled")
-Button/styles/hover = SubResource("sb_btn_hover")
+default_font = ExtResource("2")
+default_font_size = 16
+
+Button/fonts/font = ExtResource("1")
+Button/font_sizes/font_size = 16
+Button/colors/font_color = Color(0.768627, 0.709804, 0.643137, 1)
+Button/colors/font_hover_color = Color(0.929412, 0.894118, 0.831373, 1)
+Button/colors/font_pressed_color = Color(0.921569, 0.780392, 0.4, 1)
+Button/colors/font_disabled_color = Color(0.4, 0.34902, 0.313725, 1)
+Button/colors/font_focus_color = Color(0.929412, 0.894118, 0.831373, 1)
 Button/styles/normal = SubResource("sb_btn_normal")
+Button/styles/hover = SubResource("sb_btn_hover")
 Button/styles/pressed = SubResource("sb_btn_pressed")
-Label/colors/font_color = Color(0.88, 0.89, 0.93, 1)
+Button/styles/disabled = SubResource("sb_btn_disabled")
+Button/styles/focus = SubResource("sb_btn_focus")
+
+Label/fonts/font = ExtResource("2")
+Label/font_sizes/font_size = 16
+Label/colors/font_color = Color(0.768627, 0.709804, 0.643137, 1)
+
+RichTextLabel/fonts/normal_font = ExtResource("2")
+RichTextLabel/font_sizes/normal_font_size = 16
+RichTextLabel/colors/default_color = Color(0.768627, 0.709804, 0.643137, 1)
+
 Panel/styles/panel = SubResource("sb_panel")
+PanelContainer/styles/panel = SubResource("sb_panel")
+
+ProgressBar/styles/background = SubResource("sb_progress_bg")
+ProgressBar/styles/fill = SubResource("sb_progress_fill")
+ProgressBar/colors/font_color = Color(0.929412, 0.894118, 0.831373, 1)
+
+HSlider/styles/slider = SubResource("sb_slider")
+HSlider/styles/grabber_area = SubResource("sb_slider_grabber")
+HSlider/styles/grabber_area_highlight = SubResource("sb_slider_grabber")
+
+VScrollBar/styles/scroll = SubResource("sb_scroll")
+VScrollBar/styles/grabber = SubResource("sb_scroll_grabber")
+VScrollBar/styles/grabber_highlight = SubResource("sb_scroll_grabber_hl")
+VScrollBar/styles/grabber_pressed = SubResource("sb_scroll_grabber_hl")
+HScrollBar/styles/scroll = SubResource("sb_scroll")
+HScrollBar/styles/grabber = SubResource("sb_scroll_grabber")
+HScrollBar/styles/grabber_highlight = SubResource("sb_scroll_grabber_hl")
+HScrollBar/styles/grabber_pressed = SubResource("sb_scroll_grabber_hl")
+
+CheckButton/fonts/font = ExtResource("2")
+CheckButton/font_sizes/font_size = 16
+CheckButton/colors/font_color = Color(0.768627, 0.709804, 0.643137, 1)
+CheckButton/colors/font_hover_color = Color(0.929412, 0.894118, 0.831373, 1)
+
+; Display variation for combat's large read-at-a-glance numbers (HP, damage,
+; energy). Carried over from combat_theme.tres - it is used and it works. The
+; hard outline matters more now than it did: pixel glyphs sit directly on
+; sprite art, and with antialiasing off the outline is a clean 1-colour ring
+; rather than a soft halo.
+CombatDisplayLabel/base_type = &"Label"
+CombatDisplayLabel/fonts/font = ExtResource("1")
+CombatDisplayLabel/font_sizes/font_size = 24
+CombatDisplayLabel/colors/font_color = Color(0.929412, 0.894118, 0.831373, 1)
+CombatDisplayLabel/colors/font_outline_color = Color(0.027451, 0.023529, 0.039216, 1)
+CombatDisplayLabel/constants/outline_size = 4
+
+; Card and enemy names. Uses the *body* face, not the display face, which is
+; a deliberate exception to the display/body split: Silkscreen is wide enough
+; that the longest card name in the data ("Reckless Charge+", 16 chars) does
+; not fit a 176px card at any legal size - 8px would fit but is unreadable.
+; Jersey15 is narrow enough to fit it at 16px with room to spare, and its
+; lowercase reads better on a card face than all-caps anyway.
+; Silkscreen still owns HP/energy/damage numbers via CombatDisplayLabel,
+; where its unambiguous digits are the whole point.
+CardTitleLabel/base_type = &"Label"
+CardTitleLabel/fonts/font = ExtResource("2")
+CardTitleLabel/font_sizes/font_size = 16
+CardTitleLabel/colors/font_color = Color(0.929412, 0.894118, 0.831373, 1)
+CardTitleLabel/colors/font_outline_color = Color(0.027451, 0.023529, 0.039216, 1)
+CardTitleLabel/constants/outline_size = 3

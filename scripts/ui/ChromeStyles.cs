@@ -3,12 +3,16 @@ using Hollowdeck.Data;
 
 namespace Hollowdeck.UI;
 
-// Phase 8 chrome: replaces the flat-theme-ProgressBar-plus-Modulate-tint
-// placeholder (Phase 5) with a bronze-bordered bezel for HP bars, and wraps
-// a sourced CC0 ornate frame (see CREDITS.md) for the End Turn button.
-// Also owns card frame styling (moved here from CardView's private
-// FrameStyle, which duplicated color literals with no sharing) so all
-// procedural StyleBox construction reads from the same UiTheme tokens.
+// Procedural chrome: HP-bar bezels, card frames, badges and the emphasis
+// button treatment. Owns all StyleBox construction so it reads from one set
+// of UiTheme tokens rather than duplicated color literals.
+//
+// Rebuilt for pixel art (docs/ART_SPEC.md section 6). Two things are now
+// illegal here and were removed throughout:
+//   - corner radii. StyleBoxFlat rounds corners by anti-aliasing them, which
+//     cannot exist in pixels. Every box is hard-edged; UiTheme.Radius is gone.
+//   - ShadowSize glows. Same problem - a blur has no pixel representation.
+//     Emphasis is carried by border weight and ramp brightness instead.
 public static class ChromeStyles
 {
     public static StyleBoxFlat HpBarBackground()
@@ -16,10 +20,9 @@ public static class ChromeStyles
         var style = new StyleBoxFlat
         {
             BgColor = UiTheme.Palette.BgPanel,
-            BorderColor = new Color(0.5f, 0.4f, 0.22f),
+            BorderColor = PixelSpec.Ramp.G1,
         };
-        style.SetBorderWidthAll(2);
-        style.SetCornerRadiusAll(4);
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
         return style;
     }
 
@@ -27,23 +30,19 @@ public static class ChromeStyles
     {
         var style = new StyleBoxFlat
         {
-            BgColor = new Color(0.66f, 0.13f, 0.13f),
-            BorderColor = new Color(0.85f, 0.35f, 0.25f),
+            BgColor = PixelSpec.Ramp.R3,
+            BorderColor = PixelSpec.Ramp.R4,
         };
-        style.SetBorderWidthAll(1);
-        style.SetCornerRadiusAll(3);
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Thin);
         return style;
     }
 
     // Amber, distinct from the main bar's red, so the lagging "damage you
     // just took" zone reads as a separate layer rather than a paler version
-    // of the same bar.
-    public static StyleBoxFlat HpGhostBarFill()
-    {
-        var style = new StyleBoxFlat { BgColor = new Color(0.9f, 0.5f, 0.25f, 0.85f) };
-        style.SetCornerRadiusAll(3);
-        return style;
-    }
+    // of the same bar. Opaque now rather than alpha 0.85: a blended fill
+    // lands on off-ramp colors, and the ghost sits over the bezel background
+    // anyway so it never needed the transparency.
+    public static StyleBoxFlat HpGhostBarFill() => new() { BgColor = PixelSpec.Ramp.E2 };
 
     // GhostHpBar (behind) draws the bezel background + a lagging fill; the
     // real HpBar (in front) draws its normal fill but with an EMPTY
@@ -88,15 +87,31 @@ public static class ChromeStyles
         tween.TweenProperty(ghostBar, "value", newValue, 0.4).SetTrans(Tween.TransitionType.Sine);
     }
 
-    // NinePatch-style stretch: TextureMargin preserves the ~22px ornate
-    // border at any button size instead of squashing it.
-    public static StyleBoxTexture EndTurnButtonStyle(string texturePath)
+    // The "this is the important button" treatment - End Turn, and the main
+    // menu's entries. Replaces the sourced CC0 ornate wooden frame this used
+    // to wrap (StumpyStrust's Fantasy UI Box): that texture is smooth,
+    // anti-aliased fantasy art, and sitting it beside Silkscreen glyphs and
+    // 32x32 sprites was exactly the mixed-media seam the pixel-art commitment
+    // exists to close.
+    //
+    // Distinguished from the ordinary theme button by weight, not ornament: a
+    // double-thickness gold bezel on a darker face, which survives the medium
+    // where a carved frame does not.
+    //
+    // Applies all four states in one call because the four were always set
+    // together at every call site.
+    public static void ApplyEmphasisButtonStyle(Button button)
     {
-        var style = new StyleBoxTexture { Texture = GD.Load<Texture2D>(texturePath) };
-        style.TextureMarginLeft = 22;
-        style.TextureMarginTop = 22;
-        style.TextureMarginRight = 22;
-        style.TextureMarginBottom = 22;
+        button.AddThemeStyleboxOverride("normal", EmphasisState(PixelSpec.Ramp.N2, PixelSpec.Ramp.G2));
+        button.AddThemeStyleboxOverride("hover", EmphasisState(PixelSpec.Ramp.N3, PixelSpec.Ramp.G4));
+        button.AddThemeStyleboxOverride("pressed", EmphasisState(PixelSpec.Ramp.N1, PixelSpec.Ramp.G3));
+        button.AddThemeStyleboxOverride("disabled", EmphasisState(PixelSpec.Ramp.N1, PixelSpec.Ramp.N3));
+    }
+
+    private static StyleBoxFlat EmphasisState(Color fill, Color border)
+    {
+        var style = new StyleBoxFlat { BgColor = fill, BorderColor = border };
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
         style.ContentMarginLeft = 16;
         style.ContentMarginTop = 10;
         style.ContentMarginRight = 16;
@@ -122,36 +137,38 @@ public static class ChromeStyles
         if (isUpgraded) borderColor = borderColor.Lerp(UiTheme.Palette.UpgradeAccent, 0.35f);
         if (hovered) borderColor = borderColor.Lerp(Colors.White, 0.4f);
 
+        // Rare's rest-state emphasis used to be a 6px blur glow. With blurs
+        // gone it reads through the ramp instead - the border steps up to the
+        // brightest gold - plus the extra border weight below. An animated
+        // pixel border (G3->G4->G5 cycling) is the eventual treatment; that
+        // belongs in CardView with the other tweens, not in this pure style
+        // function.
+        if (!hovered && rarity == Rarity.Rare) borderColor = UiTheme.Palette.RarityRareGlow;
+
         var style = new StyleBoxFlat
         {
             BgColor = type == CardType.Attack ? UiTheme.Palette.AttackFill : UiTheme.Palette.SkillFill,
             BorderColor = borderColor,
         };
-        style.SetBorderWidthAll(hovered ? UiTheme.BorderWidth.Thick : UiTheme.BorderWidth.Normal);
-        style.SetCornerRadiusAll((int)UiTheme.Radius.Card);
 
-        if (hovered)
-        {
-            style.ShadowColor = new Color(borderColor.R, borderColor.G, borderColor.B, 0.65f);
-            style.ShadowSize = 10;
-        }
-        else if (rarity == Rarity.Rare)
-        {
-            style.ShadowColor = UiTheme.Palette.RarityRareGlow;
-            style.ShadowSize = 6;
-        }
+        // Border weight is now the only emphasis channel, so it carries both
+        // signals: hover is thickest, an un-hovered Rare still reads heavier
+        // than a Common.
+        style.SetBorderWidthAll(hovered || rarity == Rarity.Rare
+            ? UiTheme.BorderWidth.Thick
+            : UiTheme.BorderWidth.Normal);
 
         return style;
     }
 
-    // Circular badge (cost pip, Exhaust pip) - a large corner radius always
-    // rounds to a full circle regardless of the node's actual size, so no
-    // per-size radius math is needed at the call site.
+    // Badge (cost pip, Exhaust pip). Square, not circular: the old version
+    // used a 999 corner radius to force a circle at any size, and a
+    // radius-rounded box is an anti-aliased curve. A hard 2px-ringed square
+    // reads the same at a glance and is native to the medium.
     public static StyleBoxFlat BadgeStyle(Color fill, Color ring)
     {
         var style = new StyleBoxFlat { BgColor = fill, BorderColor = ring };
         style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
-        style.SetCornerRadiusAll(999);
         return style;
     }
 
@@ -167,7 +184,6 @@ public static class ChromeStyles
             BorderColor = new Color(0.55f, 0.6f, 0.68f),
         };
         style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
-        style.SetCornerRadiusAll((int)UiTheme.Radius.Panel);
         return style;
     }
 
@@ -179,7 +195,6 @@ public static class ChromeStyles
     public static StyleBoxFlat InsetPanelStyle()
     {
         var style = new StyleBoxFlat { BgColor = new Color(0f, 0f, 0f, 0.28f) };
-        style.SetCornerRadiusAll((int)UiTheme.Radius.Panel);
         style.ContentMarginLeft = 4;
         style.ContentMarginRight = 4;
         style.ContentMarginTop = 2;
@@ -199,7 +214,6 @@ public static class ChromeStyles
             BorderColor = new Color(0.5f, 0.4f, 0.22f),
         };
         style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
-        style.SetCornerRadiusAll((int)UiTheme.Radius.Panel);
         style.ContentMarginLeft = UiTheme.Spacing.Sm;
         style.ContentMarginRight = UiTheme.Spacing.Sm;
         style.ContentMarginTop = UiTheme.Spacing.Xs;
@@ -207,22 +221,23 @@ public static class ChromeStyles
         return style;
     }
 
-    // Always-on glow for the boss map node - same drop-shadow trick
-    // CardFrameStyle uses for a Rare card's glow, keyed to the existing
-    // "Damage" semantic red token (danger/ominous) rather than Rarity's
-    // gold, since this isn't a rarity signal.
+    // Always-on emphasis for the boss map node, keyed to the "Damage"
+    // semantic red (danger/ominous) rather than Rarity's gold, since this is
+    // not a rarity signal.
+    //
+    // Was a 999-radius circle with a 12px red bloom; both are anti-aliased
+    // effects. Now a hard box with the heaviest border weight in the system
+    // over a deep oxblood face - it still reads as the one node on the map
+    // you are not supposed to walk into casually, and the skull icon it
+    // frames was always doing most of that work anyway.
     public static StyleBoxFlat BossNodeGlowStyle()
     {
-        var accent = UiTheme.Palette.Damage;
         var style = new StyleBoxFlat
         {
-            BgColor = new Color(0.2f, 0.05f, 0.05f, 0.9f),
-            BorderColor = accent,
+            BgColor = PixelSpec.Ramp.R0,
+            BorderColor = UiTheme.Palette.Damage,
         };
         style.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
-        style.SetCornerRadiusAll(999);
-        style.ShadowColor = new Color(accent.R, accent.G, accent.B, 0.75f);
-        style.ShadowSize = 12;
         return style;
     }
 }

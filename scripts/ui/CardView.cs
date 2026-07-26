@@ -46,8 +46,8 @@ public partial class CardView : Panel
     private static readonly Vector2 NormalScale = Vector2.One;
     private static readonly Color UnaffordableTint = new(0.55f, 0.55f, 0.55f);
 
-    // Derived from the fixed 224x308 card layout (VBox 8px inset, 6px
-    // separation x2 gaps, NameBanner 32px, ArtWindow 84px, DescriptionPanel's
+    // Derived from the fixed 176x240 card layout (VBox 8px inset, 6px
+    // separation x2 gaps, NameBanner 24px, ArtWindow 96px, DescriptionPanel's
     // own 4px/2px content margins) rather than read live from
     // DescriptionPanel.Size - SetCardInstance runs synchronously right after
     // AddChild, before the VBoxContainer's deferred sort pass has actually
@@ -55,8 +55,20 @@ public partial class CardView : Panel
     // on a card's first render. Same fixed-constant approach CombatScreen's
     // FanSafeWidth and PileViewPopup's EntryContentWidth already use to
     // avoid this class of Container-timing bug.
-    private static readonly Vector2 DescriptionBoxSize = new(200, 160);
-    private static readonly int[] DescriptionFontSizes = { 15, 14, 13, 12, 11 };
+    //
+    // Width:  176 - 8*2 inset - 4*2 panel margin = 152
+    // Height: 240 - 8*2 inset - 24 banner - 96 art - 6*2 separation - 2*2 = 88
+    private static readonly Vector2 DescriptionBoxSize = new(152, 88);
+
+    // Matches the CostBadge rect in CardView.tscn. Used to pad the name
+    // banner clear of the badge that overlaps it.
+    private const int CostBadgeWidth = 30;
+    // Body sizes the description may shrink to, largest first. Tightened from
+    // the old {15,14,13,12,11} vector-face ladder: Jersey15 is a bitmap face
+    // designed around 15px, so it stays clean near its design size but breaks
+    // down into uneven stems well below it. Three steps in a narrow band
+    // rather than five stepping down to 11 (see docs/ART_SPEC.md section 7).
+    private static readonly int[] DescriptionFontSizes = { 16, 14, 12 };
 
     public CardInstance? CardInstance { get; private set; }
 
@@ -112,11 +124,24 @@ public partial class CardView : Panel
         _exhaustBadge = GetNode<PanelContainer>("ExhaustBadge");
         _hotkeyBadge = GetNode<PanelContainer>("HotkeyBadge");
         _hotkeyLabel = GetNode<Label>("HotkeyBadge/HotkeyLabel");
-        _nameLabel.ThemeTypeVariation = "CombatDisplayLabel";
+        // CardTitleLabel, not CombatDisplayLabel: same Silkscreen face but
+        // 16px. The display variation's 24px was sized for a serif face and
+        // clips card names now that Silkscreen is much wider ("TWIN STRIKE"
+        // rendered as "WIN STRIKE").
+        _nameLabel.ThemeTypeVariation = "CardTitleLabel";
 
         var inset = ChromeStyles.InsetPanelStyle();
-        _nameBanner.AddThemeStyleboxOverride("panel", inset);
         _artWindow.AddThemeStyleboxOverride("panel", inset);
+
+        // The name banner gets its own inset with extra left padding. The cost
+        // badge is anchored to the card's top-left corner and paints over the
+        // banner, so a centred name had its first character hidden underneath
+        // it ("TWIN STRIKE" read as "WIN STRIKE"). Padding the banner's
+        // content past the badge re-centres the name in the space actually
+        // visible, rather than in the space nominally available.
+        var nameInset = ChromeStyles.InsetPanelStyle();
+        nameInset.ContentMarginLeft = CostBadgeWidth;
+        _nameBanner.AddThemeStyleboxOverride("panel", nameInset);
         _descriptionPanel.AddThemeStyleboxOverride("panel", ChromeStyles.InsetPanelStyle());
         _costBadge.AddThemeStyleboxOverride("panel", ChromeStyles.BadgeStyle(UiTheme.Palette.AccentGoldBright, UiTheme.Palette.AccentGold));
         _costLabel.AddThemeColorOverride("font_color", UiTheme.Palette.BgPanel);

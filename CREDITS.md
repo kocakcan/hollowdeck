@@ -86,16 +86,41 @@ Fonts in `assets/fonts/` are used under the
 to ship alongside the font files (see the `*-OFL.txt` files next to each
 font).
 
-| Font | Designer | Use |
+| Font | Copyright | Use |
 | --- | --- | --- |
-| [Cinzel](https://fonts.google.com/specimen/Cinzel) | Natanael Gama | Display face — card/enemy names, HP/energy numbers, floating damage text |
-| [IM Fell English](https://fonts.google.com/specimen/IM+Fell+English) | Igino Marini | Body face — card descriptions and general UI text |
+| [Silkscreen](https://fonts.google.com/specimen/Silkscreen) | © 2001 The Silkscreen Project Authors | Display face — titles, buttons, card/enemy names, HP/energy numbers, floating damage text |
+| [Jersey 15](https://fonts.google.com/specimen/Jersey+15) | © 2023 The Soft Type Project Authors | Body face — card descriptions and general UI text |
 
-## UI chrome — OpenGameArt (CC0 / public domain)
+Both are bitmap/pixel faces, imported with antialiasing, hinting and subpixel
+positioning disabled so glyphs stay on the pixel grid — see
+`docs/ART_SPEC.md` §7.
 
-The End Turn button's ornate frame textures in `assets/ui/` come from
-[Fantasy UI Box](https://opengameart.org/content/fantasy-ui-box) by
-**StumpyStrust**, released under CC0.
+### Retired
+
+Cinzel (Natanael Gama) and IM Fell English (Igino Marini) were the previous
+display/body pair. They were dropped when the project committed to pixel art
+as a single medium: high-res serif faces are anti-aliased sub-pixel curves,
+so keeping them would have moved the art/text seam rather than closed it.
+Their files have been removed from `assets/fonts/`.
+
+Pixelify Sans was also trialled as the body face and rejected: at 16px its
+digits `2`, `3`, `5` and `8` are mutually ambiguous, which is disqualifying
+for a game whose text is mostly numbers. Its files were removed too.
+
+## UI chrome — procedural, no sourced material
+
+All chrome (button bezels, HP-bar frames, card frames, badges, panels) is
+built procedurally in `scripts/ui/ChromeStyles.cs` from the shared palette.
+No attribution is required.
+
+### Retired
+
+The End Turn and main-menu buttons previously used ornate wooden frame
+textures from [Fantasy UI Box](https://opengameart.org/content/fantasy-ui-box)
+by **StumpyStrust** (CC0). They were removed when the project committed to
+pixel art: the frames are smooth, anti-aliased fantasy art, and placing them
+beside bitmap type and 32×32 sprites was exactly the mixed-media seam the
+commitment exists to close.
 
 ## Audio — procedurally generated, no sourced material
 

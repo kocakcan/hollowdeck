@@ -46,15 +46,15 @@ public partial class CombatTargetingSmokeTest : Node
         var enemyA = enemyRow.GetChild<EnemyView>(0);
         var enemyB = enemyRow.GetChild<EnemyView>(1);
 
-        Check("starts_unlocked", !enemyA.HasThemeStyleboxOverride("normal"), "expected no override before locking");
+        Check("starts_unlocked", !enemyA.IsTargetLocked, "expected unlocked before locking");
 
         enemyA.SetTargetLocked(true);
-        Check("lock_adds_normal_override", enemyA.HasThemeStyleboxOverride("normal"), "expected override after locking");
-        Check("locking_one_enemy_does_not_affect_the_other", !enemyB.HasThemeStyleboxOverride("normal"),
+        Check("lock_sets_lock_stylebox", enemyA.IsTargetLocked, "expected lock stylebox after locking");
+        Check("locking_one_enemy_does_not_affect_the_other", !enemyB.IsTargetLocked,
             "expected enemyB to be unaffected");
 
         enemyA.SetTargetLocked(false);
-        Check("unlock_removes_normal_override", !enemyA.HasThemeStyleboxOverride("normal"),
+        Check("unlock_restores_empty_stylebox", !enemyA.IsTargetLocked,
             "expected override removed after unlocking");
 
         instance.QueueFree();

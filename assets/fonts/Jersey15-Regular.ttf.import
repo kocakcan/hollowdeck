@@ -2,18 +2,18 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://d0uk5hna5d1dw"
-path="res://.godot/imported/Cinzel-Regular.ttf-1f2482390868c1d57b51169225b76ab4.fontdata"
+uid="uid://bbnhfnouq12m2"
+path="res://.godot/imported/Jersey15-Regular.ttf-02b7a9c16d7f58e87e7892dd150df4bc.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/Cinzel-Regular.ttf"
-dest_files=["res://.godot/imported/Cinzel-Regular.ttf-1f2482390868c1d57b51169225b76ab4.fontdata"]
+source_file="res://assets/fonts/Jersey15-Regular.ttf"
+dest_files=["res://.godot/imported/Jersey15-Regular.ttf-02b7a9c16d7f58e87e7892dd150df4bc.fontdata"]
 
 [params]
 
 Rendering=null
-antialiasing=1
+antialiasing=0
 generate_mipmaps=false
 disable_embedded_bitmaps=true
 multichannel_signed_distance_field=false
@@ -22,10 +22,10 @@ msdf_size=48
 allow_system_fallback=true
 force_autohinter=false
 modulate_color_glyphs=false
-hinting=3
-subpixel_positioning=4
-keep_rounding_remainders=true
-oversampling=0.0
+hinting=0
+subpixel_positioning=0
+keep_rounding_remainders=false
+oversampling=1.0
 Fallbacks=null
 fallbacks=[]
 Compress=null

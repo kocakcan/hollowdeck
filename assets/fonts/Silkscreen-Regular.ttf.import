@@ -2,18 +2,18 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://384jdumaixri"
-path="res://.godot/imported/IMFellEnglish-Italic.ttf-ef0c18e92a8aa91154f2dd3d65632e6b.fontdata"
+uid="uid://clp8atpd53e50"
+path="res://.godot/imported/Silkscreen-Regular.ttf-0088f200f2f1c02c371962cb8d277333.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/IMFellEnglish-Italic.ttf"
-dest_files=["res://.godot/imported/IMFellEnglish-Italic.ttf-ef0c18e92a8aa91154f2dd3d65632e6b.fontdata"]
+source_file="res://assets/fonts/Silkscreen-Regular.ttf"
+dest_files=["res://.godot/imported/Silkscreen-Regular.ttf-0088f200f2f1c02c371962cb8d277333.fontdata"]
 
 [params]
 
 Rendering=null
-antialiasing=1
+antialiasing=0
 generate_mipmaps=false
 disable_embedded_bitmaps=true
 multichannel_signed_distance_field=false
@@ -22,10 +22,10 @@ msdf_size=48
 allow_system_fallback=true
 force_autohinter=false
 modulate_color_glyphs=false
-hinting=3
-subpixel_positioning=4
-keep_rounding_remainders=true
-oversampling=0.0
+hinting=0
+subpixel_positioning=0
+keep_rounding_remainders=false
+oversampling=1.0
 Fallbacks=null
 fallbacks=[]
 Compress=null

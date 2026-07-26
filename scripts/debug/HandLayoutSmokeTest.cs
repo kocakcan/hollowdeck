@@ -29,6 +29,8 @@ public partial class HandLayoutSmokeTest : Node
         TestRegressionAtConfirmedOverflowCases();
         TestCombatScreenLayoutStaysInBoundsAtFifteenCards();
         TestEveryCardDescriptionFitsWithoutTruncation();
+        TestHandNeverReachesTheEnemyRow();
+        TestEveryCardNameFitsItsBanner();
 
         GD.Print($"HandLayoutSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -51,7 +53,7 @@ public partial class HandLayoutSmokeTest : Node
     private void TestSpacingNeverOverflowsForAnyHandSize()
     {
         const float handAreaWidth = 1152f;
-        const float cardWidth = 224f;
+        const float cardWidth = 176f;
         const float fanSafeWidth = 760f;
 
         bool allFit = true;
@@ -72,7 +74,7 @@ public partial class HandLayoutSmokeTest : Node
     private void TestRegressionAtConfirmedOverflowCases()
     {
         const float handAreaWidth = 1152f;
-        const float cardWidth = 224f;
+        const float cardWidth = 176f;
         const float fanSafeWidth = 760f;
 
         foreach (int n in new[] { 11, 12 })
@@ -82,6 +84,64 @@ public partial class HandLayoutSmokeTest : Node
             Check($"no_overflow_regression_at_n_{n}", totalWidth <= handAreaWidth + 0.01f,
                 $"totalWidth={totalWidth} handAreaWidth={handAreaWidth}");
         }
+    }
+
+    // Phase 2 regression guard. Cards used to be 224x308 resting at
+    // FanBaseY=-140, putting a card's top edge at y=320 while EnemyRow ends
+    // at y=330 - so a full hand physically covered the enemies, and on the
+    // act-3 boss fight it occluded nearly all of The Hollow Throne. This
+    // asserts the geometry that fixed it, so shrinking the card or raising
+    // the fan can't silently undo it.
+    private void TestHandNeverReachesTheEnemyRow()
+    {
+        float highestCardTop = CombatScreen.HighestCardTopY;
+        Check("hand_clears_enemy_row",
+            highestCardTop > CombatScreen.EnemyRowBottomY,
+            $"highest card top is y={highestCardTop}, which is at or above EnemyRow's " +
+            $"bottom y={CombatScreen.EnemyRowBottomY} - the hand would cover the enemies");
+    }
+
+    // The description had a fit check; the name never did, and it bit twice
+    // during the pixel-art move - first when Silkscreen (much wider than the
+    // serif face it replaced) overflowed the banner at 24px, then again when
+    // the card narrowed to 176px. Longest name in the data is
+    // "Reckless Charge+" at 16 characters.
+    private void TestEveryCardNameFitsItsBanner()
+    {
+        var cardView = GD.Load<PackedScene>("res://scenes/CardView.tscn").Instantiate<CardView>();
+        AddChild(cardView);
+        cardView.Interactive = false;
+
+        var nameLabel = (Label)typeof(CardView)
+            .GetField("_nameLabel", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(cardView)!;
+        var nameBanner = (PanelContainer)typeof(CardView)
+            .GetField("_nameBanner", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(cardView)!;
+
+        // Space actually visible: the banner minus the cost badge painted
+        // over its left end.
+        var bannerStyle = nameBanner.GetThemeStylebox("panel");
+        float available = cardView.CustomMinimumSize.X - 16f - bannerStyle.ContentMarginLeft
+                          - bannerStyle.ContentMarginRight;
+
+        var overflowing = new List<string>();
+        foreach (var card in CardDatabase.All)
+        {
+            foreach (var variant in new[] { card, CardUpgrade.Apply(card) })
+            {
+                cardView.SetCardInstance(new CardInstance(variant));
+                var font = nameLabel.GetThemeFont("font");
+                int size = nameLabel.GetThemeFontSize("font_size");
+                float width = font.GetStringSize(nameLabel.Text, fontSize: size).X;
+                if (width > available) overflowing.Add($"{variant.Id} ({width:F0}px > {available:F0}px)");
+            }
+        }
+
+        Check("every_card_name_fits_its_banner", overflowing.Count == 0,
+            $"overflowing: {string.Join(", ", overflowing)}");
+
+        cardView.QueueFree();
     }
 
     private void TestCombatScreenLayoutStaysInBoundsAtFifteenCards()
@@ -110,7 +170,7 @@ public partial class HandLayoutSmokeTest : Node
 
         var handArea = instance.GetNode<Control>("HandArea");
         float handAreaWidth = handArea.Size.X;
-        const float cardWidth = 224f;
+        const float cardWidth = 176f;
         // Cards tween toward their slot over ~0.2s rather than snapping
         // there instantly (SnapHome), so check the layout target
         // (_homePosition, what RefreshHand actually computed) rather than

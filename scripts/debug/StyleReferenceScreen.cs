@@ -202,10 +202,7 @@ public partial class StyleReferenceScreen : Control
         row.AddChild(new Button { Text = "Disabled", Disabled = true });
 
         var chrome = new Button { Text = "End Turn (chrome)", CustomMinimumSize = new Vector2(160, 48) };
-        chrome.AddThemeStyleboxOverride("normal", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_normal.png"));
-        chrome.AddThemeStyleboxOverride("hover", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_hover.png"));
-        chrome.AddThemeStyleboxOverride("pressed", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_pressed.png"));
-        chrome.AddThemeStyleboxOverride("disabled", ChromeStyles.EndTurnButtonStyle("res://assets/ui/button_box_normal.png"));
+        ChromeStyles.ApplyEmphasisButtonStyle(chrome);
         row.AddChild(chrome);
 
         row.AddChild(new Label { Text = "(hover/click live in the editor to preview hover/pressed states)" });
