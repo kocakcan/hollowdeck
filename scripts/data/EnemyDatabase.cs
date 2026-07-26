@@ -24,5 +24,11 @@ public static class EnemyDatabase
         foreach (var def in defs) ById[def.Id] = def;
     }
 
+    // Card/Relic/PotionDatabase have always exposed All; EnemyDatabase was the
+    // odd one out because nothing enumerated enemies until acts needed their
+    // encounter pools validated (MapSmokeTest checks every id an act references
+    // actually resolves).
+    public static IReadOnlyCollection<EnemyDefinition> All => ById.Values;
+
     public static EnemyDefinition Get(string id) => ById[id];
 }

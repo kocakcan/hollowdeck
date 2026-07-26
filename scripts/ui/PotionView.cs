@@ -12,7 +12,10 @@ public partial class PotionView : Button
     public void SetPotionInstance(PotionInstance potion)
     {
         _potion = potion;
-        var description = EffectDescriptionFormatter.Describe(potion.Definition.Effects, CombatManager.Instance?.Player);
+        // Target type included so an AllEnemies potion (Weak Potion) says so -
+        // its EffectSpecs are indistinguishable from a single-target one's.
+        var description = EffectDescriptionFormatter.Describe(potion.Definition.Effects,
+            new DescribeContext(CombatManager.Instance?.Player, potion.Definition.Target));
         // With an icon the belt shows icon-only buttons (name lives in the
         // tooltip); without one it falls back to the old text button.
         Icon = ArtAssets.PotionIcon(potion.Definition.Id);

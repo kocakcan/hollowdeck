@@ -1,47 +1,36 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Hollowdeck.Data;
 
 namespace Hollowdeck.Map;
 
 // Builds a small layered DAG (Slay-the-Spire-style branching path), seeded
 // from RngStreams.Map so map shape is reproducible per run seed like combat
-// shuffles/enemy AI already are (CLAUDE.md risk #2). Kept deliberately
-// short (FloorCount = 8) for a single act - multi-act sprawl is content
-// breadth work, tracked in ROADMAP.md, not a generator limitation.
+// shuffles/enemy AI already are (CLAUDE.md risk #2).
+//
+// Everything act-specific - how many floors, which encounters, which boss -
+// comes from the ActDefinition passed in, so a new act is a row in
+// data/acts/acts.json rather than more code here (the same content-is-data
+// split cards/relics/enemies already use). The boss is drawn from the act's
+// pool with the same rng as the map shape, so which boss ends an act is part
+// of the run seed too.
 public static class MapGenerator
 {
-    private const int FloorCount = 8;
     private const int MinNodesPerFloor = 3;
     private const int MaxNodesPerFloor = 4;
 
-    private static readonly List<List<string>> NormalEncounters = new()
+    public static List<MapNode> Generate(Random rng, ActDefinition act)
     {
-        new() { "cultist" },
-        new() { "slime", "slime" },
-        new() { "cultist", "slime" },
-        new() { "slime", "slime", "slime" },
-        new() { "cultist", "cultist" },
-    };
-
-    private static readonly List<List<string>> EliteEncounters = new()
-    {
-        new() { "bog_troll" },
-        new() { "possessed_armor" },
-    };
-
-    private const string BossEnemyId = "hollow_king";
-
-    public static List<MapNode> Generate(Random rng)
-    {
+        int floorCount = act.FloorCount;
         var floors = new List<List<MapNode>>();
 
-        for (int f = 0; f < FloorCount; f++)
+        for (int f = 0; f < floorCount; f++)
         {
-            floors.Add(BuildFloor(f, rng));
+            floors.Add(BuildFloor(f, floorCount, act, rng));
         }
 
-        for (int f = 0; f < FloorCount - 1; f++)
+        for (int f = 0; f < floorCount - 1; f++)
         {
             ConnectFloors(floors[f], floors[f + 1], rng);
         }
@@ -49,21 +38,21 @@ public static class MapGenerator
         return floors.SelectMany(floor => floor).ToList();
     }
 
-    private static List<MapNode> BuildFloor(int floor, Random rng)
+    private static List<MapNode> BuildFloor(int floor, int floorCount, ActDefinition act, Random rng)
     {
         // Floor 0 is always a soft-open Combat floor; the floor right before
         // the boss is always a forced single Rest node (guaranteed reachable
         // from every path since it's the sole node on its floor - see
         // ConnectFloors); the boss floor is always a single Boss node.
-        if (floor == FloorCount - 1) return new List<MapNode> { MakeNode(floor, 0, MapNodeType.Boss, rng) };
-        if (floor == FloorCount - 2) return new List<MapNode> { MakeNode(floor, 0, MapNodeType.Rest, rng) };
+        if (floor == floorCount - 1) return new List<MapNode> { MakeNode(floor, 0, MapNodeType.Boss, act, rng) };
+        if (floor == floorCount - 2) return new List<MapNode> { MakeNode(floor, 0, MapNodeType.Rest, act, rng) };
 
         int count = floor == 0 ? MinNodesPerFloor : rng.Next(MinNodesPerFloor, MaxNodesPerFloor + 1);
         var nodes = new List<MapNode>();
         for (int c = 0; c < count; c++)
         {
             var type = floor == 0 ? MapNodeType.Combat : PickNodeType(floor, rng);
-            nodes.Add(MakeNode(floor, c, type, rng));
+            nodes.Add(MakeNode(floor, c, type, act, rng));
         }
         return nodes;
     }
@@ -92,16 +81,16 @@ public static class MapGenerator
         return MapNodeType.Combat;
     }
 
-    private static MapNode MakeNode(int floor, int column, MapNodeType type, Random rng)
+    private static MapNode MakeNode(int floor, int column, MapNodeType type, ActDefinition act, Random rng)
     {
         var node = new MapNode { Id = $"f{floor}_{column}", Floor = floor, Column = column, Type = type };
         if (type is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss)
         {
             node.EnemyIds = type switch
             {
-                MapNodeType.Boss => new List<string> { BossEnemyId },
-                MapNodeType.Elite => new List<string>(EliteEncounters[rng.Next(EliteEncounters.Count)]),
-                _ => new List<string>(NormalEncounters[rng.Next(NormalEncounters.Count)]),
+                MapNodeType.Boss => new List<string> { act.BossIds[rng.Next(act.BossIds.Count)] },
+                MapNodeType.Elite => new List<string>(act.EliteEncounters[rng.Next(act.EliteEncounters.Count)]),
+                _ => new List<string>(act.NormalEncounters[rng.Next(act.NormalEncounters.Count)]),
             };
         }
         return node;

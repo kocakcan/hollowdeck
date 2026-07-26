@@ -37,7 +37,7 @@ layout and built-in tweening. Worth it here; would not be for a combat-only prot
 ## Architecture
 
 **Content is data, effects are code, connected by string keys.** This is the single most
-load-bearing decision. Cards/relics/enemies/potions/events are authored as JSON under `data/`;
+load-bearing decision. Acts/cards/relics/enemies/potions/events are authored as JSON under `data/`;
 each `CardDefinition` holds a list of `EffectSpec`s (e.g. `{action: "deal_damage", amount: 6,
 scope: "Target"}`) that key into `EffectRegistry`, a dictionary of `IEffect` implementations
 (`DealDamageEffect`, `ApplyStatusEffect`, `DrawCardsEffect`, ...). New cards are new data rows,
@@ -61,6 +61,14 @@ lives in its own save file (`user://meta_progression.json`) separate from in-run
 (`user://run_save.json`) — different lifetimes and versioning needs, don't merge them. The meta
 save carries a schema version and a v1→v2 migration; keep deserialization tolerant of unknown
 fields.
+
+**Acts:** a run is three acts, authored in `data/acts/acts.json` (`ActDefinition`/`ActDatabase`).
+`RunState.ActIndex` says which one is in play; `RunState.MapNodes` only ever holds the *current*
+act's graph. Killing a non-final act's boss goes RewardScreen-then-Map like any other fight, with
+`RunState.AdvanceAct()` regenerating the map, resetting `CurrentNodeId`/`VisitedNodeIds` (node ids
+repeat across acts), banking the cleared act's floors into `RunStats.FloorsInPreviousActs`, and
+applying the act's max-HP bonus and heal. Only `IsFinalAct`'s boss routes to Victory. The run save
+is v3 for `ActIndex`; a v2 save loads as act 1, which is what it always was.
 
 **Combat loop** (`CombatManager`) is an explicit `CombatState` enum machine — `Start`,
 `PlayerTurn`, `AwaitingTarget`, `ResolvingCard`, `EnemyTurn`, `ResolvingEnemyIntent`, `CombatEnd`
@@ -89,7 +97,11 @@ Event nodes, turn pacing, a themed art/typography pass, and a fully procedural a
 
 - 11 screens, all wired to real data: MainMenu, Map, Combat, Event, Rest, Shop, Treasure, Reward,
   RunEnd, MetaProgression, Settings.
-- Content: 30 cards (Attack/Skill), 22 relics, 12 potions, 5 enemies, 5 events — one act.
+- Content: **three acts** (`data/acts/acts.json`), 30 cards (Attack/Skill), 22 relics, 12
+  potions, 24 enemies (12 normal, 6 elite, 6 boss), 5 events. Each act has its own encounter
+  pools, backdrops and gold scaling plus a **two-boss pool** the run seed picks from, so which
+  boss ends an act varies per run. Enemy pools don't overlap between acts (asserted in
+  `ActSmokeTest`).
 - Effects: `deal_damage`, `gain_block`, `apply_status`, `draw_cards`, `heal`, `gain_energy`,
   `lose_hp`. Statuses: Vulnerable, Weak, Strength, Poison.
 - Meta-progression is a **score-driven unlock track** (`RunScore` grades a finished run; the
@@ -98,7 +110,8 @@ Event nodes, turn pacing, a themed art/typography pass, and a fully procedural a
 - Audio is synthesized in-engine at runtime, no sampled assets.
 
 `ROADMAP.md` tracks what's genuinely still open (CI, packaged export, `InputMap` actions, Power
-card type, rarity in data, more enemies/statuses). Don't treat this section as a to-do list.
+card type, rarity in data, wider status roster, a balance pass over the three-act curve). Don't
+treat this section as a to-do list.
 
 ## Key files
 
@@ -112,7 +125,9 @@ card type, rarity in data, more enemies/statuses). Don't treat this section as a
 - `scripts/relics/RelicBehavior.cs` — the 7 relic hooks; `SimpleHookEffectRelic.cs` is the
   data-only path (currently `OnCombatStart`/`OnTurnStart` only)
 - `scripts/events/EventOutcomeRegistry.cs` — the 8 event outcome keys
-- `scripts/map/MapGenerator.cs` — branching node DAG
+- `scripts/map/MapGenerator.cs` — branching node DAG, per-act (floor count, encounter pools and
+  boss pool all come from the `ActDefinition` passed in)
+- `scripts/data/ActDefinition.cs` + `ActDatabase.cs` — the three acts and what varies per act
 - `data/*/*.json` — the content layer; the schema is the data-vs-code split everything depends on
 - `scenes/CombatScreen.tscn` — card drag/hover/targeting
 
@@ -131,10 +146,10 @@ card type, rarity in data, more enemies/statuses). Don't treat this section as a
 
 There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Ready`, prints
 `PASS`/`FAIL` per check plus a `<Name>: N passed, M failed` summary, and exits nonzero on
-failure. 13 suites, 261 checks at the last full green run.
+failure. 14 suites, 332 checks at the last full green run.
 
 ```bash
-tools/run-smoke-tests.sh                 # all 13; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh                 # all 14; builds first, nonzero exit on any failure
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 

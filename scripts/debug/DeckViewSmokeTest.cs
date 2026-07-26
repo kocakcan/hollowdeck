@@ -25,6 +25,7 @@ public partial class DeckViewSmokeTest : Node
 
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 

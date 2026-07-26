@@ -59,6 +59,7 @@ public partial class RunManager : Node
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         EventDatabase.LoadAll();
+        ActDatabase.LoadAll();
     }
 
     public void ChangeScreen(ScreenState next)

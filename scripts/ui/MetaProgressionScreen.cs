@@ -158,7 +158,9 @@ public partial class MetaProgressionScreen : Control
             return RelicDatabase.All.FirstOrDefault(r => r.Id == entry.Id)?.Description ?? "";
         }
         var card = CardDatabase.All.FirstOrDefault(c => c.Id == entry.Id);
-        return card is null ? "" : EffectDescriptionFormatter.Describe(card.Effects);
+        return card is null
+            ? ""
+            : EffectDescriptionFormatter.Describe(card.Effects, new DescribeContext(TargetType: card.Target));
     }
 
     private void RefreshSeedHistory()

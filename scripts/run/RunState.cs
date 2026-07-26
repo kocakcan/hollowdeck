@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Hollowdeck.Data;
@@ -23,6 +24,16 @@ public static class RunState
     public static string CurrentNodeId = "";
     public static HashSet<string> VisitedNodeIds = new();
 
+    // Which act (chapter) the run is in, 0-based into ActDatabase.All. MapNodes
+    // above only ever holds the *current* act's graph - clearing an act
+    // regenerates it (see AdvanceAct), so node ids repeat across acts and
+    // VisitedNodeIds is reset with them.
+    public static int ActIndex;
+
+    public static ActDefinition CurrentAct => ActDatabase.At(ActIndex);
+
+    public static bool IsFinalAct => ActIndex >= ActDatabase.Count - 1;
+
     // Scoring tallies for this run - see RunScore/MetaProgressionManager.
     public static RunStats Stats = new();
 
@@ -44,10 +55,38 @@ public static class RunState
         Relics = new List<RelicInstance> { new(RelicDatabase.Get("second_wind")) };
         Potions = new List<PotionInstance>();
 
-        MapNodes = MapGenerator.Generate(RngStreams.Map);
+        ActIndex = 0;
+        MapNodes = MapGenerator.Generate(RngStreams.Map, CurrentAct);
         CurrentNodeId = "";
         VisitedNodeIds = new HashSet<string>();
         Stats = new RunStats();
+    }
+
+    // Called when an act's boss dies and there's another act to go. The deck,
+    // relics, potions and gold all carry over untouched - only the map is
+    // replaced, so the run continues rather than restarting.
+    //
+    // Floors are counted cumulatively for scoring (RunScore's Floors Climbed)
+    // because the new act's floor numbering restarts at 0; without the offset,
+    // reaching act 2 would *lower* the recorded progress.
+    public static void AdvanceAct()
+    {
+        if (IsFinalAct) return;
+
+        var cleared = CurrentAct;
+        Stats.FloorsInPreviousActs += cleared.FloorCount;
+
+        ActIndex++;
+        MapNodes = MapGenerator.Generate(RngStreams.Map, CurrentAct);
+        CurrentNodeId = "";
+        VisitedNodeIds = new HashSet<string>();
+
+        // A run tuned around one act's 50 HP would not survive three, so
+        // clearing an act raises the ceiling and heals part of the damage. Both
+        // amounts come from the cleared act's data - see ActDefinition.
+        PlayerMaxHp += cleared.ClearMaxHpBonus;
+        int heal = cleared.ClearHealPercent * PlayerMaxHp / 100;
+        PlayerCurrentHp = Math.Min(PlayerMaxHp, PlayerCurrentHp + heal);
     }
 
     public static MapNode GetMapNode(string id) => MapNodes.First(n => n.Id == id);

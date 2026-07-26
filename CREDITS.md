@@ -6,14 +6,45 @@ The 32×32 pixel sprites in `assets/sprites/` come from the
 [Dungeon Crawl Stone Soup](https://github.com/crawl/crawl) tile set
 (`crawl-ref/source/rltiles/mon/`), released under CC0. Mapping:
 
+Act I:
+
 | Game use | Source tile |
 | --- | --- |
 | Player avatar | `humanoids/humans/hell_knight.png` |
 | Cultist | `humanoids/humans/occultist.png` |
 | Acid Slime | `amorphous/slime_creature.png` |
+| Rot Hound | `animals/hound.png` |
+| Ward Acolyte | `vault/cloud_mage.png` |
 | Bog Troll | `humanoids/troll.png` |
 | Possessed Armor | `undead/ancient_champion.png` |
 | Hollow King | `undead/ancient_lich.png` |
+| The Gaol Warden | `humanoids/oni_incarcerator.png` |
+
+Act II:
+
+| Game use | Source tile |
+| --- | --- |
+| Ember Wisp | `nonliving/fire_vortex1.png` |
+| Slag Brute | `nonliving/iron_golem.png` |
+| Cinder Cultist | `vault/hellbinder.png` |
+| Ash Stalker | `demons/smoke_demon.png` |
+| Molten Sentinel | `nonliving/blazeheart_golem.png` |
+| Pyre Warden | `demons/efreet.png` |
+| Emberlord Vashk | `unique/asmodeus.png` |
+| The Slag Maw | `amorphous/rockslime.png` |
+
+Act III:
+
+| Game use | Source tile |
+| --- | --- |
+| Hollow Shade | `undead/shadow_wraith.png` |
+| Bone Choir | `undead/revenant.png` |
+| Throne Sentry | `statues/obsidian_statue.png` |
+| Void Leech | `aberrations/tentacled_monstrosity.png` |
+| Crown Reaver | `vault/antique_champion.png` |
+| The Silent Judge | `holy/daeva.png` |
+| The Hollow Throne | `vault/zot_statue.png` |
+| The Nameless Regent | `undead/ancient_lich.png` |
 
 The tiled screen backgrounds in `assets/backgrounds/` are from the same set
 (`crawl-ref/source/rltiles/dngn/floor/`, CC0, upscaled 2×): `crypt0`,

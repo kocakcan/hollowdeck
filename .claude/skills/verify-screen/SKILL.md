@@ -23,7 +23,11 @@ With no screen names it shoots all of them. Unknown names exit 1 and list the va
 
 ## Screens
 
-`combat` `reward` `shop` `map` `rest` `treasure` `event` `unlocks` `runend` `mainmenu` `settings`
+`combat` `combat3` `reward` `shop` `map` `map3` `rest` `treasure` `event` `unlocks` `runend`
+`mainmenu` `settings`
+
+`map3`/`combat3` are the final act (its own backdrop, title and boss); `map3` is also the longest
+map, which is where node layout runs out of horizontal room first.
 
 Each one instantiates the real `.tscn` the way `RunManager.ChangeScreen` would, with the global
 statics that screen's `_Ready` reads already seeded (`RunState`, `RewardContext`,

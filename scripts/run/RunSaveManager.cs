@@ -42,6 +42,7 @@ public static class RunSaveManager
             DeckCardIds = RunState.Deck.Select(c => c.Id).ToList(),
             RelicIds = RunState.Relics.Select(r => r.Definition.Id).ToList(),
             Potions = RunState.Potions.Select(p => new PotionSaveEntry { DefinitionId = p.DefinitionId }).ToList(),
+            ActIndex = RunState.ActIndex,
             MapNodes = RunState.MapNodes,
             CurrentNodeId = RunState.CurrentNodeId,
             VisitedNodeIds = RunState.VisitedNodeIds.ToList(),
@@ -92,6 +93,10 @@ public static class RunSaveManager
         RunState.Potions = data.Potions
             .Where(entry => PotionDatabase.All.Any(pd => pd.Id == entry.DefinitionId))
             .Select(entry => new PotionInstance(PotionDatabase.Get(entry.DefinitionId))).ToList();
+        // Clamped, not trusted: an ActIndex past the end (a save from a build
+        // with more acts) must land on the last act rather than throw when
+        // CurrentAct is read. ActDatabase.At does the clamping.
+        RunState.ActIndex = Mathf.Clamp(data.ActIndex, 0, Mathf.Max(0, ActDatabase.Count - 1));
         RunState.MapNodes = data.MapNodes;
         RunState.CurrentNodeId = data.CurrentNodeId;
         RunState.VisitedNodeIds = data.VisitedNodeIds.ToHashSet();

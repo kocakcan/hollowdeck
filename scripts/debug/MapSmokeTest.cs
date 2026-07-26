@@ -24,9 +24,14 @@ public partial class MapSmokeTest : Node
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
+        ActDatabase.LoadAll();
+
         TestSingleSeedShape();
         TestManySeedsStayConnected();
+        TestBossPickIsSeedDeterministic();
+        TestEncounterPoolsResolve();
         TestMapScreenRendersGraph();
+        TestLongestActFitsOnScreen();
 
         GD.Print($"MapSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -38,23 +43,71 @@ public partial class MapSmokeTest : Node
         else { _fail++; GD.Print($"FAIL {name}: {detail}"); }
     }
 
+    // Every act, not just the first: floor counts and encounter pools now come
+    // from data, so an act authored with a too-short floorCount or a boss pool
+    // that doesn't match its own ids has to fail here rather than mid-run.
     private void TestSingleSeedShape()
     {
-        var nodes = MapGenerator.Generate(new Random(42));
-        AssertShape(nodes, "seed42_");
+        foreach (var act in ActDatabase.All)
+        {
+            var nodes = MapGenerator.Generate(new Random(42), act);
+            AssertShape(nodes, $"{act.Id}_seed42_");
+
+            Check($"{act.Id}_honours_authored_floor_count",
+                nodes.Max(n => n.Floor) + 1 == act.FloorCount,
+                $"generated={nodes.Max(n => n.Floor) + 1}, authored={act.FloorCount}");
+
+            var boss = nodes.Single(n => n.Type == MapNodeType.Boss);
+            Check($"{act.Id}_boss_comes_from_its_own_pool",
+                boss.EnemyIds.Count == 1 && act.BossIds.Contains(boss.EnemyIds[0]),
+                $"boss=[{string.Join(",", boss.EnemyIds)}], pool=[{string.Join(",", act.BossIds)}]");
+        }
     }
 
     private void TestManySeedsStayConnected()
     {
         bool allOk = true;
         string detail = "";
-        for (int seed = 0; seed < 25 && allOk; seed++)
+        foreach (var act in ActDatabase.All)
         {
-            var nodes = MapGenerator.Generate(new Random(seed));
-            var (ok, why) = ValidateConnectivity(nodes);
-            if (!ok) { allOk = false; detail = $"seed {seed}: {why}"; }
+            for (int seed = 0; seed < 25 && allOk; seed++)
+            {
+                var nodes = MapGenerator.Generate(new Random(seed), act);
+                var (ok, why) = ValidateConnectivity(nodes);
+                if (!ok) { allOk = false; detail = $"{act.Id} seed {seed}: {why}"; }
+            }
         }
         Check("many_seeds_stay_fully_connected", allOk, detail);
+    }
+
+    // The boss pick has to be part of the seed like the map shape is, or a
+    // "same seed, same run" promise breaks the moment an act has two bosses.
+    private void TestBossPickIsSeedDeterministic()
+    {
+        bool stable = true;
+        string detail = "";
+        foreach (var act in ActDatabase.All)
+        {
+            for (int seed = 0; seed < 10 && stable; seed++)
+            {
+                var first = MapGenerator.Generate(new Random(seed), act).Single(n => n.Type == MapNodeType.Boss);
+                var second = MapGenerator.Generate(new Random(seed), act).Single(n => n.Type == MapNodeType.Boss);
+                if (first.EnemyIds[0] != second.EnemyIds[0])
+                {
+                    stable = false;
+                    detail = $"{act.Id} seed {seed}: {first.EnemyIds[0]} then {second.EnemyIds[0]}";
+                }
+            }
+        }
+        Check("boss_pick_is_reproducible_for_a_seed", stable, detail);
+
+        // ...and not pinned to one boss either, or the pool is decorative.
+        var pooled = ActDatabase.All.Where(a => a.BossIds.Count > 1).ToList();
+        bool anyVariety = pooled.All(act => Enumerable.Range(0, 40)
+            .Select(seed => MapGenerator.Generate(new Random(seed), act).Single(n => n.Type == MapNodeType.Boss).EnemyIds[0])
+            .Distinct().Count() > 1);
+        Check("multi_boss_acts_actually_roll_different_bosses", pooled.Count > 0 && anyVariety,
+            $"acts with a pool: {pooled.Count}");
     }
 
     private void AssertShape(List<MapNode> nodes, string prefix)
@@ -98,7 +151,8 @@ public partial class MapSmokeTest : Node
         RunState.PlayerMaxHp = 50;
         RunState.PlayerCurrentHp = 33;
         RunState.Relics = new List<RelicInstance>();
-        RunState.MapNodes = MapGenerator.Generate(new Random(7));
+        RunState.ActIndex = 0;
+        RunState.MapNodes = MapGenerator.Generate(new Random(7), ActDatabase.At(0));
         RunState.CurrentNodeId = "";
         RunState.VisitedNodeIds = new HashSet<string>();
 
@@ -120,6 +174,62 @@ public partial class MapSmokeTest : Node
         Check("map_screen_enables_only_floor0_nodes_initially", enabledCount == floor0Count,
             $"enabled={enabledCount}, floor0={floor0Count}");
 
+        var actLabel = instance.GetChildren().OfType<Label>()
+            .FirstOrDefault(l => l.Text.StartsWith("Act "));
+        Check("map_screen_names_the_current_act",
+            actLabel is not null && actLabel.Text.Contains(ActDatabase.At(0).Name),
+            $"label='{actLabel?.Text}'");
+
+        instance.QueueFree();
+    }
+
+    // Node ids are only ever resolved through EnemyDatabase at fight start, so
+    // a typo in an act's encounter pool would otherwise surface as a crash on
+    // entering that node, several minutes into a run.
+    private void TestEncounterPoolsResolve()
+    {
+        var known = EnemyDatabase.All.Select(e => e.Id).ToHashSet();
+        var unknown = new List<string>();
+        foreach (var act in ActDatabase.All)
+        {
+            var referenced = act.NormalEncounters.Concat(act.EliteEncounters).SelectMany(g => g)
+                .Concat(act.BossIds);
+            unknown.AddRange(referenced.Where(id => !known.Contains(id)).Select(id => $"{act.Id}:{id}"));
+        }
+        Check("every_act_encounter_id_exists", unknown.Count == 0, string.Join(", ", unknown));
+
+        foreach (var act in ActDatabase.All)
+        {
+            Check($"{act.Id}_has_pools_for_every_node_type",
+                act.NormalEncounters.Count > 0 && act.EliteEncounters.Count > 0 && act.BossIds.Count > 0,
+                $"normals={act.NormalEncounters.Count}, elites={act.EliteEncounters.Count}, bosses={act.BossIds.Count}");
+        }
+    }
+
+    // Floor spacing is derived from the act's length (MapScreen.RightMargin):
+    // the longest act's 10 floors at the old fixed 130px would have put the
+    // boss node ~150px past the right edge of the 1152px design width.
+    private void TestLongestActFitsOnScreen()
+    {
+        var longest = ActDatabase.All.OrderByDescending(a => a.FloorCount).First();
+        RunState.ActIndex = ActDatabase.All.ToList().IndexOf(longest);
+        RunState.MapNodes = MapGenerator.Generate(new Random(11), longest);
+        RunState.CurrentNodeId = "";
+        RunState.VisitedNodeIds = new HashSet<string>();
+
+        var instance = GD.Load<PackedScene>("res://scenes/MapScreen.tscn").Instantiate();
+        AddChild(instance);
+
+        const float designWidth = 1152f;
+        var buttons = instance.GetNode<Control>("NodeButtons").GetChildren().OfType<Button>().ToList();
+        var overflowing = buttons
+            .Where(b => b.Position.X < 0f || b.Position.X + b.Size.X > designWidth)
+            .Select(b => $"x={b.Position.X}+{b.Size.X}")
+            .ToList();
+        Check($"{longest.Id}_all_nodes_within_design_width", overflowing.Count == 0,
+            string.Join(", ", overflowing));
+
+        RunState.ActIndex = 0;
         instance.QueueFree();
     }
 }

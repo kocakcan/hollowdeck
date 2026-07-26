@@ -1,0 +1,99 @@
+[
+  {
+    "id": "act_1",
+    "name": "The Sunken Ward",
+    "floorCount": 8,
+    "mapBackground": "black_cobalt",
+    "mapTint": "d9d9e6",
+    "combatBackground": "crypt",
+    "combatTint": "99949e",
+    "normalEncounters": [
+      ["cultist"],
+      ["slime", "slime"],
+      ["cultist", "slime"],
+      ["slime", "slime", "slime"],
+      ["cultist", "cultist"],
+      ["rot_hound"],
+      ["rot_hound", "slime"],
+      ["ward_acolyte"],
+      ["ward_acolyte", "rot_hound"],
+      ["cultist", "ward_acolyte"]
+    ],
+    "eliteEncounters": [
+      ["bog_troll"],
+      ["possessed_armor"],
+      ["rot_hound", "rot_hound", "ward_acolyte"]
+    ],
+    "bossIds": ["hollow_king", "gaol_warden"],
+    "normalGoldBase": 20,
+    "goldPerEnemy": 5,
+    "eliteGold": 45,
+    "bossGold": 60,
+    "clearMaxHpBonus": 8,
+    "clearHealPercent": 30
+  },
+  {
+    "id": "act_2",
+    "name": "The Ember Reach",
+    "floorCount": 9,
+    "mapBackground": "dirt",
+    "mapTint": "6b5138",
+    "combatBackground": "demonic",
+    "combatTint": "b57a58",
+    "normalEncounters": [
+      ["ember_wisp", "ember_wisp"],
+      ["slag_brute"],
+      ["cinder_cultist"],
+      ["ash_stalker"],
+      ["ember_wisp", "ash_stalker"],
+      ["cinder_cultist", "ember_wisp"],
+      ["ash_stalker", "ash_stalker"],
+      ["slag_brute", "ember_wisp"],
+      ["cinder_cultist", "cinder_cultist"]
+    ],
+    "eliteEncounters": [
+      ["molten_sentinel"],
+      ["pyre_warden"],
+      ["pyre_warden", "ember_wisp"]
+    ],
+    "bossIds": ["emberlord_vashk", "the_slag_maw"],
+    "normalGoldBase": 28,
+    "goldPerEnemy": 7,
+    "eliteGold": 60,
+    "bossGold": 80,
+    "clearMaxHpBonus": 8,
+    "clearHealPercent": 30
+  },
+  {
+    "id": "act_3",
+    "name": "The Hollow Throne",
+    "floorCount": 10,
+    "mapBackground": "etched",
+    "mapTint": "9ea0b8",
+    "combatBackground": "cobble",
+    "combatTint": "7a6e78",
+    "normalEncounters": [
+      ["hollow_shade", "hollow_shade"],
+      ["bone_choir"],
+      ["throne_sentry"],
+      ["void_leech"],
+      ["hollow_shade", "void_leech"],
+      ["bone_choir", "hollow_shade"],
+      ["throne_sentry", "void_leech"],
+      ["void_leech", "void_leech"],
+      ["bone_choir", "throne_sentry"]
+    ],
+    "eliteEncounters": [
+      ["crown_reaver"],
+      ["silent_judge"],
+      ["crown_reaver", "hollow_shade"]
+    ],
+    "bossIds": ["the_hollow_throne", "nameless_regent"],
+    "normalGoldBase": 34,
+    "goldPerEnemy": 9,
+    "eliteGold": 75,
+    "bossGold": 0,
+    "clearMaxHpBonus": 0,
+    "clearHealPercent": 0
+  }
+]

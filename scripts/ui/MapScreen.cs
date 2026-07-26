@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Hollowdeck.Combat;
+using Hollowdeck.Data;
 using Hollowdeck.Map;
 using Hollowdeck.Run;
 
@@ -15,9 +16,16 @@ public partial class MapScreen : Control
 {
     private const float OriginX = 60f;
     private const float OriginY = 60f;
-    private const float FloorSpacing = 130f;
+    private const float MaxFloorSpacing = 130f;
     private const float ColumnSpacing = 80f;
     private const float NodeSize = 56f;
+
+    // Right-hand margin the rightmost (boss) node must stay inside. Floor
+    // spacing is derived from it rather than fixed at MaxFloorSpacing: act 3's
+    // 10 floors at 130px each would be 1300px wide against a 1152px design
+    // width, so the boss node would sit off-screen. Shorter acts still get the
+    // roomier 130.
+    private const float RightMargin = 90f;
 
     private Control _nodeButtons = null!;
     private Label _goldLabel = null!;
@@ -27,7 +35,8 @@ public partial class MapScreen : Control
 
     public override void _Ready()
     {
-        ScreenBackground.Attach(this, "black_cobalt", new Color(0.85f, 0.85f, 0.9f));
+        var act = RunState.CurrentAct;
+        ScreenBackground.Attach(this, act.MapBackground, Color.FromString(act.MapTint, Colors.White));
         DeckViewButtons.Attach(this);
         _nodeButtons = GetNode<Control>("NodeButtons");
         _goldLabel = GetNode<Label>("GoldLabel");
@@ -35,6 +44,7 @@ public partial class MapScreen : Control
         _relicsRow = GetNode<HBoxContainer>("RelicsRow");
         GetNode<Button>("BackButton").Pressed += OnBackPressed;
 
+        BuildActTitle(act);
         BuildLayout();
         BuildButtons();
         RefreshInfo();
@@ -77,15 +87,46 @@ public partial class MapScreen : Control
         DrawPolyline(points, color, highlighted ? 3f : 1.5f, antialiased: true);
     }
 
+    // Which act this is, by name - the only on-screen signal that clearing a
+    // boss moved the run somewhere new (the map itself regenerates, but a fresh
+    // graph on its own reads as "same place, different route"). Built in code
+    // rather than added to MapScreen.tscn for the same reason ScreenBackground
+    // and DeckViewButtons are: one place to change, no scene edit.
+    private void BuildActTitle(ActDefinition act)
+    {
+        const float width = 552f;
+        var label = new Label
+        {
+            Text = $"Act {RunState.ActIndex + 1} — {act.Name}",
+            Position = new Vector2((1152f - width) / 2f, 12f),
+            CustomMinimumSize = new Vector2(width, 0),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            MouseFilter = MouseFilterEnum.Ignore,
+            ThemeTypeVariation = "CombatDisplayLabel",
+        };
+        label.AddThemeFontSizeOverride("font_size", 24);
+        label.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
+        AddChild(label);
+    }
+
     private void BuildLayout()
     {
+        // Derived from the longest act that has to fit, not a constant - see
+        // RightMargin. GroupBy's key is the floor index, so Max() + 1 is the
+        // floor count of whatever act is being rendered.
+        int floorCount = RunState.MapNodes.Count == 0 ? 1 : RunState.MapNodes.Max(n => n.Floor) + 1;
+        float available = 1152f - OriginX - NodeSize - RightMargin;
+        float floorSpacing = floorCount <= 1
+            ? MaxFloorSpacing
+            : Mathf.Min(MaxFloorSpacing, available / (floorCount - 1));
+
         foreach (var floor in RunState.MapNodes.GroupBy(n => n.Floor))
         {
             var nodes = floor.OrderBy(n => n.Column).ToList();
             for (int i = 0; i < nodes.Count; i++)
             {
                 var center = new Vector2(
-                    OriginX + floor.Key * FloorSpacing + NodeSize / 2f,
+                    OriginX + floor.Key * floorSpacing + NodeSize / 2f,
                     OriginY + i * ColumnSpacing + NodeSize / 2f);
                 _nodeCenters[nodes[i].Id] = center;
             }
@@ -243,8 +284,15 @@ public partial class MapScreen : Control
         // Floor is 0-based in MapGenerator, so climbing to floor 3 means 4
         // rooms entered. Counted on entering the node rather than on
         // finishing it, matching StS - dying on a floor still counts it.
-        RunState.Stats.MaxFloorReached = Mathf.Max(RunState.Stats.MaxFloorReached, node.Floor + 1);
+        // Floors accumulate across acts (each act renumbers from 0) - see
+        // RunStats.FloorsInPreviousActs.
+        RunState.Stats.MaxFloorReached = Mathf.Max(
+            RunState.Stats.MaxFloorReached, RunState.Stats.FloorsInPreviousActs + node.Floor + 1);
         if (firstVisit && node.Type == MapNodeType.Event) RunState.Stats.EventRoomsVisited++;
+
+        // Rewards come from the act's own data, so later acts pay for their
+        // pricier shops without a magic number per node type here.
+        var act = RunState.CurrentAct;
 
         switch (node.Type)
         {
@@ -252,21 +300,21 @@ public partial class MapScreen : Control
                 CombatContext.EnemyDefinitionIds = node.EnemyIds;
                 CombatContext.IsElite = false;
                 CombatContext.IsBoss = false;
-                CombatContext.GoldReward = 20 + node.EnemyIds.Count * 5;
+                CombatContext.GoldReward = act.NormalGoldBase + node.EnemyIds.Count * act.GoldPerEnemy;
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Combat);
                 break;
             case MapNodeType.Elite:
                 CombatContext.EnemyDefinitionIds = node.EnemyIds;
                 CombatContext.IsElite = true;
                 CombatContext.IsBoss = false;
-                CombatContext.GoldReward = 45;
+                CombatContext.GoldReward = act.EliteGold;
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Combat);
                 break;
             case MapNodeType.Boss:
                 CombatContext.EnemyDefinitionIds = node.EnemyIds;
                 CombatContext.IsElite = false;
                 CombatContext.IsBoss = true;
-                CombatContext.GoldReward = 0;
+                CombatContext.GoldReward = act.BossGold;
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Combat);
                 break;
             case MapNodeType.Rest:

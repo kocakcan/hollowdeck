@@ -21,12 +21,14 @@ public partial class HandLayoutSmokeTest : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
         TestSpacingNeverOverflowsForAnyHandSize();
         TestRegressionAtConfirmedOverflowCases();
         TestCombatScreenLayoutStaysInBoundsAtFifteenCards();
+        TestEveryCardDescriptionFitsWithoutTruncation();
 
         GD.Print($"HandLayoutSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -132,5 +134,39 @@ public partial class HandLayoutSmokeTest : Node
         Check("fifteen_card_hand_stays_within_hand_area_in_real_scene", allInBounds, worst);
 
         instance.QueueFree();
+    }
+
+    // Descriptions are generated, so their length isn't something an author
+    // controls per card - and CardView's last resort when text won't fit its
+    // 200x160 box even at the smallest font is to cut it and append an
+    // ellipsis, which reads as a rendering glitch and hides mechanics from the
+    // player. Adding the "to ALL enemies" suffix made the longest ones
+    // materially longer (Thunderclap takes it twice), so every card - upgraded
+    // too, since upgrades push amounts to two digits - is checked against the
+    // real font and box, not eyeballed in a screenshot.
+    private void TestEveryCardDescriptionFitsWithoutTruncation()
+    {
+        var cardView = GD.Load<PackedScene>("res://scenes/CardView.tscn").Instantiate<CardView>();
+        AddChild(cardView);
+        cardView.Interactive = false;
+
+        var descriptionLabel = (RichTextLabel)typeof(CardView)
+            .GetField("_descriptionLabel", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(cardView)!;
+
+        var truncated = new List<string>();
+        foreach (var card in CardDatabase.All)
+        {
+            foreach (var variant in new[] { card, CardUpgrade.Apply(card) })
+            {
+                cardView.SetCardInstance(new CardInstance(variant));
+                if (descriptionLabel.Text.Contains('…')) truncated.Add(variant.Id);
+            }
+        }
+
+        Check("every_card_description_fits_without_truncation", truncated.Count == 0,
+            $"truncated: {string.Join(", ", truncated)}");
+
+        cardView.QueueFree();
     }
 }

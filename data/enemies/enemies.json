@@ -167,5 +167,692 @@
         ]
       }
     ]
+  },
+  {
+    "id": "gaol_warden",
+    "name": "The Gaol Warden",
+    "maxHp": 148,
+    "aiType": "phase_threshold",
+    "loopFromIndex": 0,
+    "enrageHpPercent": 50,
+    "moves": [
+      {
+        "moveId": "chain_lash",
+        "intent": { "type": "Attack", "displayAmount": 11 },
+        "effects": [
+          { "action": "deal_damage", "amount": 11, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "iron_will",
+        "intent": { "type": "Defend", "displayAmount": 12 },
+        "effects": [
+          { "action": "gain_block", "amount": 12, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "warden_strike",
+        "intent": { "type": "Attack", "displayAmount": 13 },
+        "effects": [
+          { "action": "deal_damage", "amount": 13, "scope": "Target" }
+        ]
+      }
+    ],
+    "enrageMoves": [
+      {
+        "moveId": "brutalize",
+        "intent": { "type": "Attack", "displayAmount": 17 },
+        "effects": [
+          { "action": "deal_damage", "amount": 17, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "shackle",
+        "intent": { "type": "Attack", "displayAmount": 10 },
+        "effects": [
+          { "action": "deal_damage", "amount": 10, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "crush",
+        "intent": { "type": "Attack", "displayAmount": 15 },
+        "effects": [
+          { "action": "deal_damage", "amount": 15, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "rot_hound",
+    "name": "Rot Hound",
+    "maxHp": 36,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "bite",
+        "intent": { "type": "Attack", "displayAmount": 7 },
+        "effects": [
+          { "action": "deal_damage", "amount": 7, "scope": "Target" }
+        ],
+        "weight": 60
+      },
+      {
+        "moveId": "rend",
+        "intent": { "type": "Attack", "displayAmount": 5 },
+        "effects": [
+          { "action": "deal_damage", "amount": 5, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+        ],
+        "weight": 40
+      }
+    ]
+  },
+  {
+    "id": "ward_acolyte",
+    "name": "Ward Acolyte",
+    "maxHp": 40,
+    "aiType": "sequential",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "raise_ward",
+        "intent": { "type": "Defend", "displayAmount": 8 },
+        "effects": [
+          { "action": "gain_block", "amount": 8, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "smite",
+        "intent": { "type": "Attack", "displayAmount": 7 },
+        "effects": [
+          { "action": "deal_damage", "amount": 7, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "hex",
+        "intent": { "type": "Attack", "displayAmount": 4 },
+        "effects": [
+          { "action": "deal_damage", "amount": 4, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ember_wisp",
+    "name": "Ember Wisp",
+    "maxHp": 55,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "scorch",
+        "intent": { "type": "Attack", "displayAmount": 10 },
+        "effects": [
+          { "action": "deal_damage", "amount": 10, "scope": "Target" }
+        ],
+        "weight": 55
+      },
+      {
+        "moveId": "flare",
+        "intent": { "type": "Attack", "displayAmount": 6 },
+        "effects": [
+          { "action": "deal_damage", "amount": 6, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+        ],
+        "weight": 45
+      }
+    ]
+  },
+  {
+    "id": "slag_brute",
+    "name": "Slag Brute",
+    "maxHp": 74,
+    "aiType": "sequential",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "harden",
+        "intent": { "type": "Defend", "displayAmount": 12 },
+        "effects": [
+          { "action": "gain_block", "amount": 12, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "maul",
+        "intent": { "type": "Attack", "displayAmount": 13 },
+        "effects": [
+          { "action": "deal_damage", "amount": 13, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "slag_sweep",
+        "intent": { "type": "Attack", "displayAmount": 9 },
+        "effects": [
+          { "action": "deal_damage", "amount": 9, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "cinder_cultist",
+    "name": "Cinder Cultist",
+    "maxHp": 58,
+    "aiType": "sequential",
+    "loopFromIndex": 1,
+    "moves": [
+      {
+        "moveId": "invoke_flame",
+        "intent": { "type": "Buff", "displayAmount": 3 },
+        "effects": [
+          { "action": "apply_status", "status": "Strength", "amount": 3, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "ember_bolt",
+        "intent": { "type": "Attack", "displayAmount": 9 },
+        "effects": [
+          { "action": "deal_damage", "amount": 9, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ash_stalker",
+    "name": "Ash Stalker",
+    "maxHp": 60,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "shred",
+        "intent": { "type": "Attack", "displayAmount": 11 },
+        "effects": [
+          { "action": "deal_damage", "amount": 11, "scope": "Target" }
+        ],
+        "weight": 50
+      },
+      {
+        "moveId": "choke_dust",
+        "intent": { "type": "Attack", "displayAmount": 7 },
+        "effects": [
+          { "action": "deal_damage", "amount": 7, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+        ],
+        "weight": 50
+      }
+    ]
+  },
+  {
+    "id": "molten_sentinel",
+    "name": "Molten Sentinel",
+    "maxHp": 122,
+    "aiType": "sequential",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "molten_guard",
+        "intent": { "type": "Defend", "displayAmount": 14 },
+        "effects": [
+          { "action": "gain_block", "amount": 14, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "forge_hammer",
+        "intent": { "type": "Attack", "displayAmount": 15 },
+        "effects": [
+          { "action": "deal_damage", "amount": 15, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "eruption",
+        "intent": { "type": "Attack", "displayAmount": 11 },
+        "effects": [
+          { "action": "deal_damage", "amount": 11, "scope": "Target" },
+          { "action": "apply_status", "status": "Poison", "amount": 3, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "pyre_warden",
+    "name": "Pyre Warden",
+    "maxHp": 112,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "pyre_lash",
+        "intent": { "type": "Attack", "displayAmount": 13 },
+        "effects": [
+          { "action": "deal_damage", "amount": 13, "scope": "Target" }
+        ],
+        "weight": 40
+      },
+      {
+        "moveId": "immolate",
+        "intent": { "type": "Attack", "displayAmount": 9 },
+        "effects": [
+          { "action": "deal_damage", "amount": 9, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
+        ],
+        "weight": 35
+      },
+      {
+        "moveId": "stoke_flames",
+        "intent": { "type": "Buff", "displayAmount": 3 },
+        "effects": [
+          { "action": "apply_status", "status": "Strength", "amount": 3, "scope": "Self" }
+        ],
+        "weight": 25
+      }
+    ]
+  },
+  {
+    "id": "emberlord_vashk",
+    "name": "Emberlord Vashk",
+    "maxHp": 215,
+    "aiType": "phase_threshold",
+    "loopFromIndex": 0,
+    "enrageHpPercent": 50,
+    "moves": [
+      {
+        "moveId": "flame_arc",
+        "intent": { "type": "Attack", "displayAmount": 14 },
+        "effects": [
+          { "action": "deal_damage", "amount": 14, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "ember_shield",
+        "intent": { "type": "Defend", "displayAmount": 16 },
+        "effects": [
+          { "action": "gain_block", "amount": 16, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "cinder_burst",
+        "intent": { "type": "Attack", "displayAmount": 11 },
+        "effects": [
+          { "action": "deal_damage", "amount": 11, "scope": "Target" },
+          { "action": "apply_status", "status": "Poison", "amount": 3, "scope": "Target" }
+        ]
+      }
+    ],
+    "enrageMoves": [
+      {
+        "moveId": "firestorm",
+        "intent": { "type": "Attack", "displayAmount": 21 },
+        "effects": [
+          { "action": "deal_damage", "amount": 21, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "molten_grasp",
+        "intent": { "type": "Attack", "displayAmount": 15 },
+        "effects": [
+          { "action": "deal_damage", "amount": 15, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "ashen_roar",
+        "intent": { "type": "Buff", "displayAmount": 4 },
+        "effects": [
+          { "action": "apply_status", "status": "Strength", "amount": 4, "scope": "Self" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "the_slag_maw",
+    "name": "The Slag Maw",
+    "maxHp": 222,
+    "aiType": "phase_threshold",
+    "loopFromIndex": 0,
+    "enrageHpPercent": 45,
+    "moves": [
+      {
+        "moveId": "swallow",
+        "intent": { "type": "Attack", "displayAmount": 16 },
+        "effects": [
+          { "action": "deal_damage", "amount": 16, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "magma_shell",
+        "intent": { "type": "Defend", "displayAmount": 18 },
+        "effects": [
+          { "action": "gain_block", "amount": 18, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "spit_slag",
+        "intent": { "type": "Attack", "displayAmount": 12 },
+        "effects": [
+          { "action": "deal_damage", "amount": 12, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
+        ]
+      }
+    ],
+    "enrageMoves": [
+      {
+        "moveId": "molten_flood",
+        "intent": { "type": "Attack", "displayAmount": 22 },
+        "effects": [
+          { "action": "deal_damage", "amount": 22, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "corrosive_tide",
+        "intent": { "type": "Attack", "displayAmount": 13 },
+        "effects": [
+          { "action": "deal_damage", "amount": 13, "scope": "Target" },
+          { "action": "apply_status", "status": "Poison", "amount": 5, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "gorge",
+        "intent": { "type": "Attack", "displayAmount": 18 },
+        "effects": [
+          { "action": "deal_damage", "amount": 18, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "hollow_shade",
+    "name": "Hollow Shade",
+    "maxHp": 82,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "drain",
+        "intent": { "type": "Attack", "displayAmount": 14 },
+        "effects": [
+          { "action": "deal_damage", "amount": 14, "scope": "Target" }
+        ],
+        "weight": 55
+      },
+      {
+        "moveId": "wither",
+        "intent": { "type": "Attack", "displayAmount": 10 },
+        "effects": [
+          { "action": "deal_damage", "amount": 10, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+        ],
+        "weight": 45
+      }
+    ]
+  },
+  {
+    "id": "bone_choir",
+    "name": "Bone Choir",
+    "maxHp": 86,
+    "aiType": "sequential",
+    "loopFromIndex": 1,
+    "moves": [
+      {
+        "moveId": "dirge",
+        "intent": { "type": "Buff", "displayAmount": 3 },
+        "effects": [
+          { "action": "apply_status", "status": "Strength", "amount": 3, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "discord",
+        "intent": { "type": "Attack", "displayAmount": 13 },
+        "effects": [
+          { "action": "deal_damage", "amount": 13, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "requiem",
+        "intent": { "type": "Attack", "displayAmount": 9 },
+        "effects": [
+          { "action": "deal_damage", "amount": 9, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "throne_sentry",
+    "name": "Throne Sentry",
+    "maxHp": 98,
+    "aiType": "sequential",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "bulwark",
+        "intent": { "type": "Defend", "displayAmount": 16 },
+        "effects": [
+          { "action": "gain_block", "amount": 16, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "halberd_sweep",
+        "intent": { "type": "Attack", "displayAmount": 17 },
+        "effects": [
+          { "action": "deal_damage", "amount": 17, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "pin_down",
+        "intent": { "type": "Attack", "displayAmount": 12 },
+        "effects": [
+          { "action": "deal_damage", "amount": 12, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "void_leech",
+    "name": "Void Leech",
+    "maxHp": 88,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "siphon",
+        "intent": { "type": "Attack", "displayAmount": 15 },
+        "effects": [
+          { "action": "deal_damage", "amount": 15, "scope": "Target" }
+        ],
+        "weight": 50
+      },
+      {
+        "moveId": "corrupt",
+        "intent": { "type": "Attack", "displayAmount": 8 },
+        "effects": [
+          { "action": "deal_damage", "amount": 8, "scope": "Target" },
+          { "action": "apply_status", "status": "Poison", "amount": 4, "scope": "Target" }
+        ],
+        "weight": 50
+      }
+    ]
+  },
+  {
+    "id": "crown_reaver",
+    "name": "Crown Reaver",
+    "maxHp": 162,
+    "aiType": "sequential",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "reave",
+        "intent": { "type": "Attack", "displayAmount": 19 },
+        "effects": [
+          { "action": "deal_damage", "amount": 19, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "crown_guard",
+        "intent": { "type": "Defend", "displayAmount": 18 },
+        "effects": [
+          { "action": "gain_block", "amount": 18, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "sunder",
+        "intent": { "type": "Attack", "displayAmount": 14 },
+        "effects": [
+          { "action": "deal_damage", "amount": 14, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "silent_judge",
+    "name": "The Silent Judge",
+    "maxHp": 152,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "verdict",
+        "intent": { "type": "Attack", "displayAmount": 18 },
+        "effects": [
+          { "action": "deal_damage", "amount": 18, "scope": "Target" }
+        ],
+        "weight": 40
+      },
+      {
+        "moveId": "silence",
+        "intent": { "type": "Attack", "displayAmount": 12 },
+        "effects": [
+          { "action": "deal_damage", "amount": 12, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
+        ],
+        "weight": 30
+      },
+      {
+        "moveId": "condemn",
+        "intent": { "type": "Attack", "displayAmount": 10 },
+        "effects": [
+          { "action": "deal_damage", "amount": 10, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+        ],
+        "weight": 30
+      }
+    ]
+  },
+  {
+    "id": "the_hollow_throne",
+    "name": "The Hollow Throne",
+    "maxHp": 290,
+    "aiType": "phase_threshold",
+    "loopFromIndex": 0,
+    "enrageHpPercent": 50,
+    "moves": [
+      {
+        "moveId": "throne_edict",
+        "intent": { "type": "Attack", "displayAmount": 18 },
+        "effects": [
+          { "action": "deal_damage", "amount": 18, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "regal_ward",
+        "intent": { "type": "Defend", "displayAmount": 20 },
+        "effects": [
+          { "action": "gain_block", "amount": 20, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "sceptre_fall",
+        "intent": { "type": "Attack", "displayAmount": 20 },
+        "effects": [
+          { "action": "deal_damage", "amount": 20, "scope": "Target" }
+        ]
+      }
+    ],
+    "enrageMoves": [
+      {
+        "moveId": "hollow_judgment",
+        "intent": { "type": "Attack", "displayAmount": 26 },
+        "effects": [
+          { "action": "deal_damage", "amount": 26, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "unmaking",
+        "intent": { "type": "Attack", "displayAmount": 16 },
+        "effects": [
+          { "action": "deal_damage", "amount": 16, "scope": "Target" },
+          { "action": "apply_status", "status": "Poison", "amount": 5, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "dominion",
+        "intent": { "type": "Buff", "displayAmount": 5 },
+        "effects": [
+          { "action": "apply_status", "status": "Strength", "amount": 5, "scope": "Self" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "nameless_regent",
+    "name": "The Nameless Regent",
+    "maxHp": 284,
+    "aiType": "phase_threshold",
+    "loopFromIndex": 0,
+    "enrageHpPercent": 40,
+    "moves": [
+      {
+        "moveId": "regents_toll",
+        "intent": { "type": "Attack", "displayAmount": 19 },
+        "effects": [
+          { "action": "deal_damage", "amount": 19, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "shroud_veil",
+        "intent": { "type": "Defend", "displayAmount": 20 },
+        "effects": [
+          { "action": "gain_block", "amount": 20, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "unname",
+        "intent": { "type": "Attack", "displayAmount": 14 },
+        "effects": [
+          { "action": "deal_damage", "amount": 14, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
+        ]
+      }
+    ],
+    "enrageMoves": [
+      {
+        "moveId": "oblivion",
+        "intent": { "type": "Attack", "displayAmount": 27 },
+        "effects": [
+          { "action": "deal_damage", "amount": 27, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "withering_gaze",
+        "intent": { "type": "Attack", "displayAmount": 17 },
+        "effects": [
+          { "action": "deal_damage", "amount": 17, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "ascend",
+        "intent": { "type": "Buff", "displayAmount": 5 },
+        "effects": [
+          { "action": "apply_status", "status": "Strength", "amount": 5, "scope": "Self" }
+        ]
+      }
+    ]
   }
 ]

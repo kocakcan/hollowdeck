@@ -21,6 +21,7 @@ public partial class EffectSmokeTest : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
@@ -32,6 +33,8 @@ public partial class EffectSmokeTest : Node
         TestHeal();
         TestGainEnergy();
         TestEffectDescriptionFormatter();
+        TestAllEnemiesWording();
+        TestLiveTargetDamage();
 
         GD.Print($"EffectSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -186,5 +189,87 @@ public partial class EffectSmokeTest : Node
         var flex = CardDatabase.Get("flex");
         var flexText = EffectDescriptionFormatter.Describe(flex.Effects);
         Check("description_self_strength_reads_as_gain", flexText == "Gain 2 Strength.", $"text='{flexText}'");
+
+        var weakPlayer = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 50 };
+        weakPlayer.AddStatus(StatusType.Weak, 1);
+        var weakened = EffectDescriptionFormatter.DescribeDetailed(strike.Effects, new DescribeContext(weakPlayer));
+        Check("description_reflects_live_weak", weakened.Text.Contains("Deal 4 damage"),
+            $"text='{weakened.Text}' (expected 6 base * 0.75 = 4)");
+        Check("description_reports_weakened_number", weakened.Weakened.Contains(4) && weakened.Buffed.Count == 0,
+            $"buffed=[{string.Join(",", weakened.Buffed)}] weakened=[{string.Join(",", weakened.Weakened)}]");
+
+        var strengthDetailed = EffectDescriptionFormatter.DescribeDetailed(strike.Effects, new DescribeContext(strongPlayer));
+        Check("description_reports_buffed_number", strengthDetailed.Buffed.Contains(8) && strengthDetailed.Weakened.Count == 0,
+            $"buffed=[{string.Join(",", strengthDetailed.Buffed)}] weakened=[{string.Join(",", strengthDetailed.Weakened)}]");
     }
+
+    // The reported bug: an AllEnemies card's text was identical to a
+    // single-target one's, so Cleave/Whirlwind never said they hit everything.
+    private void TestAllEnemiesWording()
+    {
+        var cleave = CardDatabase.Get("cleave");
+        var cleaveText = EffectDescriptionFormatter.Describe(cleave.Effects, new DescribeContext(TargetType: cleave.Target));
+        Check("description_all_enemies_damage_says_so", cleaveText.Contains("Deal 8 damage to ALL enemies"),
+            $"text='{cleaveText}'");
+
+        var toxicCloud = CardDatabase.Get("toxic_cloud");
+        var cloudText = EffectDescriptionFormatter.Describe(toxicCloud.Effects, new DescribeContext(TargetType: toxicCloud.Target));
+        Check("description_all_enemies_status_says_so", cloudText.Contains("Apply 3 Poison to ALL enemies"),
+            $"text='{cloudText}'");
+
+        // A single-target card must NOT pick up the suffix, and neither must
+        // the self-scoped half of a mixed card (Iron Wave's block).
+        var ironWave = CardDatabase.Get("iron_wave");
+        var ironWaveText = EffectDescriptionFormatter.Describe(ironWave.Effects, new DescribeContext(TargetType: ironWave.Target));
+        Check("description_single_target_has_no_suffix", !ironWaveText.Contains("ALL enemies"),
+            $"text='{ironWaveText}'");
+
+        var thunderclap = CardDatabase.Get("thunderclap");
+        var clapText = EffectDescriptionFormatter.Describe(thunderclap.Effects, new DescribeContext(TargetType: thunderclap.Target));
+        Check("description_all_enemies_self_scope_unaffected",
+            clapText.Contains("Deal 4 damage to ALL enemies") && clapText.Contains("Apply 1 Vulnerable to ALL enemies"),
+            $"text='{clapText}'");
+    }
+
+    // Damage against the enemy actually being targeted, rather than the
+    // hypothetical "(~N vs Vulnerable)" parenthetical.
+    private void TestLiveTargetDamage()
+    {
+        var strike = CardDatabase.Get("strike");
+        var plain = MakeEnemy();
+        var vulnerable = MakeEnemy();
+        vulnerable.AddStatus(StatusType.Vulnerable, 2);
+
+        var vsPlain = EffectDescriptionFormatter.Describe(strike.Effects,
+            new DescribeContext(Targets: new List<Combatant> { plain }));
+        Check("description_live_plain_target_is_base", vsPlain == "Deal 6 damage.", $"text='{vsPlain}'");
+
+        var vsVulnerable = EffectDescriptionFormatter.DescribeDetailed(strike.Effects,
+            new DescribeContext(Targets: new List<Combatant> { vulnerable }));
+        Check("description_live_vulnerable_target_shows_real_number",
+            vsVulnerable.Text == "Deal 9 damage." && vsVulnerable.Buffed.Contains(9), $"text='{vsVulnerable.Text}'");
+
+        // Mixed vulnerability across an AllEnemies card can't be one number.
+        var cleave = CardDatabase.Get("cleave");
+        var mixed = EffectDescriptionFormatter.Describe(cleave.Effects,
+            new DescribeContext(null, cleave.Target, new List<Combatant> { plain, vulnerable }));
+        Check("description_mixed_targets_show_a_range", mixed == "Deal 8-12 damage to ALL enemies.",
+            $"text='{mixed}'");
+
+        // One hint for the whole card, not one per deal_damage effect -
+        // Twin Strike has two.
+        var twinStrike = CardDatabase.Get("twin_strike");
+        var twinText = EffectDescriptionFormatter.Describe(twinStrike.Effects);
+        Check("description_vulnerable_hint_appears_once",
+            twinText == "Deal 4 damage. Deal 4 damage. (~12 vs Vulnerable)", $"text='{twinText}'");
+    }
+
+    private static EnemyCombatant MakeEnemy() => new()
+    {
+        Name = "Dummy",
+        MaxHp = 40,
+        CurrentHp = 40,
+        Definition = EnemyDatabase.Get("cultist"),
+        IntentPicker = new SequentialLoopingIntentPicker(),
+    };
 }

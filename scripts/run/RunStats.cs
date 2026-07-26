@@ -20,7 +20,13 @@ public class RunStats
     public int PerfectElites;
     public int PerfectBosses;
 
+    // MaxFloorReached is the deepest floor reached across the whole run, not
+    // within the current act: each act's floors are numbered from 0 again, so
+    // FloorsInPreviousActs (bumped by RunState.AdvanceAct) is added to a node's
+    // floor before the max is taken. Without it, entering act 2 would report
+    // less progress than finishing act 1.
     public int MaxFloorReached;
+    public int FloorsInPreviousActs;
     public int EventRoomsVisited;
 
     // One-shot achievements: once earned anywhere in the run they stay

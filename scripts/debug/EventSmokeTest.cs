@@ -23,6 +23,7 @@ public partial class EventSmokeTest : Node
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         EventDatabase.LoadAll();
@@ -123,7 +124,7 @@ public partial class EventSmokeTest : Node
         bool anyEventFound = false;
         for (int seed = 0; seed < 25 && !anyEventFound; seed++)
         {
-            var nodes = MapGenerator.Generate(new Random(seed));
+            var nodes = MapGenerator.Generate(new Random(seed), ActDatabase.At(0));
             if (nodes.Any(n => n.Type == MapNodeType.Event)) anyEventFound = true;
         }
         Check("map_generator_produces_event_nodes_across_seeds", anyEventFound, "no Event node found in 25 seeds");
