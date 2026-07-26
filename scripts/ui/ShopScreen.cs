@@ -17,6 +17,12 @@ public partial class ShopScreen : Control
     private VBoxContainer _offersList = null!;
     private HBoxContainer _cardOffersRow = null!;
 
+    // Every buy button on the screen with its price, so RefreshOffers can
+    // grey out what the player can no longer afford after each purchase.
+    // Previously a too-expensive click just silently returned, which read as
+    // "this item is broken" rather than "you don't have the gold".
+    private readonly List<(Button Button, int Price)> _offerButtons = new();
+
     public override void _Ready()
     {
         ScreenBackground.Attach(this, "cobble", new Color(0.7f, 0.7f, 0.75f));
@@ -37,7 +43,7 @@ public partial class ShopScreen : Control
         // conflated into a single badge. Relics/potions have no CardView
         // equivalent, so they stay on the generic offer-row treatment.
         var cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
-        foreach (var card in Sample(CardDatabase.All.ToList(), 4, rng))
+        foreach (var card in Sample(MetaProgressionManager.Instance.UnlockedCards().ToList(), 4, rng))
         {
             AddCardOffer(card, cardScene);
         }
@@ -64,7 +70,7 @@ public partial class ShopScreen : Control
             }, ArtAssets.PotionIcon(potion.Id));
         }
 
-        RefreshGoldLabel();
+        RefreshOffers();
     }
 
     private static List<T> Sample<T>(List<T> pool, int count, System.Random rng)
@@ -90,14 +96,15 @@ public partial class ShopScreen : Control
 
         var buyButton = new Button { Text = $"Buy ({CardPrice}g)" };
         column.AddChild(buyButton);
+        _offerButtons.Add((buyButton, CardPrice));
         buyButton.Pressed += () =>
         {
             if (RunState.Gold < CardPrice) return;
             AudioManager.Instance?.PlaySfx("reward_pickup");
             RunState.Deck.Add(card);
             RunState.Gold -= CardPrice;
-            buyButton.Disabled = true;
-            RefreshGoldLabel();
+            MarkSold(buyButton);
+            RefreshOffers();
         };
     }
 
@@ -122,6 +129,7 @@ public partial class ShopScreen : Control
         row.AddChild(button);
         row.AddChild(descriptionLabel);
         _offersList.AddChild(row);
+        _offerButtons.Add((button, price));
 
         button.Pressed += () =>
         {
@@ -129,12 +137,29 @@ public partial class ShopScreen : Control
             if (!onBuy()) return;
             AudioManager.Instance?.PlaySfx("reward_pickup");
             RunState.Gold -= price;
-            button.Disabled = true;
-            RefreshGoldLabel();
+            MarkSold(button);
+            RefreshOffers();
         };
     }
 
-    private void RefreshGoldLabel() => _goldLabel.Text = $"Gold: {RunState.Gold}";
+    // A sold offer drops out of _offerButtons entirely so RefreshOffers can
+    // never re-enable it when gold later goes back up (it can't here, but
+    // that's a trap worth closing rather than relying on).
+    private void MarkSold(Button button)
+    {
+        button.Disabled = true;
+        button.Text = "Sold";
+        _offerButtons.RemoveAll(o => o.Button == button);
+    }
+
+    private void RefreshOffers()
+    {
+        _goldLabel.Text = $"Gold: {RunState.Gold}";
+        foreach (var (button, price) in _offerButtons)
+        {
+            button.Disabled = RunState.Gold < price;
+        }
+    }
 
     private void OnLeavePressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.Map);
 }

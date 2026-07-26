@@ -13,7 +13,10 @@ public class PotionSaveEntry
 // cards.json/relics.json mid-dev must not corrupt an existing run save.
 public class RunSaveData
 {
-    public int SaveVersion { get; set; } = 1;
+    // v2 added Stats. Older saves simply deserialize it as a fresh zeroed
+    // RunStats (tolerant deserialization), so a run resumed across the
+    // upgrade just scores from where it was reloaded rather than failing.
+    public int SaveVersion { get; set; } = 2;
     public int RunSeed { get; set; }
     public int Gold { get; set; }
     public int PlayerMaxHp { get; set; }
@@ -24,4 +27,5 @@ public class RunSaveData
     public List<MapNode> MapNodes { get; set; } = new();
     public string CurrentNodeId { get; set; } = "";
     public List<string> VisitedNodeIds { get; set; } = new();
+    public RunStats Stats { get; set; } = new();
 }
