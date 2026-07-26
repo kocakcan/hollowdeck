@@ -16,7 +16,7 @@ See `README.md` for the developer orientation (layout, how to run, how to add co
 
 ## Stack
 
-**Godot 4.7 with C#** (`Godot.NET.Sdk/4.7.1`, `net8.0`). The Mono/.NET build of the Godot editor
+**Godot 4.7 with C#**. The Mono/.NET build of the Godot editor
 is required. Scenes/nodes map directly onto the genre's screens (map, combat, shop, reward);
 `Control` nodes with anchors/containers handle card layout/hover/drag; built-in
 `Tween`/`AnimationPlayer` handle animation ("juice") without third-party libraries.
@@ -90,24 +90,7 @@ and cosmetic jitter can never desync a deterministic run.
 
 ## Current state
 
-The originally planned phases are all built, not stubbed: the data-driven effect system, the
-`CombatManager` state machine, the branching map generator, relics/potions/gold, the
-meta-progression save, and a content-and-polish pass. Later passes added mid-run save/resume,
-Event nodes, turn pacing, a themed art/typography pass, and a fully procedural audio layer.
-
-- 11 screens, all wired to real data: MainMenu, Map, Combat, Event, Rest, Shop, Treasure, Reward,
-  RunEnd, MetaProgression, Settings.
-- Content: **three acts** (`data/acts/acts.json`), 30 cards (Attack/Skill), 22 relics, 12
-  potions, 24 enemies (12 normal, 6 elite, 6 boss), 5 events. Each act has its own encounter
-  pools, backdrops and gold scaling plus a **two-boss pool** the run seed picks from, so which
-  boss ends an act varies per run. Enemy pools don't overlap between acts (asserted in
-  `ActSmokeTest`).
-- Effects: `deal_damage`, `gain_block`, `apply_status`, `draw_cards`, `heal`, `gain_energy`,
-  `lose_hp`. Statuses: Vulnerable, Weak, Strength, Poison.
-- Meta-progression is a **score-driven unlock track** (`RunScore` grades a finished run; the
-  track's 14 rungs unlock 10 cards and 4 relics). An earlier shard *shop* was removed — don't
-  reintroduce shard-purchase language.
-- Audio is synthesized in-engine at runtime, no sampled assets.
+An earlier shard *shop* was removed — don't reintroduce shard-purchase language.
 
 `ROADMAP.md` tracks what's genuinely still open (CI, packaged export, `InputMap` actions, Power
 card type, rarity in data, wider status roster, a balance pass over the three-act curve). Don't
@@ -144,27 +127,8 @@ treat this section as a to-do list.
 
 ## Verification
 
-There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Ready`, prints
-`PASS`/`FAIL` per check plus a `<Name>: N passed, M failed` summary, and exits nonzero on
-failure. 14 suites, 332 checks at the last full green run.
-
-```bash
-tools/run-smoke-tests.sh                 # all 14; builds first, nonzero exit on any failure
-tools/run-smoke-tests.sh MapSmokeTest    # a subset
-```
-
-Run these after touching anything under `scripts/` or any `.tscn`, before reporting work done.
-The `smoke-test` skill catalogues which suite covers which subsystem.
-
-For anything visual — a `.tscn`, layout, colours, card/relic rendering, or a bug described as
-"looks dimmed"/"overlaps"/"cut off" — use the `verify-screen` skill to render the real screen and
-look at the PNG. Never `--headless` for screenshots: the dummy renderer returns an empty
-viewport texture.
-
-Expected output that is **not** a regression: `MetaProgressionSmokeTest` prints a JSON parse
-warning with a backtrace (its deliberate corrupt-save case, proving the loader falls back to
-defaults), and `ScreenSmokeTest` and `Phase4ContentSmokeTest` each print one `Parent node is busy
-adding/removing children` engine error from a test clicking a button that changes scene.
+See the `smoke-test` and `verify-screen` skills for commands, suite coverage, and known-noise
+details.
 
 Smoke tests are not full coverage. The phase-level bar remains: the game launches from the editor
 and from a packaged export, the loop is playable end-to-end by hand, and no console
