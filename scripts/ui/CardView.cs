@@ -141,7 +141,15 @@ public partial class CardView : Panel
         _artIcon.Texture = icon;
         _artIconShadow.Texture = icon;
 
-        bool affordable = CombatManager.Instance?.Player is not { } player || player.CurrentEnergy >= def.Cost;
+        // Only a real hand card can be "too expensive to play right now" -
+        // a card sitting in a shop, a reward pick or a pile-view popup has
+        // no energy cost context at all, so it must never dim. Interactive
+        // is already the flag separating those two worlds, and gating on it
+        // keeps the tint correct even if the CombatManager.Instance lifetime
+        // regresses again.
+        bool affordable = !Interactive
+            || CombatManager.Instance?.Player is not { } player
+            || player.CurrentEnergy >= def.Cost;
         Modulate = affordable ? Colors.White : UnaffordableTint;
 
         AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(def.Type, def.Rarity, hovered: false, CardUpgrade.IsUpgraded(def)));
@@ -508,7 +516,7 @@ public partial class CardView : Panel
         screenRoot.AddChild(this);
         GlobalPosition = globalPosition;
 
-        bool resolved = CombatManager.Instance.TryPlayCard(CardInstance, target);
+        bool resolved = CombatManager.Instance!.TryPlayCard(CardInstance, target);
         if (resolved)
         {
             AudioManager.Instance?.PlaySfx("card_play");

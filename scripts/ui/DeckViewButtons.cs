@@ -27,11 +27,15 @@ public static class DeckViewButtons
         screen.AddChild(stack);
 
         stack.AddChild(MakeButton("Deck", () => OpenDeck(screen)));
+        // The ! on Instance here and in DeckViewKeybindListener below is safe
+        // precisely because includeCombatPiles is only ever true on
+        // CombatScreen, whose own CombatManager child is alive for as long as
+        // these buttons are.
         if (includeCombatPiles)
         {
-            stack.AddChild(MakeButton("Draw", () => OpenPile(screen, "Draw Pile", CombatManager.Instance.Player.Piles.DrawPile)));
-            stack.AddChild(MakeButton("Discard", () => OpenPile(screen, "Discard Pile", CombatManager.Instance.Player.Piles.Discard)));
-            stack.AddChild(MakeButton("Exhaust", () => OpenPile(screen, "Exhaust Pile", CombatManager.Instance.Player.Piles.Exhaust)));
+            stack.AddChild(MakeButton("Draw", () => OpenPile(screen, "Draw Pile", CombatManager.Instance!.Player.Piles.DrawPile)));
+            stack.AddChild(MakeButton("Discard", () => OpenPile(screen, "Discard Pile", CombatManager.Instance!.Player.Piles.Discard)));
+            stack.AddChild(MakeButton("Exhaust", () => OpenPile(screen, "Exhaust Pile", CombatManager.Instance!.Player.Piles.Exhaust)));
         }
 
         // Anchored to the top-right corner and sized exactly to fit its
@@ -135,15 +139,15 @@ public partial class DeckViewKeybindListener : Node
                 GetViewport().SetInputAsHandled();
                 break;
             case Key.Q when _includeCombatPiles:
-                DeckViewButtons.OpenPile(_screen, "Draw Pile", CombatManager.Instance.Player.Piles.DrawPile);
+                DeckViewButtons.OpenPile(_screen, "Draw Pile", CombatManager.Instance!.Player.Piles.DrawPile);
                 GetViewport().SetInputAsHandled();
                 break;
             case Key.W when _includeCombatPiles:
-                DeckViewButtons.OpenPile(_screen, "Discard Pile", CombatManager.Instance.Player.Piles.Discard);
+                DeckViewButtons.OpenPile(_screen, "Discard Pile", CombatManager.Instance!.Player.Piles.Discard);
                 GetViewport().SetInputAsHandled();
                 break;
             case Key.E when _includeCombatPiles:
-                DeckViewButtons.OpenPile(_screen, "Exhaust Pile", CombatManager.Instance.Player.Piles.Exhaust);
+                DeckViewButtons.OpenPile(_screen, "Exhaust Pile", CombatManager.Instance!.Player.Piles.Exhaust);
                 GetViewport().SetInputAsHandled();
                 break;
         }

@@ -1,26 +1,45 @@
+using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
 
+// End-of-run summary. Scores the run (RunScore, modelled on Slay the Spire's
+// score screen), banks that score as meta progress, and announces anything
+// the run just unlocked. Replaces the old flat "+10 Shards / +25 if you won"
+// grant, which paid the same regardless of how the run actually went.
 public partial class RunEndScreen : Control
 {
-    private const int RunCompletionShards = 10;
-    private const int RunWinBonusShards = 15;
-
     public override void _Ready()
     {
         ScreenBackground.Attach(this, "demonic", new Color(0.75f, 0.7f, 0.7f));
         bool won = RunEndContext.Outcome == RunEndOutcome.Win;
 
-        int shards = RunCompletionShards + (won ? RunWinBonusShards : 0);
-        MetaProgressionManager.Instance.GrantShards(shards);
-        MetaProgressionManager.Instance.LogSeed(RunManager.Instance.RunSeed, won ? "Win" : "Lose");
+        var breakdown = RunScore.EvaluateCurrentRun();
+        int score = RunScore.Total(breakdown);
+        int progressBefore = MetaProgressionManager.Instance.TotalProgress;
+        var newlyUnlocked = MetaProgressionManager.Instance.AddRunResult(
+            score, RunManager.Instance.RunSeed, won ? "Win" : "Lose");
         RunSaveManager.Delete();
 
         var outcomeLabel = GetNode<Label>("CenterContainer/VBoxContainer/OutcomeLabel");
         outcomeLabel.Text = (won ? "Victory! You cleared the run." : "Defeated...") +
-                             $"\nSeed: {RunManager.Instance.RunSeed}  (+{shards} Shards)";
+                             $"\nSeed: {RunManager.Instance.RunSeed}";
+
+        BuildScoreList(breakdown, score);
+
+        GetNode<Label>("CenterContainer/VBoxContainer/ProgressLabel").Text =
+            $"Progress: {progressBefore:N0} → {progressBefore + score:N0}";
+
+        var unlockLabel = GetNode<Label>("CenterContainer/VBoxContainer/UnlockLabel");
+        unlockLabel.Visible = newlyUnlocked.Count > 0;
+        if (newlyUnlocked.Count > 0)
+        {
+            unlockLabel.Text = "Unlocked: " + string.Join(", ", newlyUnlocked.Select(UnlockName));
+            unlockLabel.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
+            AudioManager.Instance?.PlaySfx("reward_pickup");
+        }
 
         var restartButton = GetNode<Button>("CenterContainer/VBoxContainer/RestartButton");
         restartButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
@@ -30,6 +49,44 @@ public partial class RunEndScreen : Control
         viewUnlocksButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         viewUnlocksButton.Pressed += OnViewUnlocksPressed;
     }
+
+    // Category on the left, points on the right, then a Total row - the
+    // itemized layout the genre's score screens use, so the player can see
+    // which behaviours actually paid.
+    private void BuildScoreList(List<RunScore.Entry> breakdown, int total)
+    {
+        var list = GetNode<VBoxContainer>("CenterContainer/VBoxContainer/ScoreList");
+        foreach (var entry in breakdown)
+        {
+            list.AddChild(BuildScoreRow(entry.Label, $"{entry.Points:N0}", bold: false));
+        }
+        if (breakdown.Count == 0)
+        {
+            list.AddChild(BuildScoreRow("No score earned", "0", bold: false));
+        }
+        list.AddChild(new HSeparator());
+        list.AddChild(BuildScoreRow("Total Score", $"{total:N0}", bold: true));
+    }
+
+    private static Control BuildScoreRow(string label, string value, bool bold)
+    {
+        var row = new HBoxContainer();
+        var name = new Label { Text = label, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        var points = new Label { Text = value, HorizontalAlignment = HorizontalAlignment.Right };
+        foreach (var child in new[] { name, points })
+        {
+            child.AddThemeFontSizeOverride("font_size", bold ? 18 : 14);
+            if (bold) child.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
+            row.AddChild(child);
+        }
+        return row;
+    }
+
+    private static string UnlockName(UnlockEntry entry) => entry.Kind switch
+    {
+        UnlockKind.Card => Data.CardDatabase.All.FirstOrDefault(c => c.Id == entry.Id)?.Name ?? entry.Id,
+        _ => Data.RelicDatabase.All.FirstOrDefault(r => r.Id == entry.Id)?.Name ?? entry.Id,
+    };
 
     private void OnRestartPressed() => RunManager.Instance.StartNewRun();
 

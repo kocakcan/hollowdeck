@@ -44,6 +44,6 @@ public partial class PotionView : Button
     private void OnPressed()
     {
         AudioManager.Instance?.PlaySfx("ui_click");
-        CombatManager.Instance.TryUsePotion(_potion);
+        CombatManager.Instance?.TryUsePotion(_potion);
     }
 }

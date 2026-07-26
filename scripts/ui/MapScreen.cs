@@ -237,7 +237,14 @@ public partial class MapScreen : Control
     {
         AudioManager.Instance?.PlaySfx("ui_click");
         RunState.CurrentNodeId = node.Id;
-        RunState.VisitedNodeIds.Add(node.Id);
+        bool firstVisit = RunState.VisitedNodeIds.Add(node.Id);
+
+        // Scoring tallies (RunScore's Floors Climbed / Mystery Machine).
+        // Floor is 0-based in MapGenerator, so climbing to floor 3 means 4
+        // rooms entered. Counted on entering the node rather than on
+        // finishing it, matching StS - dying on a floor still counts it.
+        RunState.Stats.MaxFloorReached = Mathf.Max(RunState.Stats.MaxFloorReached, node.Floor + 1);
+        if (firstVisit && node.Type == MapNodeType.Event) RunState.Stats.EventRoomsVisited++;
 
         switch (node.Type)
         {

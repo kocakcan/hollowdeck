@@ -1045,8 +1045,40 @@ public partial class CombatScreen : Control
         tween.TweenProperty(_endTurnButton, "modulate", Colors.White, 0.6);
     }
 
+    // Folds this fight's tallies into the run-long RunStats that RunScore
+    // reads at the end of the run. Counted on a loss too - the enemies the
+    // player killed in the fight that finally got them still happened.
+    // _statsFolded guards against a double Continue press double-counting.
+    private bool _statsFolded;
+
+    private void FoldCombatStatsIntoRun()
+    {
+        if (_statsFolded) return;
+        _statsFolded = true;
+
+        var stats = RunState.Stats;
+        stats.EnemiesSlain += _combat.EnemiesKilled;
+        if (_combat.LargestSingleHit >= RunScore.OverkillDamage) stats.OverkillEarned = true;
+        if (_combat.MostCardsInOneTurn >= RunScore.ComboCards) stats.ComboEarned = true;
+
+        if (_combat.Outcome != CombatOutcome.Win) return;
+
+        if (CombatContext.IsBoss)
+        {
+            stats.BossesSlain++;
+            if (!_combat.TookDamage) stats.PerfectBosses++;
+        }
+        else if (CombatContext.IsElite)
+        {
+            stats.ElitesSlain++;
+            if (!_combat.TookDamage) stats.PerfectElites++;
+        }
+    }
+
     private void OnContinuePressed()
     {
+        FoldCombatStatsIntoRun();
+
         if (_combat.Outcome == CombatOutcome.Win)
         {
             RunState.PlayerCurrentHp = _combat.Player.CurrentHp;
@@ -1091,9 +1123,9 @@ public partial class CombatScreen : Control
 
     private static List<CardDefinition> SampleCardChoices(int count)
     {
-        // No unlock filter - all cards are available from the start (see
-        // MetaProgressionManager.LockedRelicIds; only relics are lockable).
-        var pool = CardDatabase.All.ToList();
+        // Same unlock-filtered pool ShopScreen and the random-card event
+        // outcome draw from (MetaProgressionManager.UnlockTrack).
+        var pool = MetaProgressionManager.Instance.UnlockedCards().ToList();
         var rng = RngStreams.Shop;
         for (int i = pool.Count - 1; i > 0; i--)
         {

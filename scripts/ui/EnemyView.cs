@@ -290,5 +290,5 @@ public partial class EnemyView : Button
         return System.Enum.Parse<StatusType>(effect.Status);
     }
 
-    private void OnPressed() => CombatManager.Instance.TryTargetEnemy(Combatant);
+    private void OnPressed() => CombatManager.Instance?.TryTargetEnemy(Combatant);
 }

@@ -23,6 +23,14 @@ public static class RunState
     public static string CurrentNodeId = "";
     public static HashSet<string> VisitedNodeIds = new();
 
+    // Scoring tallies for this run - see RunScore/MetaProgressionManager.
+    public static RunStats Stats = new();
+
+    // The cards every run opens with. Shared by StartingDeck below and
+    // RunScore's Highlander/Collector bonuses (which must ignore them), and
+    // deliberately never gated by unlocks.
+    public static readonly HashSet<string> StarterCardIds = new() { "strike", "defend", "bash" };
+
     public static void InitNewRun()
     {
         Gold = 99;
@@ -39,13 +47,16 @@ public static class RunState
         MapNodes = MapGenerator.Generate(RngStreams.Map);
         CurrentNodeId = "";
         VisitedNodeIds = new HashSet<string>();
+        Stats = new RunStats();
     }
 
     public static MapNode GetMapNode(string id) => MapNodes.First(n => n.Id == id);
 
     private static List<CardDefinition> StartingDeck()
     {
-        // Not affected by unlocks - all cards are available from the start.
+        // Never filtered by unlocks: starters are not on the unlock track
+        // (see MetaProgressionManager.UnlockTrack), so a brand-new save can
+        // always build this deck.
         var counts = new (string id, int count)[]
         {
             ("strike", 5),

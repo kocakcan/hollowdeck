@@ -39,7 +39,7 @@ public partial class AnimationScreenshot : Node
 
         var combat = GD.Load<PackedScene>("res://scenes/CombatScreen.tscn").Instantiate();
         AddChild(combat);
-        var manager = Hollowdeck.Combat.CombatManager.Instance;
+        var manager = Hollowdeck.Combat.CombatManager.Instance!;
 
         for (int i = 0; i < 15; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await Snapshot("user://anim_00_turn_banner.png");

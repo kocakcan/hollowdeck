@@ -121,14 +121,15 @@ card draw, victory/defeat, shop purchase — is still an instant state snap).
 
 ## Phase 9 — Ship readiness
 
-- **Promote smoke tests to real CI.** The 7 existing `scripts/debug/*SmokeTest`
-  files are solid but manual (`godot --headless scenes/debug/<Name>.tscn`,
-  read stdout by hand) and only 3 of 10 screens have UI-level coverage
-  (Reward/Shop/Treasure) — Combat's drag/targeting, the project's own stated
-  highest-risk area, has zero UI-layer coverage. At minimum, wire the existing
-  headless smoke tests into a CI script that runs on every push and fails the
-  build on nonzero exit; consider GUT only if the custom harness starts
-  showing real limits.
+- **Promote smoke tests to real CI.** The 13 `scripts/debug/*SmokeTest` files
+  (261 checks) now run from one command that fails on nonzero exit —
+  `tools/run-smoke-tests.sh`, catalogued in the `smoke-test` skill. What's left
+  is the CI trigger itself: point a workflow at that script so it runs on every
+  push instead of being remembered by hand. Coverage is still the real gap —
+  Combat's drag/targeting, the project's own stated highest-risk area, has only
+  the target-lock glow asserted, and no screen has visual-regression coverage
+  (`scenes/debug/ScreenShot.tscn` renders them, but a human still has to look).
+  Consider GUT only if the custom harness starts showing real limits.
 - **Packaged export pass.** Verify a real exported build (not just editor
   play) on Windows/Mac/Linux per `CLAUDE.md`'s verification standard — no
   console errors, all autoloads/paths resolve outside the editor.

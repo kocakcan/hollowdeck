@@ -10,40 +10,81 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
 
-[node name="TitleLabel" type="Label" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 16.0
-text = "Unlocks"
+[node name="Margin" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
 
-[node name="ShardsLabel" type="Label" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 48.0
-text = "Shards: 0"
+[node name="Root" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
 
-[node name="RelicUnlocksList" type="VBoxContainer" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 88.0
-offset_right = 500.0
-offset_bottom = 300.0
+[node name="TitleLabel" type="Label" parent="Margin/Root"]
+layout_mode = 2
+text = "Progression"
 
-[node name="SeedHistoryLabel" type="Label" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 310.0
-text = "Recent Seeds"
+[node name="ProgressLabel" type="Label" parent="Margin/Root"]
+layout_mode = 2
+text = "Progress: 0"
 
-[node name="SeedHistoryList" type="VBoxContainer" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 340.0
-offset_right = 700.0
-offset_bottom = 600.0
+[node name="NextUnlockLabel" type="Label" parent="Margin/Root"]
+layout_mode = 2
+text = "Next unlock:"
 
-[node name="BackButton" type="Button" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 610.0
+[node name="NextUnlockBar" type="ProgressBar" parent="Margin/Root"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 18)
+show_percentage = false
+
+[node name="Columns" type="HBoxContainer" parent="Margin/Root"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 24
+
+[node name="TrackColumn" type="VBoxContainer" parent="Margin/Root/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.6
+
+[node name="TrackHeading" type="Label" parent="Margin/Root/Columns/TrackColumn"]
+layout_mode = 2
+text = "Unlock Track"
+
+[node name="TrackScroll" type="ScrollContainer" parent="Margin/Root/Columns/TrackColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="UnlockTrackList" type="VBoxContainer" parent="Margin/Root/Columns/TrackColumn/TrackScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="HistoryColumn" type="VBoxContainer" parent="Margin/Root/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HistoryHeading" type="Label" parent="Margin/Root/Columns/HistoryColumn"]
+layout_mode = 2
+text = "Recent Runs"
+
+[node name="HistoryScroll" type="ScrollContainer" parent="Margin/Root/Columns/HistoryColumn"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="SeedHistoryList" type="VBoxContainer" parent="Margin/Root/Columns/HistoryColumn/HistoryScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="BackButton" type="Button" parent="Margin/Root"]
+layout_mode = 2
+size_flags_horizontal = 0
 text = "Back"

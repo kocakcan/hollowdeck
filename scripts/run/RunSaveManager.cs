@@ -45,6 +45,7 @@ public static class RunSaveManager
             MapNodes = RunState.MapNodes,
             CurrentNodeId = RunState.CurrentNodeId,
             VisitedNodeIds = RunState.VisitedNodeIds.ToList(),
+            Stats = RunState.Stats,
         };
         using var file = FileAccess.Open(path ?? DefaultPath, FileAccess.ModeFlags.Write);
         file.StoreString(JsonSerializer.Serialize(data, Options));
@@ -94,6 +95,7 @@ public static class RunSaveManager
         RunState.MapNodes = data.MapNodes;
         RunState.CurrentNodeId = data.CurrentNodeId;
         RunState.VisitedNodeIds = data.VisitedNodeIds.ToHashSet();
+        RunState.Stats = data.Stats;
 
         return data.RunSeed;
     }

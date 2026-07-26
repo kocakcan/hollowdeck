@@ -42,7 +42,7 @@ public partial class ArtScreenshot : Node
 
         // Seed some statuses so the status rows are visible in the shot,
         // then poke the screen's private Refresh to redraw them.
-        var manager = Hollowdeck.Combat.CombatManager.Instance;
+        var manager = Hollowdeck.Combat.CombatManager.Instance!;
         manager.Player.AddStatus(StatusType.Strength, 2);
         manager.Player.AddStatus(StatusType.Poison, 3);
         manager.Enemies[0].AddStatus(StatusType.Weak, 2);
