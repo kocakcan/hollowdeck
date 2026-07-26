@@ -25,7 +25,15 @@ public enum CombatOutcome { None, Win, Lose }
 
 public partial class CombatManager : Node
 {
-    public static CombatManager Instance { get; private set; } = null!;
+    // Nullable, and cleared in _ExitTree: unlike RunManager/AudioManager/
+    // MetaProgressionManager, CombatManager is NOT an autoload - it's a child
+    // node of CombatScreen.tscn, so it dies with every fight. Leaving the
+    // static pointing at a finished fight is what made Shop/Reward render
+    // cards dimmed (stale CurrentEnergy), print damage numbers inflated by
+    // the last fight's Strength, and made the Deck button show the previous
+    // fight's piles. "null Instance" is every call site's existing shorthand
+    // for "not in combat", so clearing it is all those checks needed.
+    public static CombatManager? Instance { get; private set; }
 
     // Plain C# events, not Godot [Signal]s - CombatManager is only ever
     // consumed from other C# scripts in-process, so there's no need to pay
@@ -54,12 +62,27 @@ public partial class CombatManager : Node
     public List<EnemyCombatant> Enemies { get; private set; } = new();
     public List<RelicInstance> Relics { get; private set; } = new();
 
+    // Per-fight tallies read once by CombatScreen when the fight ends and
+    // folded into RunState.Stats for end-of-run scoring (see RunScore) -
+    // kept here rather than in RunState because only this class sees the
+    // individual hits, kills and per-turn card counts they're derived from.
+    public int EnemiesKilled { get; private set; }
+    public bool TookDamage { get; private set; }
+    public int LargestSingleHit { get; private set; }
+    public int MostCardsInOneTurn { get; private set; }
+
+    private int _cardsThisTurn;
     private PotionInstance? _pendingPotion;
     private List<EnemyCombatant> _enemyTurnOrder = new();
 
     public override void _Ready()
     {
         Instance = this;
+    }
+
+    public override void _ExitTree()
+    {
+        if (Instance == this) Instance = null;
     }
 
     public void StartCombat(PlayerCombatant player, List<EnemyCombatant> enemies, List<RelicInstance> relics)
@@ -69,6 +92,11 @@ public partial class CombatManager : Node
         Relics = relics;
         State = CombatState.Start;
         Outcome = CombatOutcome.None;
+        EnemiesKilled = 0;
+        TookDamage = false;
+        LargestSingleHit = 0;
+        MostCardsInOneTurn = 0;
+        _cardsThisTurn = 0;
 
         Player.Piles.Shuffle(Player.Piles.DrawPile);
 
@@ -97,6 +125,7 @@ public partial class CombatManager : Node
 
         Player.CurrentEnergy = Player.MaxEnergy;
         Player.Piles.DrawHand(5);
+        _cardsThisTurn = 0;
 
         var ctx = MakeRelicContext();
         foreach (var relic in Relics) relic.Behavior.OnTurnStart(ctx);
@@ -178,9 +207,16 @@ public partial class CombatManager : Node
     // this game are always player-owned.
     private void ExecuteEffect(EffectSpec spec, Combatant source, List<Combatant> targets)
     {
+        // Snapshotted around EVERY effect, not just deal_damage, so the
+        // no-damage-taken scoring bonus (RunScore's Champion/Perfect) also
+        // counts self-inflicted lose_hp (Reckless Charge, Last Stand) and
+        // anything a future effect does to the player's HP.
+        int playerHpBefore = Player.CurrentHp;
+
         if (spec.Action != "deal_damage")
         {
             EffectRegistry.Execute(new EffectContext { Source = source, Targets = targets, Combat = this }, spec);
+            if (Player.CurrentHp < playerHpBefore) TookDamage = true;
             return;
         }
 
@@ -192,9 +228,15 @@ public partial class CombatManager : Node
         {
             int dealt = before[target] - target.CurrentHp;
             if (dealt <= 0) continue;
-            if (source == Player) foreach (var relic in Relics) relic.Behavior.OnDamageDealt(relicCtx, target, dealt);
+            if (source == Player)
+            {
+                LargestSingleHit = Math.Max(LargestSingleHit, dealt);
+                foreach (var relic in Relics) relic.Behavior.OnDamageDealt(relicCtx, target, dealt);
+            }
             if (target == Player) foreach (var relic in Relics) relic.Behavior.OnDamageTaken(relicCtx, source, dealt);
         }
+
+        if (Player.CurrentHp < playerHpBefore) TookDamage = true;
     }
 
     private void ResolveCard(CardInstance card, List<Combatant> targets)
@@ -202,6 +244,8 @@ public partial class CombatManager : Node
         TransitionTo(CombatState.ResolvingCard);
 
         Player.CurrentEnergy -= card.Definition.Cost;
+        _cardsThisTurn++;
+        MostCardsInOneTurn = Math.Max(MostCardsInOneTurn, _cardsThisTurn);
         Player.Piles.Hand.Remove(card);
         if (card.Definition.Exhaust) Player.Piles.Exhaust.Add(card);
         else Player.Piles.Discard.Add(card);
@@ -218,7 +262,7 @@ public partial class CombatManager : Node
         var relicCtx = MakeRelicContext();
         foreach (var relic in Relics) relic.Behavior.OnCardPlayed(relicCtx, card);
 
-        Enemies.RemoveAll(e => e.IsDead);
+        RemoveDeadEnemies();
         CombatantsChanged?.Invoke();
 
         if (Enemies.Count == 0)
@@ -245,7 +289,7 @@ public partial class CombatManager : Node
             ExecuteEffect(effect, Player, scopedTargets);
         }
 
-        Enemies.RemoveAll(e => e.IsDead);
+        RemoveDeadEnemies();
         CombatantsChanged?.Invoke();
 
         if (Enemies.Count == 0)
@@ -287,7 +331,7 @@ public partial class CombatManager : Node
             ApplyPoisonTick(enemy);
             if (enemy.IsDead)
             {
-                Enemies.RemoveAll(e => e.IsDead);
+                RemoveDeadEnemies();
                 CombatantsChanged?.Invoke();
                 if (Enemies.Count == 0)
                 {
@@ -318,7 +362,7 @@ public partial class CombatManager : Node
                 return;
             }
 
-            Enemies.RemoveAll(e => e.IsDead);
+            RemoveDeadEnemies();
             CombatantsChanged?.Invoke();
 
             if (Enemies.Count == 0)
@@ -362,6 +406,16 @@ public partial class CombatManager : Node
         if (poison <= 0) return;
         c.CurrentHp -= Math.Min(c.CurrentHp, poison);
         c.DecayStatus(StatusType.Poison);
+        if (c == Player) TookDamage = true;
+    }
+
+    // Replaces the four bare Enemies.RemoveAll(e => e.IsDead) calls this
+    // class used to make, so every path that clears corpses - card kill,
+    // potion kill, poison tick, enemy-turn retaliation - feeds the same
+    // kill tally without each call site having to remember to.
+    private void RemoveDeadEnemies()
+    {
+        EnemiesKilled += Enemies.RemoveAll(e => e.IsDead);
     }
 
     private void AdvanceEnemyIntent(EnemyCombatant enemy)
