@@ -1,0 +1,15 @@
+[package]
+name = "artgen"
+version = "0.1.0"
+edition = "2021"
+
+# Standalone, deliberately: the game never needs Rust at build time, so this
+# must not be part of any parent workspace or the dotnet build. See
+# tools/artgen/README.md.
+[workspace]
+
+[dependencies]
+png = "0.17"
+
+[profile.release]
+opt-level = 2

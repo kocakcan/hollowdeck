@@ -33,6 +33,22 @@ if ! dotnet build -v q --nologo; then
     exit 1
 fi
 
+# ART_SPEC's asset rules (grid, palette, hard alpha, no SVG) - see
+# tools/artgen/src/validate.rs. This runs on the raw PNG bytes, which the
+# engine-side suites cannot do: GD.Load hands back an already-imported
+# texture. Skipped with a warning rather than failed if cargo is absent, so
+# the smoke suite still runs on a machine without a Rust toolchain.
+echo
+echo "== artgen validate =="
+if command -v cargo >/dev/null 2>&1; then
+    if ! cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- validate; then
+        echo "error: assets violate docs/ART_SPEC.md; not running tests." >&2
+        exit 1
+    fi
+else
+    echo "skipped: cargo not on PATH (asset spec unchecked)"
+fi
+
 if [[ $# -gt 0 ]]; then
     tests=("$@")
 else
