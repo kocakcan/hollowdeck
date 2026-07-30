@@ -108,7 +108,7 @@ font pair and one ramp, and `PixelSpecSmokeTest` (41 checks) now enforces the sp
   `default_texture_filter=0` in `project.godot`, with the four smooth procedural gradients in
   `ScreenBackground` explicitly opted back to Linear.
 
-## Phase 2 — Rebuild the combat composition ⏳ mostly done
+## Phase 2 — Rebuild the combat composition ✅ done
 
 Restructures `CardView.tscn` and `CombatScreen.tscn`, which **will break smoke tests asserting on
 `GetNode` paths**. Per `CLAUDE.md` that is the alarm working — update the assertions, never delete
@@ -130,9 +130,23 @@ the check.
   encoded the same value twice (pip count *and* the "1/3" label under them) while reading as
   neither. Drawn as a 16x16 pixel octagon — a diamond was tried first and has too little
   interior for the number to sit inside it.
-- ⏳ **Remaining:** relic bar and potion belt are wide panels holding one or two items, so they
-  read as empty; the four pile buttons still take the whole top-right as a vertical stack rather
-  than corner counters; enemy HP bars are still full-panel width now the panel is gone.
+- ✅ **HUD density pass.** The three leftovers above were all the same defect — chrome sized for
+  content that isn't there — and were fixed together.
+  *Gold, relics, potions:* three fixed 280px-wide panels each framing one or two ~34px items.
+  Gold and the relic/status rows now share one shrink-to-fit column, and the framing moved down a
+  level to `ChromeStyles.SlotStyle` — one bordered slot per relic, so the row is exactly as wide as
+  the relics you own. The potion belt draws all `RunState.MaxPotionSlots` slots, empty ones
+  included: the same width now reads as capacity, and it is the only thing in combat that tells you
+  how many more potions you can carry.
+  *Pile buttons → counters:* the vertical stack of four full-width text buttons became
+  `PileCounterBar`, a 160x44 strip of 40px cells (a ramp-tinted card-stack glyph over a live count).
+  That deleted `PileCountsLabel` — "Draw N · Discard N · Exhaust N" was the same value-encoded-twice
+  problem the energy pips had — and with it the three hardcoded `*PileAnchor` nodes, since drawn and
+  discarded cards now fly to the counter that actually changed.
+  *Enemy HP bars:* pinned to 160px (`SpriteScale × CreatureGrid`, the sprite's rendered width) and
+  shrink-centred, instead of stretching the full 220px of a panel that no longer exists.
+  The 40px cell width is a hard budget — the strip has to clear `EnemyRow`'s `offset_right=976` or
+  it paints over the rightmost enemy's intent icon, which `DeckViewSmokeTest` asserts.
 - ✅ **Hand no longer covers the enemies** — the headline fix. `FanBaseY` -140 → -72 puts a
   card's top at y=388 against `EnemyRow`'s bottom at y=330 (worst case y=352 once the fan arc
   lifts the outer cards). `HandLayoutSmokeTest` asserts the clearance.

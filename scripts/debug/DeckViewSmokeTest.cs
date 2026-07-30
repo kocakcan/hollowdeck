@@ -68,12 +68,19 @@ public partial class DeckViewSmokeTest : Node
         DeckViewButtons.Attach(screen);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
-        var row = screen.GetChildren().OfType<VBoxContainer>().First();
+        var row = screen.GetChildren().OfType<PileCounterBar>().First();
         Check("deck_button_row_stays_within_screen",
             row.GetRect().Position.X + row.GetRect().Size.X <= screen.Size.X,
             $"row right edge={row.GetRect().Position.X + row.GetRect().Size.X}, screen width={screen.Size.X}");
 
-        var deckButton = row.GetChildren().OfType<Button>().First(b => b.Text == "Deck");
+        // Outside combat the strip is a single Deck cell, and its count comes
+        // from RunState.Deck rather than from any PileManager.
+        var cells = row.GetChildren().OfType<PileCounterCell>().ToList();
+        Check("deck_counter_shows_run_deck_size_outside_combat",
+            cells.Count == 1 && cells[0].CountText == RunState.Deck.Count.ToString(),
+            $"cells={cells.Count}, text={(cells.Count > 0 ? cells[0].CountText : "-")}, deck={RunState.Deck.Count}");
+
+        var deckButton = cells[0];
         deckButton.EmitSignal(Button.SignalName.Pressed);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
@@ -120,11 +127,14 @@ public partial class DeckViewSmokeTest : Node
         var handArea = instance.GetNode<Control>("HandArea");
         var hpFrame = instance.GetNode<Control>("PlayerHpFrame");
         var enemyRow = instance.GetNode<Control>("EnemyRow");
-        var buttonStack = instance.GetChildren().OfType<VBoxContainer>().First();
+        var pileCounters = instance.GetChildren().OfType<PileCounterBar>().First();
 
-        Check("deck_button_stack_does_not_overlap_enemy_row",
-            !enemyRow.GetGlobalRect().Intersects(buttonStack.GetGlobalRect()),
-            $"enemyRow={enemyRow.GetGlobalRect()}, buttonStack={buttonStack.GetGlobalRect()}");
+        // The whole reason PileCounterBar has a hard 40px cell budget: the
+        // strip has to fit in the ~176px of clear canvas right of EnemyRow, or
+        // it paints over the rightmost enemy's intent icon.
+        Check("pile_counter_strip_does_not_overlap_enemy_row",
+            !enemyRow.GetGlobalRect().Intersects(pileCounters.GetGlobalRect()),
+            $"enemyRow={enemyRow.GetGlobalRect()}, pileCounters={pileCounters.GetGlobalRect()}");
 
         // Mid-fight (before CombatEnd), check the Draw/Discard/Exhaust
         // buttons/popups actually reflect live pile contents - this is the
@@ -137,6 +147,21 @@ public partial class DeckViewSmokeTest : Node
                 GetPopupGrid(drawPopup).GetChildCount() == combat.Player.Piles.DrawPile.Count,
                 $"entries={GetPopupGrid(drawPopup).GetChildCount()}, pile={combat.Player.Piles.DrawPile.Count}");
             drawPopup.QueueFree();
+
+            // The counters replaced CombatScreen's "Draw N · Discard N ·
+            // Exhaust N" label, so they are now the only place these numbers
+            // are shown - a stale cell is silent otherwise.
+            var combatCells = pileCounters.GetChildren().OfType<PileCounterCell>().ToList();
+            var piles = combat.Player.Piles;
+            int deckTotal = piles.DrawPile.Count + piles.Hand.Count + piles.Discard.Count + piles.Exhaust.Count;
+            var expected = new[]
+            {
+                deckTotal.ToString(), piles.DrawPile.Count.ToString(),
+                piles.Discard.Count.ToString(), piles.Exhaust.Count.ToString(),
+            };
+            Check("pile_counters_track_live_pile_counts",
+                combatCells.Count == 4 && combatCells.Select(c => c.CountText).SequenceEqual(expected),
+                $"cells=[{string.Join(", ", combatCells.Select(c => c.CountText))}], expected=[{string.Join(", ", expected)}]");
 
             // The opening hand from this 5-card deck fills the fan out to
             // its widest (worst case for the FanSafeWidth overlap bug) -

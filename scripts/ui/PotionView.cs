@@ -7,6 +7,11 @@ namespace Hollowdeck.UI;
 
 public partial class PotionView : Button
 {
+    // The belt draws RunState.MaxPotionSlots slots whether or not you hold
+    // that many potions, so an empty slot has to match a filled one exactly -
+    // shared from here rather than repeated as a literal in CombatScreen.
+    public static readonly Vector2 SlotSize = new(48, 44);
+
     private PotionInstance _potion = null!;
 
     public void SetPotionInstance(PotionInstance potion)
@@ -24,7 +29,7 @@ public partial class PotionView : Button
             Text = "";
             ExpandIcon = true;
             IconAlignment = HorizontalAlignment.Center;
-            CustomMinimumSize = new Vector2(48, 44);
+            CustomMinimumSize = SlotSize;
             TooltipText = $"{potion.Definition.Name}\n{description}";
         }
         else

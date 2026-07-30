@@ -85,6 +85,13 @@ public partial class EnemyView : Button
         _shadow = GetNode<TextureRect>("VBox/Sprite/Shadow");
         _shadow.Texture = _shadowTexture ??= BuildShadowTexture();
         _nameLabel = GetNode<Label>("VBox/NameLabel");
+        // HpFrame is pinned to 160px wide and shrink-centered in the .tscn -
+        // 160 being PixelSpec.SpriteScale * PixelSpec.CreatureGrid, i.e. the
+        // rendered width of the sprite above it. It used to stretch the full
+        // 220px of this view, which was invisible while every enemy sat inside
+        // a panel of that width and became obvious once the panels came off:
+        // the bar was wider than the creature it belonged to and read as
+        // floor furniture rather than as part of the enemy.
         _hpBar = GetNode<ProgressBar>("VBox/HpFrame/HpBar");
         _ghostHpBar = GetNode<ProgressBar>("VBox/HpFrame/GhostHpBar");
         _hpLabel = GetNode<Label>("VBox/HpFrame/HpLabel");

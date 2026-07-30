@@ -146,7 +146,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `RelicSmokeTest` | relic hooks fire through combat | `scripts/relics/`, relic hooks, `relics.json` |
 | `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic | intent pickers, statuses, elite rewards |
 | `HandLayoutSmokeTest` | hand fan spacing at 11+ cards, every card's text fits its box | `RefreshHand`, `HandFanLayout`, `CardView` text |
-| `DeckViewSmokeTest` | pile popups, combat-end z-order | `PileViewPopup`, `DeckViewButtons` |
+| `DeckViewSmokeTest` | pile popups, pile counters, combat-end z-order | `PileViewPopup`, `DeckViewButtons`, `PileCounterBar` |
 | `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders and fits | `MapGenerator`, `MapScreen`, `MapNode`, `acts.json` |
 | `EventSmokeTest` | event DB, outcome keys, `EventScreen` | `scripts/events/`, `events.json` |
 | `ScreenSmokeTest` | Reward/Shop/Treasure/Rest load and populate | any non-combat screen or its `.tscn` |
