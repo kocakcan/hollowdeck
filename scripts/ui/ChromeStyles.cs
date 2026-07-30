@@ -221,6 +221,31 @@ public static class ChromeStyles
         return style;
     }
 
+    // A single HUD slot - one relic, one potion - as opposed to PanelStyle's
+    // frame around a whole row. The relic bar and potion belt used to be one
+    // wide PanelStyle box each holding a couple of small items, which read as
+    // mostly empty; framing per item instead makes the row exactly as wide as
+    // its contents (ROADMAP Phase 2).
+    //
+    // An empty slot is drawn, not omitted, so the potion belt shows capacity
+    // rather than shrinking - it recedes via a dimmer bezel (G0 over the deep
+    // background) instead of disappearing, which is the difference between
+    // "you have room for two more" and "there is nothing here".
+    public static StyleBoxFlat SlotStyle(bool filled)
+    {
+        var style = new StyleBoxFlat
+        {
+            BgColor = filled ? UiTheme.Palette.BgPanel : UiTheme.Palette.BgDeep,
+            BorderColor = filled ? PixelSpec.Ramp.G1 : PixelSpec.Ramp.G0,
+        };
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
+        style.ContentMarginLeft = UiTheme.Spacing.Xs;
+        style.ContentMarginRight = UiTheme.Spacing.Xs;
+        style.ContentMarginTop = UiTheme.Spacing.Xs;
+        style.ContentMarginBottom = UiTheme.Spacing.Xs;
+        return style;
+    }
+
     // Always-on emphasis for the boss map node, keyed to the "Damage"
     // semantic red (danger/ominous) rather than Rarity's gold, since this is
     // not a rarity signal.

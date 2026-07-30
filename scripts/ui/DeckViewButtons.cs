@@ -7,84 +7,38 @@ using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
 
-// Attaches a small top-right "Deck" (plus, mid-combat, "Draw"/"Discard"/
-// "Exhaust") button row that opens a read-only PileViewPopup, plus matching
-// D/Q/W/E keybinds - Slay-the-Spire-style pile inspection. Built and attached
-// in code from a screen's _Ready(), mirroring ScreenBackground/ChromeStyles'
-// one-line-per-screen convention rather than editing every screen's .tscn.
+// Attaches the top-right pile HUD - a PileCounterBar strip of "Deck" (plus,
+// mid-combat, "Draw"/"Discard"/"Exhaust") counters that open a read-only
+// PileViewPopup - plus matching D/Q/W/E keybinds, Slay-the-Spire-style pile
+// inspection. Built and attached in code from a screen's _Ready(), mirroring
+// ScreenBackground/ChromeStyles' one-line-per-screen convention rather than
+// editing every screen's .tscn.
+//
+// This file owns the popups and the keybinds; PileCounterBar owns what the
+// corner looks like.
 public static class DeckViewButtons
 {
-    public static void Attach(Control screen, bool includeCombatPiles = false)
+    // Returns the strip so a caller that needs to point at it - CombatScreen
+    // flies drawn/discarded cards to and from the matching counter - can,
+    // instead of keeping its own duplicate set of anchor coordinates.
+    public static PileCounterBar Attach(Control screen, bool includeCombatPiles = false)
     {
-        // Stacked vertically rather than in a row: on CombatScreen, EnemyRow
-        // extends out to x=976 of the 1152-wide layout, leaving only a ~176px
-        // clear margin at the top-right corner - a horizontal row of 4
-        // buttons (~330px) doesn't fit there and used to paint over the
-        // rightmost enemy's intent icon. A vertical stack of the same
-        // buttons is only as wide as the single longest label ("Discard"/
-        // "Exhaust", ~110px), which does.
-        var stack = new VBoxContainer();
-        screen.AddChild(stack);
+        var bar = new PileCounterBar(screen, includeCombatPiles);
+        screen.AddChild(bar);
 
-        stack.AddChild(MakeButton("Deck", () => OpenDeck(screen)));
-        // The ! on Instance here and in DeckViewKeybindListener below is safe
-        // precisely because includeCombatPiles is only ever true on
-        // CombatScreen, whose own CombatManager child is alive for as long as
-        // these buttons are.
-        if (includeCombatPiles)
-        {
-            stack.AddChild(MakeButton("Draw", () => OpenPile(screen, "Draw Pile", CombatManager.Instance!.Player.Piles.DrawPile)));
-            stack.AddChild(MakeButton("Discard", () => OpenPile(screen, "Discard Pile", CombatManager.Instance!.Player.Piles.Discard)));
-            stack.AddChild(MakeButton("Exhaust", () => OpenPile(screen, "Exhaust Pile", CombatManager.Instance!.Player.Piles.Exhaust)));
-        }
-
-        // Anchored to the top-right corner and sized exactly to fit its
-        // buttons (via GetCombinedMinimumSize, queried after they're added)
-        // rather than a hardcoded pixel size - a fixed width once clipped a
-        // button's text off the edge of the screen, and would do the same
-        // again for any future localization/label-length change.
-        stack.SetAnchorsPreset(Control.LayoutPreset.TopRight);
-        var stackSize = stack.GetCombinedMinimumSize();
-        stack.OffsetRight = -12;
-        stack.OffsetLeft = stack.OffsetRight - stackSize.X;
-        stack.OffsetTop = 12;
-        stack.OffsetBottom = 12 + stackSize.Y;
+        // Anchored to the top-right corner. Size comes from PileCounterBar's
+        // own fixed cell budget rather than GetCombinedMinimumSize(), so the
+        // strip is positioned correctly on the frame it is created rather
+        // than after a layout pass.
+        bar.SetAnchorsPreset(Control.LayoutPreset.TopRight);
+        var size = bar.StripSize;
+        bar.OffsetRight = -12;
+        bar.OffsetLeft = bar.OffsetRight - size.X;
+        bar.OffsetTop = 12;
+        bar.OffsetBottom = 12 + size.Y;
 
         screen.AddChild(new DeckViewKeybindListener(screen, includeCombatPiles));
-    }
-
-    private static Texture2D? _stackIconTexture;
-
-    private static Button MakeButton(string text, System.Action onPressed)
-    {
-        // FocusModeEnum.None: same reasoning as EnemyView - these buttons
-        // shouldn't be reachable by Godot's automatic arrow-key focus
-        // navigation, which would otherwise compete with CombatScreen's own
-        // arrow-key card/target cycling.
-        var button = new Button
-        {
-            Text = text,
-            Icon = _stackIconTexture ??= BuildStackIcon(),
-            IconAlignment = HorizontalAlignment.Left,
-            FocusMode = Control.FocusModeEnum.None,
-        };
-        button.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
-        button.Pressed += onPressed;
-        return button;
-    }
-
-    // Three overlapping tinted rectangles baked into one small texture - a
-    // "stack of cards" read at a glance, replacing the plain text-only
-    // button these piles used to be. Procedural (no sourced asset) via
-    // Image.FillRect, same "generate it once, cache it" approach
-    // CombatScreen's spark/energy-orb textures already use.
-    private static Texture2D BuildStackIcon()
-    {
-        var image = Image.CreateEmpty(20, 20, false, Image.Format.Rgba8);
-        image.FillRect(new Rect2I(5, 1, 12, 12), new Color(0.35f, 0.28f, 0.16f));
-        image.FillRect(new Rect2I(3, 4, 12, 12), new Color(0.55f, 0.44f, 0.24f));
-        image.FillRect(new Rect2I(1, 7, 12, 12), new Color(0.78f, 0.62f, 0.28f));
-        return ImageTexture.CreateFromImage(image);
+        return bar;
     }
 
     // Mid-combat, the "real" deck is whatever's actually rotating through

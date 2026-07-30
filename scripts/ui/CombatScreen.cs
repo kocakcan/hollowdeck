@@ -46,16 +46,18 @@ public partial class CombatScreen : Control
     private Label _playerHpLabel = null!;
     private HBoxContainer _energyRow = null!;
     private Label _energyLabel = null!;
-    private Label _pileCountsLabel = null!;
     private HBoxContainer _playerStatusRow = null!;
     private Label _targetHintLabel = null!;
     private Button _endTurnButton = null!;
     private Control _combatEndPanel = null!;
     private Label _outcomeLabel = null!;
     private Button _continueButton = null!;
-    private Control _drawPileAnchor = null!;
-    private Control _discardPileAnchor = null!;
-    private Control _exhaustPileAnchor = null!;
+    // The top-right pile strip. Held (rather than fire-and-forget like the
+    // other screens' DeckViewButtons.Attach calls) because drawn and
+    // discarded cards fly to and from the matching counter - the three
+    // *PileAnchor Control nodes that used to encode those positions a second
+    // time in the .tscn are gone.
+    private PileCounterBar _pileCounters = null!;
     private TextureRect _playerSprite = null!;
     private Label _turnBannerLabel = null!;
     private PanelContainer _turnBannerPanel = null!;
@@ -110,23 +112,24 @@ public partial class CombatScreen : Control
         // same room as a fight in the Sunken Ward.
         var act = RunState.CurrentAct;
         ScreenBackground.AttachCombat(this, act.CombatBackground, Color.FromString(act.CombatTint, Colors.White));
-        DeckViewButtons.Attach(this, includeCombatPiles: true);
+        _pileCounters = DeckViewButtons.Attach(this, includeCombatPiles: true);
         _combat = GetNode<CombatManager>("CombatManager");
         _enemyRow = GetNode<HBoxContainer>("EnemyRow");
         _handArea = GetNode<Control>("HandArea");
-        _potionBelt = GetNode<HBoxContainer>("PotionPanel/PotionBelt");
-        _relicBar = GetNode<HBoxContainer>("RelicPanel/RelicBar");
-        _goldLabel = GetNode<Label>("GoldPanel/GoldLabel");
+        _potionBelt = GetNode<HBoxContainer>("PotionBelt");
+        // Gold, relics and player statuses now live in one shrink-to-fit
+        // column (TopLeftColumn) rather than as three fixed 280px-wide
+        // panels. Each row was a wide bordered box holding one or two small
+        // items, which read as an empty HUD; the relic bar's framing moved
+        // down a level, to one slot per relic (see RefreshRelics).
+        _relicBar = GetNode<HBoxContainer>("TopLeftColumn/RelicBar");
+        _goldLabel = GetNode<Label>("TopLeftColumn/GoldPanel/GoldLabel");
         _playerHpBar = GetNode<ProgressBar>("PlayerHpFrame/HpBar");
         _playerGhostHpBar = GetNode<ProgressBar>("PlayerHpFrame/GhostHpBar");
         _playerHpLabel = GetNode<Label>("PlayerHpFrame/HpLabel");
         _energyRow = GetNode<HBoxContainer>("EnergyRow");
         _energyLabel = GetNode<Label>("EnergyLabel");
-        _pileCountsLabel = GetNode<Label>("PileCountsLabel");
-        _drawPileAnchor = GetNode<Control>("DrawPileAnchor");
-        _discardPileAnchor = GetNode<Control>("DiscardPileAnchor");
-        _exhaustPileAnchor = GetNode<Control>("ExhaustPileAnchor");
-        _playerStatusRow = GetNode<HBoxContainer>("PlayerStatusRow");
+        _playerStatusRow = GetNode<HBoxContainer>("TopLeftColumn/PlayerStatusRow");
         _targetHintLabel = GetNode<Label>("TargetHintLabel");
         _turnBannerLabel = GetNode<Label>("TurnBannerPanel/TurnBannerLabel");
         _turnBannerPanel = GetNode<PanelContainer>("TurnBannerPanel");
@@ -147,9 +150,7 @@ public partial class CombatScreen : Control
         StartPlayerIdleBob();
 
         ChromeStyles.ApplyHpBarStyle(_playerHpBar, _playerGhostHpBar);
-        GetNode<PanelContainer>("GoldPanel").AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
-        GetNode<PanelContainer>("RelicPanel").AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
-        GetNode<PanelContainer>("PotionPanel").AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
+        GetNode<PanelContainer>("TopLeftColumn/GoldPanel").AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
         _playerHpLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _energyLabel.ThemeTypeVariation = "CombatDisplayLabel";
         // The energy number sits *on* the orb now rather than under it, and
@@ -200,6 +201,12 @@ public partial class CombatScreen : Control
         RefreshRelics();
     }
 
+    // One bordered slot per relic, rather than every relic loose inside one
+    // fixed-width panel. The panel was 280px wide and a run typically carries
+    // one to four 34px relics in it, so it read as an empty box with something
+    // small in the corner; per-relic framing makes the row exactly as wide as
+    // the relics you actually own and gives each one a readable edge against
+    // the backdrop.
     private void RefreshRelics()
     {
         foreach (var child in _relicBar.GetChildren())
@@ -211,24 +218,25 @@ public partial class CombatScreen : Control
         foreach (var relic in RunState.Relics)
         {
             var tooltip = $"{relic.Definition.Name}\n{relic.Definition.Description}";
+            var slot = new PanelContainer { TooltipText = tooltip, MouseFilter = MouseFilterEnum.Stop };
+            slot.AddThemeStyleboxOverride("panel", ChromeStyles.SlotStyle(filled: true));
+            _relicBar.AddChild(slot);
+
             if (ArtAssets.RelicIcon(relic.Definition.Id) is { } icon)
             {
-                _relicBar.AddChild(new TextureRect
-                {
-                    Texture = icon,
-                    CustomMinimumSize = new Vector2(34, 34),
-                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-                    TooltipText = tooltip,
-                    MouseFilter = MouseFilterEnum.Stop,
-                });
+                // 34x34 before, which is off-grid: an icon authored on the
+                // 32px grid drawn at 34px is a 1.0625x scale, the fractional
+                // scaling docs/ART_SPEC.md section 2 exists to forbid.
+                var rect = new TextureRect { Texture = icon, MouseFilter = MouseFilterEnum.Ignore };
+                PixelSpec.ApplyPixelRect(rect, PixelSpec.IconGrid, PixelSpec.HudIconScale);
+                slot.AddChild(rect);
             }
             else
             {
-                _relicBar.AddChild(new Label
+                slot.AddChild(new Label
                 {
                     Text = relic.Definition.Name,
-                    TooltipText = tooltip,
+                    MouseFilter = MouseFilterEnum.Ignore,
                 });
             }
         }
@@ -659,8 +667,9 @@ public partial class CombatScreen : Control
                                (player.Block > 0 ? $"  🛡{player.Block}" : "");
         _energyLabel.Text = $"{player.CurrentEnergy}/{player.MaxEnergy}";
         RefreshEnergyPips(player.CurrentEnergy, player.MaxEnergy);
-        _pileCountsLabel.Text =
-            $"Draw {player.Piles.DrawPile.Count} · Discard {player.Piles.Discard.Count} · Exhaust {player.Piles.Exhaust.Count}";
+        // The "Draw N · Discard N · Exhaust N" label that used to live here is
+        // gone: PileCounterBar's cells now carry those three numbers, and
+        // printing them twice was the same double-encoding the energy pips had.
         StatusRow.Populate(_playerStatusRow, player, 20, _lastPlayerStatuses);
         _lastPlayerStatuses = new Dictionary<StatusType, int>(player.Statuses);
     }
@@ -797,8 +806,8 @@ public partial class CombatScreen : Control
             if (view.GetParent() == _handArea)
             {
                 bool isExhaust = _combat.Player.Piles.Exhaust.Contains(card);
-                var anchor = isExhaust ? _exhaustPileAnchor : _discardPileAnchor;
-                view.PlayExitTween(anchor.GlobalPosition, isExhaust);
+                var anchor = isExhaust ? _pileCounters.ExhaustCenter : _pileCounters.DiscardCenter;
+                view.PlayExitTween(anchor, isExhaust);
             }
         }
 
@@ -849,7 +858,7 @@ public partial class CombatScreen : Control
             cardView.SetHomeTransform(pos, rotationDeg, i);
             if (isNew)
             {
-                cardView.PlayDrawTween(_drawPileAnchor.GlobalPosition, i * 0.04f);
+                cardView.PlayDrawTween(_pileCounters.DrawCenter, i * 0.04f);
             }
         }
     }
@@ -1028,6 +1037,13 @@ public partial class CombatScreen : Control
         tween.TweenProperty(target, "modulate", original, 0.12);
     }
 
+    // Always RunState.MaxPotionSlots slots, empty ones included. The belt used
+    // to be a fixed-width panel containing only the potions you happened to
+    // hold, so carrying one potion drew a wide bordered box with a single icon
+    // at its left edge - dead space that looked like a layout bug. Drawing the
+    // empty slots makes the same width read as capacity, and tells the player
+    // how many more potions they can pick up, which nothing else in combat
+    // does.
     private void RefreshPotions()
     {
         foreach (var child in _potionBelt.GetChildren())
@@ -1036,11 +1052,24 @@ public partial class CombatScreen : Control
             child.QueueFree();
         }
 
-        foreach (var potion in RunState.Potions)
+        for (int i = 0; i < RunState.MaxPotionSlots; i++)
         {
-            var potionView = _potionViewScene.Instantiate<PotionView>();
-            _potionBelt.AddChild(potionView);
-            potionView.SetPotionInstance(potion);
+            if (i < RunState.Potions.Count)
+            {
+                var potionView = _potionViewScene.Instantiate<PotionView>();
+                _potionBelt.AddChild(potionView);
+                potionView.SetPotionInstance(RunState.Potions[i]);
+                continue;
+            }
+
+            var empty = new PanelContainer
+            {
+                CustomMinimumSize = PotionView.SlotSize,
+                TooltipText = "Empty potion slot",
+                MouseFilter = MouseFilterEnum.Stop,
+            };
+            empty.AddThemeStyleboxOverride("panel", ChromeStyles.SlotStyle(filled: false));
+            _potionBelt.AddChild(empty);
         }
     }
 
