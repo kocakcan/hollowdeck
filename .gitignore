@@ -13,6 +13,11 @@ bin/
 obj/
 *.csproj.user
 
+# tools/artgen is a Rust build; its output is the PNGs under assets/, which
+# ARE committed. Cargo.lock is committed too - artgen is a binary, and a
+# pinned lockfile is what makes "re-run it and get the same assets" true.
+tools/artgen/target/
+
 # OS cruft
 .DS_Store
 

@@ -196,11 +196,24 @@ See `ROADMAP.md`, "Known cost, accepted".
 
 ## 8. What gets enforced automatically
 
-`tools/artgen validate` (Phase 3) fails the build on:
+`tools/artgen validate` runs from `tools/run-smoke-tests.sh` ahead of the engine suites, and fails
+the build on:
 
 - an asset whose dimensions are not a legal grid from §1
 - a colour outside the §5 ramp
+- a partially-transparent pixel — a soft mask edge is anti-aliasing by another name, and under
+  Nearest it shows as a halo of half-lit pixels around the silhouette (§3)
 - an SVG anywhere under `assets/`
 
-A smoke test asserts the runtime half — that every sprite and icon site sets `Nearest` and an
-integer scale.
+It reads the raw PNG bytes, which is why this half lives outside the engine: `GD.Load` hands back
+an already-imported texture, not the file.
+
+`PixelSpecSmokeTest` asserts the runtime half — that every sprite and icon site sets `Nearest` and
+an integer scale, that every asset is on a legal grid, that no SVG survives, that the fonts in use
+are the bitmap pair, and two things that keep the two halves honest: that `artgen`'s `palette.rs`
+still matches `PixelSpec.Ramp` entry-for-entry, and that every icon filename is a live definition
+id (in both directions).
+
+Fixing a violation is usually `artgen clamp`, which snaps colours onto the ramp and hardens alpha.
+Both of its passes are idempotent, so it is safe to re-run over the whole tree after a palette
+edit.

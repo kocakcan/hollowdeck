@@ -49,12 +49,13 @@ scripts/
   data/       Definition classes and the JSON databases that load them, EffectSpec
   ui/         Screen controllers, CardView, EnemyView, theming, layout helpers
   audio/      AudioSynth / AudioCues / AudioMusic — everything is synthesized at runtime
-  debug/      14 smoke-test scenes + the screenshot harness
+  debug/      15 smoke-test scenes + the screenshot harness
 scenes/       11 screens + reusable CardView/EnemyView/PotionView/FloatingText
   debug/      smoke-test and screenshot scenes
 data/         acts / cards / relics / potions / enemies / events — all JSON, the content layer
 assets/       sprites, icons, fonts, backgrounds, themes (see CREDITS.md for licensing)
 tools/        run-smoke-tests.sh
+  artgen/     Rust asset tool — generates the 79 icons, palette-clamps art, validates ART_SPEC
 ```
 
 ## Architecture
@@ -131,6 +132,13 @@ single two-slime fight), a `bossIds` pool the run seed picks one from, `mapBackg
 percentage granted for clearing it. Adding a fourth act is a row here plus the enemies it names —
 `MapGenerator` reads all of it and `RunState.AdvanceAct` walks the list, so no code changes.
 
+**Art** follows the same convention as everything else: `ArtAssets.cs` resolves it by definition
+id, so a card named `strike` picks up `assets/icons/cards/strike.png` with no schema or code
+change. Those icons are generated — add a `fn` and one registry line in `tools/artgen/src/icons/`,
+then `cargo run --release --manifest-path tools/artgen/Cargo.toml -- generate`. See
+`tools/artgen/README.md`; `PixelSpecSmokeTest` fails if a definition has no icon or an icon has no
+definition.
+
 **A relic** (`data/relics/relics.json`) is data-only when it fires a single effect on
 `OnCombatStart` or `OnTurnStart` — use `"behaviorId": "simple_hook_effect"` with a `hook` and an
 `effect`. Anything else needs a `RelicBehavior` subclass in `scripts/relics/` overriding one of
@@ -140,12 +148,16 @@ the seven hooks (extending `SimpleHookEffectRelic` to the other five hooks is on
 
 There's no test framework. Each `scenes/debug/*SmokeTest.tscn` runs assertions in `_Ready`,
 prints `PASS`/`FAIL` per check and a `<Name>: N passed, M failed` summary, then exits nonzero if
-anything failed. 14 suites, 332 checks:
+anything failed. 15 suites, 463 checks:
 
 ```bash
 tools/run-smoke-tests.sh                 # all of them; builds first, nonzero exit on any failure
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
+
+The script also runs `tools/artgen validate` first, which enforces `docs/ART_SPEC.md` against the
+raw PNG bytes — grid, palette, hard alpha, no SVG. It's skipped with a warning if `cargo` isn't
+installed; the game itself never needs a Rust toolchain.
 
 Run them after touching anything under `scripts/` or any `.tscn`. Two suites print expected
 noise that is not a regression: `MetaProgressionSmokeTest` emits a JSON parse warning from its

@@ -136,6 +136,11 @@ tools/run-smoke-tests.sh                 # all 15; builds first, nonzero exit on
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 
+The script also runs `tools/artgen validate` before the engine suites — the `docs/ART_SPEC.md`
+asset rules (grid, ramp, hard alpha, no SVG) checked against the raw PNG bytes, which the C# side
+can't do because `GD.Load` returns an imported texture. It's skipped with a warning if `cargo`
+isn't installed.
+
 Run these after touching anything under `scripts/` or any `.tscn`, before reporting work done.
 
 | Test | Covers | Run when you touch |
@@ -154,7 +159,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `RunSaveSmokeTest` | in-run save/load round-trip, save v2/v3 tolerance | `RunSaveData`, `RunSaveManager`, `RunState` |
 | `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |
 | `AudioSmokeTest` | stream construction, bus setup, volume round-trip | `scripts/audio/`, `AudioManager`, `SettingsManager` |
-| `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/font, `project.godot` rendering |
+| `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon-to-definition coverage, `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
 
 When in doubt run everything — the full sweep takes well under a minute. Restructuring a
 `.tscn` will break tests that assert on `GetNode` paths, on purpose — that's the alarm working;
