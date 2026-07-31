@@ -1,5 +1,7 @@
 # Hollowdeck
 
+[![CI](https://github.com/kocakcan/hollowdeck/actions/workflows/ci.yml/badge.svg)](https://github.com/kocakcan/hollowdeck/actions/workflows/ci.yml)
+
 A standalone desktop deckbuilder roguelike in the vein of Slay the Spire: traverse a branching
 node map, fight turn-based card combats against enemies that telegraph their intents, collect
 relics and potions, and unlock new content across runs by scoring well. Single-player, no
@@ -163,6 +165,12 @@ Each suite runs under a 90-second watchdog (`SUITE_TIMEOUT`). A test that throws
 a `GetNode` against a path a `.tscn` no longer has is the usual way — never reaches its
 `GetTree().Quit()`, so Godot drops into an idle main loop and the whole sweep stalls instead of
 failing. The watchdog turns that back into a `TIMEOUT` line and a nonzero exit.
+
+The same script is what CI runs (`.github/workflows/ci.yml`) on every push to `main` and every
+pull request, against the pinned 4.7.1-stable mono build. It imports assets first — `.godot/` is
+gitignored, so a fresh checkout has no imported resources and every `ResourceLoader.Exists()`
+returns false — and afterwards re-runs `artgen generate` to check the committed art still matches
+the code that produces it.
 
 Run them after touching anything under `scripts/` or any `.tscn`. Two suites print expected
 noise that is not a regression: `MetaProgressionSmokeTest` emits a JSON parse warning from its

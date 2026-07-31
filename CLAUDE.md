@@ -171,6 +171,11 @@ inside `_Ready` — a `GetNode` against a path a restructured `.tscn` no longer 
 — never reaches its `GetTree().Quit()`, so Godot sits in an idle main loop and the sweep *stalls*
 rather than failing. The watchdog reports that as `TIMEOUT` and exits nonzero.
 
+`.github/workflows/ci.yml` runs this same script on every push to `main` and every PR. It imports
+assets first (`.godot/` is gitignored, so a fresh checkout resolves no resources at all) and then
+re-runs `artgen generate` to check the committed art still matches its source. A red CI on
+"Generated art is up to date" means an icon `fn` was edited without re-running the generator.
+
 Run these after touching anything under `scripts/` or any `.tscn`, before reporting work done.
 
 | Test | Covers | Run when you touch |
