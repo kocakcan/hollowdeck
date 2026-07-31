@@ -23,8 +23,8 @@ With no screen names it shoots all of them. Unknown names exit 1 and list the va
 
 ## Screens
 
-`combat` `combatfull` `combat2` `combat3` `reward` `shop` `map` `map2` `map3` `rest` `treasure`
-`event` `unlocks` `runend` `mainmenu` `settings` `deckpopup`
+`combat` `combatfull` `combat2` `combat3` `reward` `shop` `map` `map2` `map3` `rest` `restupgrade`
+`treasure` `event` `unlocks` `runend` `mainmenu` `settings` `deckpopup`
 
 `map2`/`map3` and `combat2`/`combat3` are the later acts — each has its own backdrop tint, title,
 boss sprites and floor count, none of which act 1's shots show. `map3` is also the longest map (10
@@ -36,7 +36,9 @@ real bug that shipped, the relic bar growing rightward across the leftmost enemy
 its target-lock glow. Reach for this one for any HUD or enemy-row layout change.
 
 `deckpopup` opens the pile popup over the map with a 13-card deck, since the popup is spawned on
-demand by `DeckViewButtons` rather than being a screen of its own.
+demand by `DeckViewButtons` rather than being a screen of its own. `restupgrade` is the same idea
+for the rest site's second view — it presses Smith first, and seeds seven un-upgraded cards so the
+shot shows the picker's grid wrapping rather than one tidy row.
 
 Each one instantiates the real `.tscn` the way `RunManager.ChangeScreen` would, with the global
 statics that screen's `_Ready` reads already seeded (`RunState`, `RewardContext`,

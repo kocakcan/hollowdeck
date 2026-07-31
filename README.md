@@ -148,7 +148,7 @@ the seven hooks (extending `SimpleHookEffectRelic` to the other five hooks is on
 
 There's no test framework. Each `scenes/debug/*SmokeTest.tscn` runs assertions in `_Ready`,
 prints `PASS`/`FAIL` per check and a `<Name>: N passed, M failed` summary, then exits nonzero if
-anything failed. 15 suites, 463 checks:
+anything failed. 15 suites, 539 checks:
 
 ```bash
 tools/run-smoke-tests.sh                 # all of them; builds first, nonzero exit on any failure
@@ -158,6 +158,11 @@ tools/run-smoke-tests.sh MapSmokeTest    # a subset
 The script also runs `tools/artgen validate` first, which enforces `docs/ART_SPEC.md` against the
 raw PNG bytes — grid, palette, hard alpha, no SVG. It's skipped with a warning if `cargo` isn't
 installed; the game itself never needs a Rust toolchain.
+
+Each suite runs under a 90-second watchdog (`SUITE_TIMEOUT`). A test that throws inside `_Ready` —
+a `GetNode` against a path a `.tscn` no longer has is the usual way — never reaches its
+`GetTree().Quit()`, so Godot drops into an idle main loop and the whole sweep stalls instead of
+failing. The watchdog turns that back into a `TIMEOUT` line and a nonzero exit.
 
 Run them after touching anything under `scripts/` or any `.tscn`. Two suites print expected
 noise that is not a regression: `MetaProgressionSmokeTest` emits a JSON parse warning from its

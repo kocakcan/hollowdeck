@@ -89,6 +89,11 @@ public partial class ScreenShot : Node
         // since the thing worth looking at is how the columns pack.
         ["deckpopup"] = new("res://scenes/MapScreen.tscn", SeedDeckPopup, OpenDeckPopup),
         ["rest"] = new("res://scenes/RestScreen.tscn", SeedRest),
+        // The rest site's second view, reached by pressing Smith. It renders
+        // real CardViews now rather than stacked text rows, so it is a layout
+        // that can overflow and needs looking at - and it is unreachable
+        // without the click, same as the deck popup above.
+        ["restupgrade"] = new("res://scenes/RestScreen.tscn", SeedRestUpgrade, OpenRestUpgrade),
         ["treasure"] = new("res://scenes/TreasureScreen.tscn", SeedTreasure),
         ["event"] = new("res://scenes/EventScreen.tscn", SeedEvent),
         ["unlocks"] = new("res://scenes/MetaProgressionScreen.tscn", SeedUnlocks),
@@ -305,6 +310,18 @@ public partial class ScreenShot : Node
     }
 
     private static void SeedRest() => RunState.PlayerCurrentHp = 21;
+
+    // Seven un-upgraded cards: two more than the picker's five columns, so the
+    // shot shows the wrap rather than a single tidy row.
+    private static void SeedRestUpgrade()
+    {
+        SeedRest();
+        RunState.Deck = CardDatabase.All.Take(7).ToList();
+    }
+
+    private static void OpenRestUpgrade(Node screen) =>
+        screen.GetNode<Button>("CenterContainer/VBoxContainer/ChoiceColumn/SmithButton")
+            .EmitSignal(Button.SignalName.Pressed);
 
     private static void SeedTreasure() => RunState.Relics = new List<RelicInstance>();
 

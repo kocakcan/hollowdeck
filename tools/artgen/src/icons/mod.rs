@@ -1,23 +1,27 @@
-//! The generated icon set — 78 icons across six categories, replacing the
-//! game-icons.net SVGs.
+//! The generated icon set — 84 icons across seven categories, replacing the
+//! game-icons.net SVGs (79 of them) plus the five event illustrations that
+//! never had a vector equivalent at all.
 //!
 //! Why generate rather than hand-place pixels in an editor: `ArtAssets.cs`
 //! resolves art by convention (`assets/icons/cards/<card_id>.png`), so the
 //! only thing an icon has to be is *a file with the right name on the right
 //! grid* — and the tool can guarantee the grid, the palette and the outline
-//! for all 78 at once, which is precisely what the vector set could not. A
-//! palette edit is then one constant and a re-run.
+//! for all of them at once, which is precisely what the vector set could not.
+//! A palette edit is then one constant and a re-run.
 //!
 //! Legibility budget: an icon is 32x32 authored, shown at 1x in the HUD
 //! (`PixelSpec.HudIconScale`) and 3x in a card's art window
 //! (`PixelSpec.CardArtScale`). 1x is the binding constraint — anything that
 //! needs more than about six distinct shapes stops reading there, which is why
-//! these are silhouettes with one accent rather than illustrations.
+//! these are silhouettes with one accent rather than illustrations. The
+//! `events` category is the one exception and says so in its own header: it is
+//! never drawn below 5x.
 
 use crate::canvas::Canvas;
 use crate::palette::*;
 
 mod cards;
+mod events;
 mod misc;
 mod potions;
 mod relics;
@@ -55,5 +59,6 @@ pub fn all() -> Vec<Icon> {
     icons.extend(relics::icons());
     icons.extend(potions::icons());
     icons.extend(misc::icons());
+    icons.extend(events::icons());
     icons
 }

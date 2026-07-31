@@ -45,7 +45,7 @@ foundation for it is already in place and already uniform:
 | --- | --- | --- |
 | Enemy + player sprites | 25 | uniform 32x32 (one boss 32x48) |
 | Background tiles | 7 | uniform 64x64 |
-| Icons (cards, relics, potions, map, status, intents) | 78 | ~~**SVG — wrong medium**~~ → 79 generated PNGs (Phase 3) |
+| Icons (cards, relics, potions, map, status, intents) | 78 | ~~**SVG — wrong medium**~~ → 79 generated PNGs (Phase 3), plus 5 event illustrations (Phase 4) |
 | Fonts (Cinzel, IM Fell English) | 2 | **high-res serif — wrong medium** |
 | `ChromeStyles` chrome | — | **anti-aliased rounded rects, soft shadows — wrong medium** |
 
@@ -208,17 +208,50 @@ loses its art silently rather than failing).
 
 Art as code: change one palette constant, re-run, every asset regenerates consistently.
 
-## Phase 4 — The remaining screens
+## Phase 4 — The remaining screens ✅ done
 
-These inherit correct chrome from Phase 1, but several are near-empty and need real layout:
+These inherited correct chrome from Phase 1 but several were near-empty. The common defect turned
+out to be one thing repeated six times: a `CenterContainer` of unstyled labels floating on a tiled
+backdrop, with the run's HP/gold printed as a bare `Label` at `(24, 16)` in the body face. So the
+fix is one new file plus six much smaller edits — `scripts/ui/ScreenChrome.cs`, attached from
+`_Ready` the way `ScreenBackground` and `DeckViewButtons` already are, supplying a screen title, a
+framed HP/gold/relic status block, a panel frame and an art plinth. The vocabulary is deliberately
+combat's own (`ChromeStyles.PanelStyle` + one `SlotStyle` per relic) rather than a second one.
 
-- **Treasure** prints `"You found: Vampire Fang"` as text while `vampire_fang.svg` sits unused.
-- **Rest** is ~90% empty — three buttons, no campfire.
-- **Event** has no illustration at all.
-- **Map** uses only the top half (~40% dead space). (The `Event`-nodes-render-as-text half of this
-  is fixed — see Phase 3; it was a missing icon file, not a layout problem.)
-- **Shop** puts relics in a raw `ItemList` with a visible scrollbar, and wastes its right half.
-- **RunEnd** has no victory treatment for a won run.
+- ✅ **Treasure** shows the relic. `vampire_fang.png` at `SpriteScale` on a plinth, name in the
+  display face, description under it, with a short rise-and-settle on arrival. It used to print
+  `"You found: Vampire Fang"` as body text while the icon `ArtAssets` already resolves by id went
+  unused.
+- ✅ **Rest** has its campfire — `assets/icons/map/rest.png` at 5x, with a slow brightness flicker
+  (gated on `ReduceMotion`; a modulate multiply, so it only ever darkens and the plinth bezel goes
+  with it). The Smith picker also stopped being three stacked text rows per card and became real
+  `CardView`s of the *upgraded* result with a "was:" delta beneath — the one place outside combat
+  the player is asked to compare cards, so "one card component everywhere" applies.
+- ✅ **Event** has per-event illustrations, five new `artgen` icons keyed to the event ids
+  (`ArtAssets.EventIcon`, falling back to the map's scroll so an unillustrated event still gets a
+  subject). This is the one icon category never drawn below 5x, and says so in its own module
+  header. The screen deliberately does *not* take a `ScreenChrome` title: the event's own name is
+  the title.
+- ✅ **Map** fills the canvas. Column spacing is now derived from the widest floor exactly as floor
+  spacing was already derived from the act length, and each floor is centred on the band rather
+  than stacked downward from a fixed `y=60` — which is what left the bottom 45% empty. Node icons
+  also moved off `Button.Icon` + `ExpandIcon`, which was resampling every 32px icon to a 56px
+  button (1.75x, a fractional scale ART_SPEC section 2 forbids); they are centred child
+  `TextureRect`s at an exact 2x on a 64px node, 3x on a 96px boss.
+- ✅ **Shop** uses its full width: four cards on top, the relic/potion stock below as four framed
+  tiles carrying their own icon, name, kind, rules text and price. The stock used to be a 476px
+  `ScrollContainer` with a visible scrollbar pinned bottom-left while the right half sat empty.
+- ✅ **RunEnd** has a victory treatment. Two columns — outcome and next actions on the left, the
+  itemized score on the right — with the player sprite on a plinth, gold-titled and breathing on a
+  win, drained toward the dark end of the ramp and red-titled on a loss. Winning used to be
+  announced by one line of 16px body text set identically to the losing one.
+
+Two things found on the way and fixed here rather than filed: `MapScreen._Draw` indexed
+`_nodeCenters` by whatever is currently in `RunState.MapNodes`, so a freed-but-not-yet-collected
+map instance threw a `KeyNotFoundException` out of `_Draw` on every suite run once the next act's
+graph had replaced it; and `tools/run-smoke-tests.sh` now runs each suite under a watchdog,
+because a test that throws inside `_Ready` never reaches `GetTree().Quit()` and hangs the sweep
+instead of failing it.
 
 ## Phase 5 — Transitions
 

@@ -5,6 +5,7 @@ using Godot;
 using Hollowdeck.Data;
 using Hollowdeck.Map;
 using Hollowdeck.Run;
+using Hollowdeck.UI;
 
 namespace Hollowdeck.Debug;
 
@@ -160,7 +161,9 @@ public partial class MapSmokeTest : Node
         var instance = packed.Instantiate();
         AddChild(instance);
 
-        var hpLabel = instance.GetNode<Label>("HpLabel");
+        // HP moved into the run-status block ScreenChrome builds; the map's
+        // own hand-placed Gold/HP labels and relic strip are gone.
+        var hpLabel = instance.GetNode<Label>(ScreenChrome.HpLabelPath);
         Check("map_screen_shows_current_hp", hpLabel.Text.Contains("33") && hpLabel.Text.Contains("50"),
             $"text='{hpLabel.Text}'");
 
@@ -221,6 +224,7 @@ public partial class MapSmokeTest : Node
         AddChild(instance);
 
         const float designWidth = 1152f;
+        const float designHeight = 648f;
         var buttons = instance.GetNode<Control>("NodeButtons").GetChildren().OfType<Button>().ToList();
         var overflowing = buttons
             .Where(b => b.Position.X < 0f || b.Position.X + b.Size.X > designWidth)
@@ -228,6 +232,27 @@ public partial class MapSmokeTest : Node
             .ToList();
         Check($"{longest.Id}_all_nodes_within_design_width", overflowing.Count == 0,
             string.Join(", ", overflowing));
+
+        // Column spacing is derived from the height the same way (ROADMAP
+        // Phase 4): the graph now fills the band between the run-status block
+        // and the footer instead of stacking down from a fixed y=60, so it can
+        // run off the *bottom* if the derivation is wrong - which the width
+        // check would never have caught.
+        var tooTall = buttons
+            .Where(b => b.Position.Y < 0f || b.Position.Y + b.Size.Y > designHeight)
+            .Select(b => $"y={b.Position.Y}+{b.Size.Y}")
+            .ToList();
+        Check($"{longest.Id}_all_nodes_within_design_height", tooTall.Count == 0,
+            string.Join(", ", tooTall));
+
+        // And it should actually use that band - the defect being fixed was a
+        // map whose bottom 45% was empty, which no "fits on screen" assertion
+        // can see. 60% of the design height is comfortably below what a
+        // centred multi-row act produces and well above the old layout.
+        float top = buttons.Min(b => b.Position.Y);
+        float bottom = buttons.Max(b => b.Position.Y + b.Size.Y);
+        Check($"{longest.Id}_graph_fills_the_vertical_band", bottom - top > designHeight * 0.6f,
+            $"spans {bottom - top:F0}px of {designHeight:F0}");
 
         RunState.ActIndex = 0;
         instance.QueueFree();

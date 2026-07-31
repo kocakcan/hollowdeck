@@ -49,6 +49,44 @@ else
     echo "skipped: cargo not on PATH (asset spec unchecked)"
 fi
 
+# Per-suite watchdog, in seconds. A test that throws inside _Ready - a
+# GetNode against a path a .tscn no longer has is the usual way - never
+# reaches its GetTree().Quit(), so Godot drops into an idle main loop and
+# sits there. The suite does not fail; it stops, and takes the whole sweep
+# with it. The full run is meant to take well under a minute, so anything
+# past this is that hang and gets reported as a failure.
+#
+# `timeout(1)` is not installed on macOS, hence doing it by hand.
+SUITE_TIMEOUT="${SUITE_TIMEOUT:-90}"
+
+run_suite() {
+    local scene="$1"
+    local out
+    out=$(mktemp)
+
+    "$GODOT" --headless --path . "$scene" >"$out" 2>&1 &
+    local pid=$!
+
+    local waited=0
+    while kill -0 "$pid" 2>/dev/null; do
+        if (( waited >= SUITE_TIMEOUT )); then
+            kill -9 "$pid" 2>/dev/null
+            wait "$pid" 2>/dev/null
+            cat "$out"
+            rm -f "$out"
+            return 124
+        fi
+        sleep 1
+        (( waited++ )) || true
+    done
+
+    wait "$pid"
+    local status=$?
+    cat "$out"
+    rm -f "$out"
+    return $status
+}
+
 if [[ $# -gt 0 ]]; then
     tests=("$@")
 else
@@ -68,9 +106,16 @@ for name in "${tests[@]}"; do
         continue
     fi
 
-    output=$("$GODOT" --headless --path . "$scene" 2>&1)
+    output=$(run_suite "$scene")
     status=$?
     summary=$(grep -E "[0-9]+ passed, [0-9]+ failed" <<<"$output" | tail -1)
+
+    if [[ $status -eq 124 ]]; then
+        echo "TIMEOUT  ${name} (killed after ${SUITE_TIMEOUT}s - threw before Quit()?)"
+        grep -E "^FAIL |SCRIPT ERROR|Unhandled exception|Node not found" <<<"$output" | head -5 | sed 's/^/           /'
+        failed+=("$name")
+        continue
+    fi
 
     if [[ $status -ne 0 || -z "$summary" ]]; then
         # A crash mid-run prints no summary line at all, which is exactly the

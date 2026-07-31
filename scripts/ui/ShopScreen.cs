@@ -7,14 +7,29 @@ using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
 
+// Two rows of merchandise across the full width: four cards on top, the
+// relic/potion stock below, priced and framed the same way.
+//
+// The relics and potions used to sit in a 476px-wide ScrollContainer pinned to
+// the bottom-left with a visible scrollbar, rendering each item as a stock
+// Button with a 36px-tall stretched icon and a wrapped description under it -
+// while the right half of the screen was empty (ROADMAP Phase 4). They are now
+// tiles the same shape as each other, which is also what makes "these four
+// things are all for sale" read at a glance.
 public partial class ShopScreen : Control
 {
     private const int CardPrice = 50;
     private const int RelicPrice = 150;
     private const int PotionPrice = 40;
 
-    private Label _goldLabel = null!;
-    private VBoxContainer _offersList = null!;
+    // Wide enough for two lines of a relic description at the body size, and
+    // narrow enough that four tiles plus separations clear the design width.
+    // 236 + 24 of frame padding = 260 each, so 4 tiles and 3 gaps come to
+    // 1088 inside OffersRow's 1112 - at 256 they came to 1168 and the outer
+    // two tiles were clipped by the screen edges.
+    private const int TileWidth = 236;
+
+    private HBoxContainer _offersRow = null!;
     private HBoxContainer _cardOffersRow = null!;
 
     // Every buy button on the screen with its price, so RefreshOffers can
@@ -27,8 +42,10 @@ public partial class ShopScreen : Control
     {
         ScreenBackground.Attach(this, "cobble", new Color(0.7f, 0.7f, 0.75f));
         DeckViewButtons.Attach(this);
-        _goldLabel = GetNode<Label>("GoldLabel");
-        _offersList = GetNode<VBoxContainer>("OffersScroll/OffersList");
+        ScreenChrome.AddTitle(this, "Shop");
+        ScreenChrome.AddRunStatus(this);
+
+        _offersRow = GetNode<HBoxContainer>("OffersRow");
         _cardOffersRow = GetNode<HBoxContainer>("CardOffersRow");
         var leaveButton = GetNode<Button>("LeaveButton");
         leaveButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
@@ -41,7 +58,7 @@ public partial class ShopScreen : Control
         // the card's own cost badge shows its Energy cost, not its Gold
         // price - those are two different numbers that would be confusing
         // conflated into a single badge. Relics/potions have no CardView
-        // equivalent, so they stay on the generic offer-row treatment.
+        // equivalent, so they get the tile treatment below.
         var cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
         foreach (var card in Sample(MetaProgressionManager.Instance.UnlockedCards().ToList(), 4, rng))
         {
@@ -54,14 +71,14 @@ public partial class ShopScreen : Control
             .ToList();
         foreach (var relic in Sample(availableRelics, 2, rng))
         {
-            AddOfferRow($"{relic.Name} (relic) - {RelicPrice}g", relic.Description, RelicPrice,
+            AddOfferTile(relic.Name, "Relic", relic.Description, RelicPrice,
                 () => RunState.Relics.Add(new RelicInstance(relic)), ArtAssets.RelicIcon(relic.Id));
         }
 
         // All potions unlocked too - same reasoning as cards above.
         foreach (var potion in Sample(PotionDatabase.All.ToList(), 2, rng))
         {
-            AddOfferRow($"{potion.Name} (potion) - {PotionPrice}g",
+            AddOfferTile(potion.Name, "Potion",
                 EffectDescriptionFormatter.Describe(potion.Effects, new DescribeContext(TargetType: potion.Target)),
                 PotionPrice, () =>
             {
@@ -88,6 +105,7 @@ public partial class ShopScreen : Control
     private void AddCardOffer(CardDefinition card, PackedScene cardScene)
     {
         var column = new VBoxContainer();
+        column.AddThemeConstantOverride("separation", (int)UiTheme.Spacing.Sm);
         _cardOffersRow.AddChild(column);
 
         var view = cardScene.Instantiate<CardView>();
@@ -96,6 +114,7 @@ public partial class ShopScreen : Control
         view.SetCardInstance(new CardInstance(card));
 
         var buyButton = new Button { Text = $"Buy ({CardPrice}g)" };
+        ChromeStyles.ApplyEmphasisButtonStyle(buyButton);
         column.AddChild(buyButton);
         _offerButtons.Add((buyButton, CardPrice));
         buyButton.Pressed += () =>
@@ -109,27 +128,46 @@ public partial class ShopScreen : Control
         };
     }
 
-    private void AddOfferRow(string label, string description, int price, System.Action onBuy, Texture2D? icon = null) =>
-        AddOfferRow(label, description, price, () => { onBuy(); return true; }, icon);
+    private void AddOfferTile(string name, string kind, string description, int price,
+        System.Action onBuy, Texture2D? icon = null) =>
+        AddOfferTile(name, kind, description, price, () => { onBuy(); return true; }, icon);
 
-    private void AddOfferRow(string label, string description, int price, System.Func<bool> onBuy, Texture2D? icon = null)
+    // Icon, name, kind, rules text, price button - in that order, in a framed
+    // panel of a fixed width. The kind ("Relic"/"Potion") is its own muted
+    // line rather than a parenthetical inside the name, because the name is
+    // the thing being scanned for.
+    private void AddOfferTile(string name, string kind, string description, int price,
+        System.Func<bool> onBuy, Texture2D? icon = null)
     {
-        var row = new VBoxContainer();
-        var button = new Button { Text = label };
+        var column = new VBoxContainer { CustomMinimumSize = new Vector2(TileWidth, 0) };
+        column.AddThemeConstantOverride("separation", (int)UiTheme.Spacing.Xs);
+
         if (icon is not null)
         {
-            button.Icon = icon;
-            button.ExpandIcon = true;
-            button.CustomMinimumSize = new Vector2(0, 36);
+            var slot = new CenterContainer();
+            // 2x, matching the map's node icons. 1x is the HUD size and gets
+            // lost inside a 256px tile; 3x would not leave room for two lines
+            // of description in the height the row has.
+            slot.AddChild(ScreenChrome.PixelIcon(icon, 2));
+            column.AddChild(slot);
         }
-        var descriptionLabel = new Label
-        {
-            Text = description,
-            AutowrapMode = TextServer.AutowrapMode.WordSmart,
-        };
-        row.AddChild(button);
-        row.AddChild(descriptionLabel);
-        _offersList.AddChild(row);
+
+        column.AddChild(ScreenChrome.Heading(name, UiTheme.Fonts.Body));
+
+        var kindLabel = ScreenChrome.Body(kind);
+        kindLabel.AddThemeFontSizeOverride("font_size", UiTheme.Fonts.Small);
+        kindLabel.AddThemeColorOverride("font_color", PixelSpec.Ramp.N5);
+        column.AddChild(kindLabel);
+
+        var descriptionLabel = ScreenChrome.Body(description);
+        descriptionLabel.SizeFlagsVertical = SizeFlags.ExpandFill;
+        column.AddChild(descriptionLabel);
+
+        var button = new Button { Text = $"Buy ({price}g)" };
+        ChromeStyles.ApplyEmphasisButtonStyle(button);
+        column.AddChild(button);
+
+        _offersRow.AddChild(ScreenChrome.Frame(column, UiTheme.Spacing.Md));
         _offerButtons.Add((button, price));
 
         button.Pressed += () =>
@@ -155,7 +193,7 @@ public partial class ShopScreen : Control
 
     private void RefreshOffers()
     {
-        _goldLabel.Text = $"Gold: {RunState.Gold}";
+        ScreenChrome.RefreshRunStatus(this);
         foreach (var (button, price) in _offerButtons)
         {
             button.Disabled = RunState.Gold < price;

@@ -302,10 +302,14 @@ public partial class MetaProgressionSmokeTest : Node
             .Where(e => e.Kind == UnlockKind.Relic)
             .Select(e => RelicDatabase.Get(e.Id).Name)
             .ToList();
-        var offers = instance.GetNode<VBoxContainer>("OffersScroll/OffersList");
+        // The relic/potion stock is a row of framed tiles now, not a scrolling
+        // list of buttons - so the offer's name is a Label inside the tile
+        // rather than the Button's own text (the button just says "Buy (150g)").
+        var offers = instance.GetNode<HBoxContainer>("OffersRow");
         bool anyLockedRelicOffered = offers.GetChildren()
-            .Select(row => row.GetChild<Button>(0).Text)
-            .Any(text => gatedRelicNames.Any(text.Contains));
+            .SelectMany(tile => tile.GetChild(0).GetChildren())
+            .OfType<Label>()
+            .Any(label => gatedRelicNames.Any(label.Text.Contains));
         Check("shop_never_offers_locked_relics", !anyLockedRelicOffered, "a locked relic appeared as a shop offer");
 
         var gatedCardNames = MetaProgressionManager.UnlockTrack

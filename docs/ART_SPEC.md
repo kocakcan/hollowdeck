@@ -227,7 +227,14 @@ an already-imported texture, not the file.
 an integer scale, that every asset is on a legal grid, that no SVG survives, that the fonts in use
 are the bitmap pair, and two things that keep the two halves honest: that `artgen`'s `palette.rs`
 still matches `PixelSpec.Ramp` entry-for-entry, and that every icon filename is a live definition
-id (in both directions).
+id (in both directions) — cards, relics, potions and events.
+
+Events are the one category where the *missing* direction is survivable: `ArtAssets.EventIcon`
+falls back to the map's scroll, so an event authored without art still renders a screen with a
+subject. The check is there for the orphan direction, where a renamed id would drop back to the
+generic art silently and forever with a stale file sitting beside it. Event icons are also the
+only ones never drawn below 5x — `EventScreen` shows them at `SpriteScale` as its focal art —
+which is why they carry more structure than the 1x-budgeted HUD set.
 
 It also scans the theme, every `.tscn` and every `scripts/ui/*.cs` for a rendered font size and
 fails any that is not a multiple of §7's 8px em. That check exists because the sizes that drifted

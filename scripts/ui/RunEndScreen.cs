@@ -9,6 +9,12 @@ namespace Hollowdeck.UI;
 // score screen), banks that score as meta progress, and announces anything
 // the run just unlocked. Replaces the old flat "+10 Shards / +25 if you won"
 // grant, which paid the same regardless of how the run actually went.
+//
+// Laid out as two columns - the outcome and what to do next on the left, the
+// itemized score on the right - rather than one tall centred stack. Winning
+// used to be announced by a single line of 16px body text reading "Victory!
+// You cleared the run.", set in the same face and weight as "Defeated...",
+// with nothing else on the screen distinguishing the two (ROADMAP Phase 4).
 public partial class RunEndScreen : Control
 {
     public override void _Ready()
@@ -23,16 +29,22 @@ public partial class RunEndScreen : Control
             score, RunManager.Instance.RunSeed, won ? "Win" : "Lose");
         RunSaveManager.Delete();
 
-        var outcomeLabel = GetNode<Label>("CenterContainer/VBoxContainer/OutcomeLabel");
-        outcomeLabel.Text = (won ? "Victory! You cleared the run." : "Defeated...") +
-                             $"\nSeed: {RunManager.Instance.RunSeed}";
+        ScreenChrome.AddTitle(this, won ? "Run Complete" : "Run Over",
+            won ? UiTheme.Palette.AccentGoldBright : PixelSpec.Ramp.R4);
 
+        BuildOutcome(won);
+
+        GetNode<Label>("CenterContainer/Columns/VBoxContainer/SeedLabel").Text =
+            $"Seed: {RunManager.Instance.RunSeed}";
+
+        GetNode<PanelContainer>("CenterContainer/Columns/ScorePanel")
+            .AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
         BuildScoreList(breakdown, score);
 
-        GetNode<Label>("CenterContainer/VBoxContainer/ProgressLabel").Text =
+        GetNode<Label>("CenterContainer/Columns/VBoxContainer/ProgressLabel").Text =
             $"Progress: {progressBefore:N0} → {progressBefore + score:N0}";
 
-        var unlockLabel = GetNode<Label>("CenterContainer/VBoxContainer/UnlockLabel");
+        var unlockLabel = GetNode<Label>("CenterContainer/Columns/VBoxContainer/UnlockLabel");
         unlockLabel.Visible = newlyUnlocked.Count > 0;
         if (newlyUnlocked.Count > 0)
         {
@@ -41,13 +53,45 @@ public partial class RunEndScreen : Control
             AudioManager.Instance?.PlaySfx("reward_pickup");
         }
 
-        var restartButton = GetNode<Button>("CenterContainer/VBoxContainer/RestartButton");
+        var restartButton = GetNode<Button>("CenterContainer/Columns/VBoxContainer/RestartButton");
+        ChromeStyles.ApplyEmphasisButtonStyle(restartButton);
         restartButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         restartButton.Pressed += OnRestartPressed;
 
-        var viewUnlocksButton = GetNode<Button>("CenterContainer/VBoxContainer/ViewUnlocksButton");
+        var viewUnlocksButton = GetNode<Button>("CenterContainer/Columns/VBoxContainer/ViewUnlocksButton");
         viewUnlocksButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         viewUnlocksButton.Pressed += OnViewUnlocksPressed;
+    }
+
+    // The two endings have to look different at a glance, and the only thing
+    // available to make them so without commissioning art is the player
+    // sprite plus the ramp: a win shows it lit and gold-titled, a loss shows
+    // it drained toward the dark end and titled in the danger red. Same
+    // silhouette, opposite treatment.
+    private void BuildOutcome(bool won)
+    {
+        var outcome = GetNode<Label>("CenterContainer/Columns/VBoxContainer/OutcomeLabel");
+        outcome.Text = won ? "VICTORY" : "DEFEATED";
+        outcome.ThemeTypeVariation = "CombatDisplayLabel";
+        outcome.AddThemeFontSizeOverride("font_size", UiTheme.Fonts.Title);
+        outcome.AddThemeColorOverride("font_color",
+            won ? UiTheme.Palette.AccentGoldBright : PixelSpec.Ramp.R4);
+
+        if (ArtAssets.PlayerSprite() is not { } sprite) return;
+
+        var plinth = ScreenChrome.ArtPlinth(sprite);
+        if (!won) plinth.Modulate = new Color(0.45f, 0.38f, 0.4f);
+        GetNode<CenterContainer>("CenterContainer/Columns/VBoxContainer/ArtSlot").AddChild(plinth);
+
+        if (!won || SettingsManager.Instance.ReduceMotion) return;
+
+        // A slow gold breath on the winning sprite. The one moment in the game
+        // that is allowed to be self-congratulatory, and it costs one tween.
+        var tween = plinth.CreateTween();
+        tween.SetLoops();
+        tween.SetTrans(Tween.TransitionType.Sine);
+        tween.TweenProperty(plinth, "modulate", new Color(1.25f, 1.15f, 0.9f), 1.4);
+        tween.TweenProperty(plinth, "modulate", Colors.White, 1.4);
     }
 
     // Category on the left, points on the right, then a Total row - the
@@ -55,7 +99,7 @@ public partial class RunEndScreen : Control
     // which behaviours actually paid.
     private void BuildScoreList(List<RunScore.Entry> breakdown, int total)
     {
-        var list = GetNode<VBoxContainer>("CenterContainer/VBoxContainer/ScoreList");
+        var list = GetNode<VBoxContainer>("CenterContainer/Columns/ScorePanel/ScoreList");
         foreach (var entry in breakdown)
         {
             list.AddChild(BuildScoreRow(entry.Label, $"{entry.Points:N0}", bold: false));
@@ -75,8 +119,9 @@ public partial class RunEndScreen : Control
         var points = new Label { Text = value, HorizontalAlignment = HorizontalAlignment.Right };
         foreach (var child in new[] { name, points })
         {
-            child.AddThemeFontSizeOverride("font_size", bold ? 24 : 16);
-            if (bold) child.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
+            child.AddThemeFontSizeOverride("font_size", bold ? UiTheme.Fonts.Heading : UiTheme.Fonts.Body);
+            child.AddThemeColorOverride("font_color",
+                bold ? UiTheme.Palette.AccentGoldBright : PixelSpec.Ramp.N7);
             row.AddChild(child);
         }
         return row;

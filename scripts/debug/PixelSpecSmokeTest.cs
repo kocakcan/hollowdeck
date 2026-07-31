@@ -174,10 +174,17 @@ public partial class PixelSpecSmokeTest : Node
         CardDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
+        EventDatabase.LoadAll();
 
         AssertIconsMatch("cards", CardDatabase.All.Select(c => c.Id));
         AssertIconsMatch("relics", RelicDatabase.All.Select(r => r.Id));
         AssertIconsMatch("potions", PotionDatabase.All.Select(p => p.Id));
+        // Events are the one category where a missing icon is survivable -
+        // ArtAssets.EventIcon falls back to the map's scroll - so this is
+        // guarding the *orphan* direction more than the missing one: a
+        // renamed event id would silently drop back to the generic art
+        // forever, with a stale file sitting next to it.
+        AssertIconsMatch("events", EventDatabase.All.Select(e => e.Id));
     }
 
     private void AssertIconsMatch(string category, System.Collections.Generic.IEnumerable<string> ids)

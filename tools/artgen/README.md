@@ -1,6 +1,6 @@
 # artgen
 
-Hollowdeck's asset tool. It generates the game's 78 icons, snaps every authored
+Hollowdeck's asset tool. It generates the game's 84 icons, snaps every authored
 asset onto the shared palette, and enforces `docs/ART_SPEC.md`.
 
 ```bash
@@ -36,7 +36,7 @@ could not have:
 - **One shape vocabulary.** `icons/shapes.rs` holds the blade, shield, flask,
   droplet, flame and fist that the set is composed from, so a blade is the same
   blade in all eleven icons that use one.
-- **Re-runnable.** Change a ramp entry, re-run, and all 78 icons regenerate
+- **Re-runnable.** Change a ramp entry, re-run, and all 84 icons regenerate
   consistently. That is the property that made the whole pixel-art commitment
   worth making.
 
@@ -49,7 +49,7 @@ could not have:
 | `clamp.rs` | alpha hardening + nearest-ramp snap |
 | `validate.rs` | the ART_SPEC checks and their failure messages |
 | `icons/shapes.rs` | the shared shape vocabulary |
-| `icons/{cards,relics,potions,misc}.rs` | the 78 icons themselves |
+| `icons/{cards,relics,potions,misc,events}.rs` | the 84 icons themselves |
 
 ## Two invariants that will bite
 
@@ -78,3 +78,10 @@ window, and the small one is what constrains you: past roughly six distinct
 shapes an icon stops reading there. Every icon in the set that had to be redrawn
 failed this way — a flexed arm that read as a boot, a fanned deck that read as a
 barcode, a horn that read as a gold blob.
+
+The `events` category is the one exception: `EventScreen` draws it at 5x and
+nowhere smaller, so those can carry more structure. They still fail in the same
+way, just at a different threshold — the ones that had to be redrawn read as a
+fireplace instead of a shrine, a claw instead of an open hand, and a medical
+cross instead of an arcane seal. Whatever the scale, look at the output before
+believing it works.

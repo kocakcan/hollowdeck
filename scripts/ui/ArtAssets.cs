@@ -46,6 +46,14 @@ public static class ArtAssets
     public static Texture2D? StatusIcon(StatusType type) =>
         Load($"res://assets/icons/status/{type.ToString().ToLowerInvariant()}.png");
 
+    // Per-event illustration, falling back to the map's scroll. The fallback
+    // is the point: a new event authored in events.json gets a screen that
+    // still looks finished, and picks up bespoke art the moment a matching
+    // file appears - same convention as everything above, but this is the one
+    // lookup where "no art" is an expected state rather than a bug.
+    public static Texture2D? EventIcon(string eventId) =>
+        Load($"res://assets/icons/events/{eventId}.png") ?? MapIcon(MapNodeType.Event);
+
     public static Texture2D? BackgroundTile(string name) => Load($"res://assets/backgrounds/{name}.png");
 
     private static Texture2D? Load(string path) =>
