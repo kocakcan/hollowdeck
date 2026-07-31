@@ -50,8 +50,15 @@ existing effects.
 border *and* how often the card is offered — `CardPool` weights every reward, shop and event draw
 60/37/3, so a Rare is an event rather than one row in a shuffled list. Playing a `Power` moves it
 to `PileManager.Powers`, which is neither Discard (it would cycle back) nor Exhaust (a cost the HUD
-renders as one). Powers are currently limited to one-shot permanent buffs; a per-turn effect hook
-analogous to `RelicBehavior.OnTurnStart` is what would make them a full card class.
+renders as one).
+
+**What a Power buys is a status that pays out every turn.** `Metallicize` (Block) and `Ritual`
+(Strength) are granted in `CombatManager.ApplyTurnStartGrants` and never decay, which is what no
+recurring Skill can offer. They are statuses rather than a `PowerBehavior` hook deliberately: a
+hook would mean one C# class per Power, the one-class-per-card pattern the effect system exists to
+avoid (risk 1), whereas a status keeps a Power an ordinary data row. The ordering is load-bearing —
+both combatants clear `Block` on their own turn, so a grant that lands before that clear is wiped
+the instant it is given; the player's clear is in `EndEnemyTurn`, the enemy's is mid-loop.
 
 **Autoloads** (declared in `project.godot`, in this order — `AudioManager` must come before
 `SettingsManager` because the settings sliders address audio bus indices):

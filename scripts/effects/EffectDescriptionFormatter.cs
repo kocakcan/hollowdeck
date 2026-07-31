@@ -134,9 +134,14 @@ public static class EffectDescriptionFormatter
             }
             case "gain_block":
                 return $"Gain {effect.Amount} Block.";
+            // "Gain" for anything you put on yourself, "Apply" for anything
+            // you put on someone else. This used to special-case Strength by
+            // name, which read correctly right up until the first other
+            // self-status shipped - Metallicize and Ritual would have said
+            // "Apply 3 Metallicize" on a card that targets nobody but you.
             case "apply_status":
-                return effect.Scope == EffectScope.Self && effect.Status == "Strength"
-                    ? $"Gain {effect.Amount} Strength."
+                return effect.Scope == EffectScope.Self
+                    ? $"Gain {effect.Amount} {effect.Status}."
                     : $"Apply {effect.Amount} {effect.Status}{Suffix(effect, ctx, hoistedAllEnemies)}.";
             case "draw_cards":
                 return $"Draw {effect.Amount} card{(effect.Amount == 1 ? "" : "s")}.";

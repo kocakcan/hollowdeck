@@ -49,6 +49,8 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "cards", name: "impale", draw: impale },
         Icon { category: "cards", name: "last_stand", draw: last_stand },
         Icon { category: "cards", name: "inflame", draw: inflame },
+        Icon { category: "cards", name: "metallicize", draw: metallicize },
+        Icon { category: "cards", name: "demon_form", draw: demon_form },
     ]
 }
 
@@ -508,6 +510,67 @@ fn inflame() -> Canvas {
     canvas.disc(3, 17, 1, E4);
 
     finish(&mut canvas);
+    canvas
+}
+
+/// Metallicize the card: a riveted breastplate, which is the status icon's
+/// banded plating wrapped onto a body. The two share a material and a rivet
+/// pattern on purpose - the card grants the status, so they should read as the
+/// same substance at two scales.
+fn metallicize() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Breastplate. Pauldrons wider than the waist, with a notch cut for the
+    // neck: a plate that simply tapered from square shoulders to a point read
+    // as a heater shield, which is the one shape this icon had to stay clear
+    // of - Block already has three shields.
+    canvas.poly(&[(3, 8), (13, 8), (16, 11), (19, 8), (29, 8), (26, 15), (24, 26), (16, 29), (8, 26), (6, 15)], B2);
+    canvas.poly(&[(6, 10), (12, 10), (16, 13), (20, 10), (26, 10), (24, 15), (22, 25), (16, 27), (10, 25), (8, 15)], B1);
+    // Pauldron caps, one step brighter, so the shoulders read as separate
+    // pieces bolted on rather than as part of one silhouette.
+    canvas.rect(3, 8, 5, 4, B3);
+    canvas.rect(24, 8, 5, 4, B3);
+
+    // Bands across it, brightening downward so the plate reads as curved.
+    for (y, colour) in [(11, B2), (16, B3), (21, B2)] {
+        canvas.hline(9, y, 15, colour);
+        canvas.hline(9, y + 1, 15, B0);
+    }
+    // Rivets, the same pair-per-band the status icon uses.
+    for y in [16, 21] {
+        canvas.set(11, y, B5);
+        canvas.set(21, y, B5);
+    }
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Demon Form: a horned head, eyes lit. Quotes `ritual`'s horns because that
+/// is the status it grants, and stays clear of the boss node's skull - this
+/// one has a solid face rather than a cranium and sockets, so the two do not
+/// collide on a reward screen.
+fn demon_form() -> Canvas {
+    let mut canvas = new_icon();
+
+    canvas.poly(&[(3, 2), (12, 10), (8, 13), (2, 7)], P2);
+    canvas.poly(&[(29, 2), (20, 10), (24, 13), (30, 7)], P2);
+
+    // Head: wide brow tapering to a chin.
+    canvas.poly(&[(8, 9), (24, 9), (22, 22), (16, 29), (10, 22)], P2);
+    canvas.poly(&[(10, 11), (22, 11), (20, 21), (16, 26), (12, 21)], P1);
+
+    // Eyes are the whole face. Angled inward, which is the difference between
+    // a demon and an owl.
+    canvas.poly(&[(11, 14), (16, 16), (16, 18), (11, 17)], R4);
+    canvas.poly(&[(21, 14), (16, 16), (16, 18), (21, 17)], R4);
+    canvas.set(13, 15, R5);
+    canvas.set(19, 15, R5);
+
+    // Mouth, one dark line - a full jaw of teeth turns to noise at 32px.
+    canvas.hline(13, 22, 7, P0);
+
+    finish_heavy(&mut canvas);
     canvas
 }
 

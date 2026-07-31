@@ -185,6 +185,14 @@ public partial class PixelSpecSmokeTest : Node
         // renamed event id would silently drop back to the generic art
         // forever, with a stale file sitting next to it.
         AssertIconsMatch("events", EventDatabase.All.Select(e => e.Id));
+
+        // Statuses are an enum rather than a JSON pool, but the failure is the
+        // same and quieter: StatusRow falls back to a bare "Metallicize 3"
+        // Label when ArtAssets.StatusIcon returns null, so a new StatusType
+        // ships looking broken rather than not at all. ArtAssets lowercases
+        // the enum name, so that is the filename it must match.
+        AssertIconsMatch("status",
+            System.Enum.GetValues<Combat.StatusType>().Select(s => s.ToString().ToLowerInvariant()));
     }
 
     private void AssertIconsMatch(string category, System.Collections.Generic.IEnumerable<string> ids)

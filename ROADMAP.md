@@ -309,19 +309,35 @@ Demoted, not dropped. Still genuinely open:
     rather than untested scaffolding — the `reward` screenshot fixture now shows one card of each
     type so both frame channels are visible in a single shot.
 
-  *Outstanding, and the real gap:* Powers can only be one-shot permanent buffs today, because the
-  only per-turn machinery in combat is the status tick. A Power like Metallicize ("gain 3 Block at
-  the start of each turn") needs either a new `StatusType` that grants on tick, or a combat-side
-  hook analogous to `RelicBehavior.OnTurnStart`. Until one of those lands, a Power is a Skill that
-  doesn't come back — a real distinction, but a thin one, and not enough to author a dozen against.
-  Do this before bulk Power authoring, for the same reason this bullet came before card volume.
-- **Cards 31 → 80–120**, and more enemies per act (24 today is ~4 normal encounters' variety each).
+- ✅ **The per-turn Power hook.** Closed the gap the bullet above left open: Powers could only be
+  one-shot permanent buffs, which made them Skills that don't come back — a real distinction, but
+  too thin to author a dozen against.
+
+  Landed as two non-decaying statuses granted at turn start — `Metallicize` (Block) and `Ritual`
+  (Strength, compounding) — rather than the `RelicBehavior.OnTurnStart`-style hook the other option
+  would have been. A hook means one C# class per Power, which is the one-class-per-card pattern the
+  effect system exists to prevent (risk 1); a status keeps a Power an ordinary data row
+  (`apply_status`, scope `Self`) and lets enemies carry them for free, which a player-only hook
+  could not. That brings the status roster to six.
+
+  The ordering is the load-bearing part and is commented at all three sites: both combatants clear
+  `Block` on their own turn, so a grant landing before that clear is wiped the instant it is given.
+  The player's clear is in `EndEnemyTurn` just before `BeginPlayerTurn`; the enemy's is mid-loop,
+  *after* its poison tick — which is why the grants are a separate pass rather than folded in with
+  poison, whose position is fixed by a death check.
+
+  Two Powers ship against it: `Metallicize` (1 energy, Uncommon, 3 Block a turn) and `Demon Form`
+  (2 energy, Rare, 2 Strength a turn, compounding). `EffectDescriptionFormatter` also stopped
+  special-casing Strength by name for its "Gain" wording — it now reads scope, so any self-status
+  says "Gain N X" instead of the "Apply 3 Metallicize" a self-targeted card would have printed.
+- **Cards 33 → 80–120**, and more enemies per act (24 today is ~4 normal encounters' variety each).
 - **Balance the three-act curve.** Authored and smoke-tested but never actually played: enemies
   scale ~1.4x per act against a 50 HP start with +8 max HP and 30% heal per act cleared. Act III
   against a deck with only ~20 card rewards is the open question. Unlock-track thresholds were
   scaled to one-act runs and now fill three times faster.
-- **Wider status roster** — only `Vulnerable`, `Weak`, `Strength`, `Poison` today. Widen it
-  alongside cards that use the new statuses, not speculatively.
+- **Wider status roster** — six today: `Vulnerable`, `Weak`, `Strength`, `Poison`, plus
+  `Metallicize` and `Ritual` from the Power hook above. Keep widening it alongside cards that use
+  the new statuses, not speculatively — those two landed with two Powers, which is the pattern.
 - **Close the relic-hook gap.** `SimpleHookEffectRelic` covers 2 of the 7 hooks `RelicBehavior`
   defines. Extending it to the other five makes future simple relics data rows instead of classes.
 - **Input actions.** There is no `[input]` section in `project.godot`, so rebinding isn't missing

@@ -26,6 +26,8 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "status", name: "weak", draw: weak },
         Icon { category: "status", name: "vulnerable", draw: vulnerable },
         Icon { category: "status", name: "poison", draw: poison },
+        Icon { category: "status", name: "metallicize", draw: metallicize },
+        Icon { category: "status", name: "ritual", draw: ritual },
         // Intents
         Icon { category: "intents", name: "attack", draw: intent_attack },
         Icon { category: "intents", name: "defend", draw: intent_defend },
@@ -202,6 +204,47 @@ fn poison() -> Canvas {
     canvas.disc(20, 17, 1, V4);
     canvas.disc(24, 9, 2, V3);
     canvas.disc(8, 11, 1, V3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Metallicize: overlapping armour plates.
+///
+/// Deliberately *not* a shield, even though it grants Block. `shield` is
+/// already spoken for three times over - the defend intent, the Block potion,
+/// and (cracked) Vulnerable - and a fourth shield variant at 1x would read as
+/// one of those three. Banded plating is the same idea with its own
+/// silhouette: no point, no taper, all horizontals.
+fn metallicize() -> Canvas {
+    let mut canvas = new_icon();
+    let plates = [(4, 6, 24, 6), (5, 13, 22, 6), (7, 20, 18, 6), (9, 26, 14, 4)];
+    for (index, (x, y, w, h)) in plates.iter().enumerate() {
+        canvas.rect(*x, *y, *w, *h, if index % 2 == 0 { B2 } else { B1 });
+        // Top edge one step brighter, so each plate reads as sitting proud of
+        // the one below rather than the stack reading as a single striped box.
+        canvas.hline(*x, *y, *w, B4);
+        // Rivets: two per plate, which is what says "metal" rather than
+        // "stairs" at this size.
+        canvas.set(*x + 2, *y + h / 2, B5);
+        canvas.set(*x + *w - 3, *y + h / 2, B5);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// Ritual: a horned sigil ring. Violet because the ramp already reserves that
+/// family for the arcane, and horns because the card that grants it is Demon
+/// Form - the pair should look like the same idea.
+fn ritual() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.poly(&[(4, 3), (11, 11), (7, 13), (3, 8)], P3);
+    canvas.poly(&[(28, 3), (21, 11), (25, 13), (29, 8)], P3);
+    canvas.ring(16, 19, 10, 3, P3);
+    canvas.disc(16, 19, 6, P1);
+    // An upward chevron inside the ring: the "and it keeps going up" half,
+    // which a plain sigil does not carry.
+    canvas.poly(&[(16, 13), (22, 21), (19, 21), (16, 17), (13, 21), (10, 21)], P4);
+    canvas.disc(16, 24, 2, P4);
     finish(&mut canvas);
     canvas
 }

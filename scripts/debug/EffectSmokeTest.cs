@@ -18,7 +18,10 @@ public partial class EffectSmokeTest : Node
     private int _pass;
     private int _fail;
 
-    public override void _Ready()
+    // async because the turn-start-grant test has to drive a real combat
+    // round, and the enemy turn paces itself with awaited delays - there is no
+    // synchronous way to step one.
+    public override async void _Ready()
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
@@ -39,6 +42,7 @@ public partial class EffectSmokeTest : Node
         TestEveryCardDeclaresARarity();
         TestCardPoolIsRarityWeighted();
         TestPowerCardsLeavePlay();
+        await TestTurnStartGrantingStatuses();
 
         GD.Print($"EffectSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -389,6 +393,73 @@ public partial class EffectSmokeTest : Node
             "the played Power came back around");
 
         combat.QueueFree();
+    }
+
+    // Metallicize and Ritual are what make Power a real card class: they pay
+    // out every turn, which no recurring Skill can do. Driven through a live
+    // CombatManager rather than by poking the tick directly, because the thing
+    // most likely to break is *ordering* - both combatants clear Block on
+    // their own turn, and a grant that lands before that clear is wiped the
+    // instant it is given.
+    //
+    // Metallicize is tested on the enemy and Ritual on the player, which is
+    // not arbitrary: nothing reduces the enemy's Block in this fixture (the
+    // player never attacks), so its value is exact, whereas the player is
+    // being hit every round and its Block is whatever survived. Between them
+    // both call sites are covered - and the enemy's is the awkward one, since
+    // its Block clear happens mid-loop rather than in BeginPlayerTurn.
+    private async System.Threading.Tasks.Task TestTurnStartGrantingStatuses()
+    {
+        var combat = new CombatManager();
+        AddChild(combat);
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 200, CurrentHp = 200,
+            MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(CardDatabase.All),
+        };
+        var enemy = EnemyFactory.Create(EnemyDatabase.Get("cultist"));
+        combat.StartCombat(player, new List<EnemyCombatant> { enemy }, new List<RelicInstance>());
+
+        player.AddStatus(StatusType.Ritual, 2);
+        enemy.AddStatus(StatusType.Metallicize, 4);
+        int strengthBefore = player.GetStatus(StatusType.Strength);
+
+        await RunOneRound(combat);
+
+        Check("metallicize_grants_block_after_the_block_clear", enemy.Block == 4,
+            $"block={enemy.Block} - 0 means the grant landed before the clear and was wiped");
+        Check("ritual_grants_strength_each_turn",
+            player.GetStatus(StatusType.Strength) == strengthBefore + 2,
+            $"strength={player.GetStatus(StatusType.Strength)}");
+        Check("granting_statuses_do_not_decay",
+            enemy.GetStatus(StatusType.Metallicize) == 4 && player.GetStatus(StatusType.Ritual) == 2,
+            $"metallicize={enemy.GetStatus(StatusType.Metallicize)} ritual={player.GetStatus(StatusType.Ritual)}");
+
+        await RunOneRound(combat);
+
+        // Ritual compounds - that is the whole reason it is worth a card slot
+        // it never returns from. Metallicize does not, because Block is
+        // cleared and re-granted rather than added to.
+        Check("ritual_compounds_over_turns",
+            player.GetStatus(StatusType.Strength) == strengthBefore + 4,
+            $"strength={player.GetStatus(StatusType.Strength)} after two rounds");
+        Check("metallicize_does_not_accumulate_across_turns", enemy.Block == 4,
+            $"block={enemy.Block} after two rounds");
+
+        combat.QueueFree();
+    }
+
+    // End the player's turn and wait until control comes back - the enemy turn
+    // is async (it paces itself with real delays), so there is no synchronous
+    // way to step a round.
+    private async System.Threading.Tasks.Task RunOneRound(CombatManager combat)
+    {
+        combat.TryEndTurn();
+        while (combat.State != CombatState.PlayerTurn && combat.State != CombatState.CombatEnd)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
     }
 
     private static EnemyCombatant MakeEnemy() => new()

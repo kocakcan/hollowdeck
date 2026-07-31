@@ -123,6 +123,10 @@ public partial class CombatManager : Node
             return;
         }
 
+        // After the poison tick and its death check, and after EndEnemyTurn
+        // has cleared Block - see ApplyTurnStartGrants.
+        ApplyTurnStartGrants(Player);
+
         Player.CurrentEnergy = Player.MaxEnergy;
         Player.Piles.DrawHand(5);
         _cardsThisTurn = 0;
@@ -350,6 +354,11 @@ public partial class CombatManager : Node
             await Delay(PreActionDelaySec);
 
             enemy.Block = 0;
+            // Must follow the Block clear above, not sit with the poison tick
+            // at the top of the loop, or Metallicize is wiped the instant it
+            // is granted - see ApplyTurnStartGrants.
+            ApplyTurnStartGrants(enemy);
+
             var move = enemy.CurrentMove!;
             var playerTargets = new List<Combatant> { Player };
             foreach (var effect in move.Effects)
@@ -411,6 +420,28 @@ public partial class CombatManager : Node
         c.CurrentHp -= Math.Min(c.CurrentHp, poison);
         c.DecayStatus(StatusType.Poison);
         if (c == Player) TookDamage = true;
+    }
+
+    // What a Power buys: statuses that pay out every turn instead of once.
+    // Neither decays - Metallicize and Ritual persist for the fight, unlike
+    // Vulnerable/Weak (end-of-turn decay) or Poison (decays as it ticks).
+    //
+    // Kept separate from ApplyPoisonTick and called at a different point on
+    // purpose. Both combatants clear Block on their own turn, and Metallicize
+    // has to land *after* that clear or it is granted and immediately wiped -
+    // for the player EndEnemyTurn clears it just before BeginPlayerTurn, but
+    // for an enemy the clear happens mid-loop, after its poison tick. Poison
+    // also has to stay where it is, because it gates a death check.
+    private void ApplyTurnStartGrants(Combatant c)
+    {
+        int metallicize = c.GetStatus(StatusType.Metallicize);
+        if (metallicize > 0) c.Block += metallicize;
+
+        // Compounding on purpose: Ritual grants Strength *every* turn, so the
+        // Strength total climbs each round. That is the whole reason a Power
+        // is worth a card slot it never returns from.
+        int ritual = c.GetStatus(StatusType.Ritual);
+        if (ritual > 0) c.AddStatus(StatusType.Strength, ritual);
     }
 
     // Replaces the four bare Enemies.RemoveAll(e => e.IsDead) calls this
