@@ -24,7 +24,7 @@ With no screen names it shoots all of them. Unknown names exit 1 and list the va
 ## Screens
 
 `combat` `combatfull` `combat2` `combat3` `reward` `shop` `map` `map2` `map3` `rest` `restupgrade`
-`treasure` `event` `unlocks` `runend` `mainmenu` `settings` `deckpopup`
+`treasure` `event` `unlocks` `runend` `mainmenu` `settings` `deckpopup` `fade`
 
 `map2`/`map3` and `combat2`/`combat3` are the later acts — each has its own backdrop tint, title,
 boss sprites and floor count, none of which act 1's shots show. `map3` is also the longest map (10
@@ -39,6 +39,13 @@ its target-lock glow. Reach for this one for any HUD or enemy-row layout change.
 demand by `DeckViewButtons` rather than being a screen of its own. `restupgrade` is the same idea
 for the rest site's second view — it presses Smith first, and seeds seven un-upgraded cards so the
 shot shows the picker's grid wrapping rather than one tidy row.
+
+`fade` holds the cross-screen transition's cover at a fixed 62% over the map. Deliberately not the
+live tween — 60 settle frames is longer than the whole fade, so a real `Play()` would always be
+captured already finished. `TransitionSmokeTest` proves the alpha ramps; this shot is for what a
+test can't see, that the cover spans the viewport and sits above the screen's own chrome. The cover
+lives on the `RunManager` autoload and survives between shots, so `ResetRunState` puts it back down
+before every screen.
 
 Each one instantiates the real `.tscn` the way `RunManager.ChangeScreen` would, with the global
 statics that screen's `_Ready` reads already seeded (`RunState`, `RewardContext`,

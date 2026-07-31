@@ -51,9 +51,16 @@ public partial class RunManager : Node
     public ScreenState CurrentScreen { get; private set; } = ScreenState.MainMenu;
     public int RunSeed { get; private set; }
 
+    // The cross-screen fade. Parented here rather than to any screen because
+    // ChangeSceneToFile frees the current scene out from under whatever is
+    // mid-transition - see ScreenFade.
+    public ScreenFade Fade { get; private set; } = null!;
+
     public override void _Ready()
     {
         Instance = this;
+        Fade = new ScreenFade { Name = "ScreenFade" };
+        AddChild(Fade);
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         RelicDatabase.LoadAll();
@@ -71,8 +78,16 @@ public partial class RunManager : Node
         }
         if (AutoSaveScreens.Contains(next)) RunSaveManager.Save(RunSeed);
         CurrentScreen = next;
+        // Music leads the visual deliberately. The track is chosen for where
+        // you are going, and starting it under the fade-out means arriving on
+        // the new screen with its music already established rather than
+        // switching a beat late.
         AudioManager.Instance?.PlayMusicForState(next);
-        GetTree().ChangeSceneToFile(path);
+
+        // Fade.Play returns false when it declined - Reduce Motion, or the
+        // overlay not built - so the hard cut stays reachable on exactly one
+        // path instead of being duplicated at the call site.
+        if (!Fade.Play(() => GetTree().ChangeSceneToFile(path))) GetTree().ChangeSceneToFile(path);
     }
 
     public void StartNewRun()

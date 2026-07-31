@@ -131,6 +131,9 @@ public partial class Phase4ContentSmokeTest : Node
         // so without this, running this test overwrites the developer's real
         // in-progress run save with this test's fixture state.
         using var saveGuard = RunSaveGuard.Protect();
+        // And pin the screen change to a hard cut, so this test does not
+        // depend on whether the machine running it has Reduce Motion set.
+        using var cutGuard = HardCutGuard.Protect();
 
         RunState.Gold = 0;
         RunState.PlayerMaxHp = 50;
