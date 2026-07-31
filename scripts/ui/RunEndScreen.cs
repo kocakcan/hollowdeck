@@ -75,7 +75,7 @@ public partial class RunEndScreen : Control
         var points = new Label { Text = value, HorizontalAlignment = HorizontalAlignment.Right };
         foreach (var child in new[] { name, points })
         {
-            child.AddThemeFontSizeOverride("font_size", bold ? 18 : 14);
+            child.AddThemeFontSizeOverride("font_size", bold ? 24 : 16);
             if (bold) child.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
             row.AddChild(child);
         }

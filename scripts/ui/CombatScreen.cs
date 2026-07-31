@@ -38,7 +38,7 @@ public partial class CombatScreen : Control
     private HBoxContainer _enemyRow = null!;
     private Control _handArea = null!;
     private HBoxContainer _potionBelt = null!;
-    private HBoxContainer _relicBar = null!;
+    private GridContainer _relicBar = null!;
     private Label _goldLabel = null!;
     private ProgressBar _playerHpBar = null!;
     private ProgressBar _playerGhostHpBar = null!;
@@ -122,7 +122,20 @@ public partial class CombatScreen : Control
         // panels. Each row was a wide bordered box holding one or two small
         // items, which read as an empty HUD; the relic bar's framing moved
         // down a level, to one slot per relic (see RefreshRelics).
-        _relicBar = GetNode<HBoxContainer>("TopLeftColumn/RelicBar");
+        //
+        // TopLeftColumn is capped at x=168 in the .tscn, 8px clear of
+        // EnemyRow's x=176, and the relic bar is a 3-wide GridContainer so it
+        // grows *downward* into that strip instead of rightward across the
+        // fight. It used to be a single HBoxContainer inside a 460px-wide
+        // column, and TopLeftColumn is declared after EnemyRow, so it painted
+        // on top: slots are 40px on a 44px pitch, so the bar reached x=20+44n,
+        // and from 5 relics on it covered the leftmost enemy's left bezel in a
+        // 3-enemy fight (that enemy starts at x=242) - including the
+        // target-lock glow, which is that Button's own background and so had
+        // nothing left to show. Three columns is what fits: 3*40 + 2*4 = 128
+        // of the 148px available. CombatTargetingSmokeTest asserts the
+        // no-overlap property directly, at 3 enemies and 8 relics.
+        _relicBar = GetNode<GridContainer>("TopLeftColumn/RelicBar");
         _goldLabel = GetNode<Label>("TopLeftColumn/GoldPanel/GoldLabel");
         _playerHpBar = GetNode<ProgressBar>("PlayerHpFrame/HpBar");
         _playerGhostHpBar = GetNode<ProgressBar>("PlayerHpFrame/GhostHpBar");

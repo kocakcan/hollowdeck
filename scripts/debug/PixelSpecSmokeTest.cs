@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Godot;
 using Hollowdeck.Data;
 using Hollowdeck.UI;
@@ -18,6 +20,7 @@ namespace Hollowdeck.Debug;
 //   - the project default texture filter is Nearest (section 3)
 //   - no SVG survives under assets/ (section 8)
 //   - the fonts in use are the bitmap pair, not the retired serif pair
+//   - every rendered font size is a multiple of the faces' 8px design em
 //   - every content definition resolves to an icon file
 //   - tools/artgen's ramp still matches PixelSpec.Ramp
 //
@@ -41,6 +44,7 @@ public partial class PixelSpecSmokeTest : Node
         TestDefaultTextureFilterIsNearest();
         TestNoSvgRemainsUnderAssets();
         TestFontsAreTheBitmapPair();
+        TestEveryRenderedFontSizeIsOnTheGrid();
         TestRampIsSelfConsistent();
         TestEveryDefinitionHasAnIcon();
         TestArtgenRampMatchesPixelSpec();
@@ -234,6 +238,77 @@ public partial class PixelSpecSmokeTest : Node
             !ResourceLoader.Exists("res://assets/fonts/Cinzel-Regular.ttf") &&
             !ResourceLoader.Exists("res://assets/fonts/IMFellEnglish-Regular.ttf"),
             "a retired serif face is still present in assets/fonts/");
+        Check("retired_offgrid_body_font_removed",
+            !ResourceLoader.Exists("res://assets/fonts/Jersey15-Regular.ttf"),
+            "Jersey 15 is back; its 27px design em cannot render crisply at any UI size");
+
+        foreach (int size in new[] { UiTheme.Fonts.Small, UiTheme.Fonts.Body, UiTheme.Fonts.Heading, UiTheme.Fonts.Title })
+        {
+            Check($"ui_theme_size_{size}_is_on_the_font_grid", PixelSpec.IsLegalFontSize(size),
+                $"{size} is not a multiple of the {PixelSpec.FontDesignEm}px design em");
+        }
+    }
+
+    // The check that would have caught Jersey 15. Godot's font_size is the em
+    // in pixels, so a size that isn't a multiple of the face's design em puts
+    // the glyph grid on fractional device pixels and the rasterizer drops
+    // stems - which is how the body face spent three phases rendering "Deal 6
+    // damage" as "Deal 8 damage" with every smoke test green.
+    //
+    // Scans the theme and every scene/script for a rendered size rather than
+    // trusting a constants list, because the sizes that drifted off-grid were
+    // all local AddThemeFontSizeOverride calls and .tscn overrides, none of
+    // which went anywhere near PixelSpec.
+    private void TestEveryRenderedFontSizeIsOnTheGrid()
+    {
+        var theme = GD.Load<Theme>("res://assets/theme/hollowdeck_theme.tres");
+        Check("theme_loads", theme is not null, "hollowdeck_theme.tres failed to load");
+        if (theme is null) return;
+
+        Check("theme_default_font_size_is_on_the_grid",
+            PixelSpec.IsLegalFontSize(theme.DefaultFontSize),
+            $"default_font_size {theme.DefaultFontSize} is not a multiple of {PixelSpec.FontDesignEm}");
+
+        foreach (var type in theme.GetFontSizeTypeList())
+        {
+            foreach (var name in theme.GetFontSizeList(type))
+            {
+                int size = theme.GetFontSize(name, type);
+                Check($"theme_{type}_{name}_is_on_the_grid", PixelSpec.IsLegalFontSize(size),
+                    $"{type}/{name} = {size}, not a multiple of {PixelSpec.FontDesignEm}");
+            }
+        }
+
+        foreach (var (path, line, size) in ScanSourceForFontSizes())
+        {
+            Check($"{path.GetFile()}_line_{line}_is_on_the_grid", PixelSpec.IsLegalFontSize(size),
+                $"{path}:{line} renders text at {size}, not a multiple of {PixelSpec.FontDesignEm}");
+        }
+    }
+
+    // Every literal font size in scenes/ and scripts/ui/, as (path, line,
+    // size). Deliberately a text scan: the alternative is instantiating every
+    // screen, and a size only reachable behind a branch would still be missed.
+    private static IEnumerable<(string Path, int Line, int Size)> ScanSourceForFontSizes()
+    {
+        var pattern = new Regex(
+            """AddThemeFontSizeOverride\("[a-z_]+", (\d+)\)|theme_override_font_sizes/[a-z_]+ = (\d+)""");
+
+        foreach (string path in FilesUnder("res://scenes", ".tscn").Concat(FilesUnder("res://scripts/ui", ".cs")))
+        {
+            // Qualified: this file already has System.IO in scope for Path.
+            using var file = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (file is null) continue;
+            int line = 0;
+            while (!file.EofReached())
+            {
+                line++;
+                var match = pattern.Match(file.GetLine());
+                if (!match.Success) continue;
+                string digits = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+                yield return (path, line, int.Parse(digits));
+            }
+        }
     }
 
     // Guards the ramp itself: Clamp must be idempotent on ramp colours, and

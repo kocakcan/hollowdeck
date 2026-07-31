@@ -60,7 +60,10 @@ public partial class PileViewPopup : Control
         var panel = new PanelContainer { MouseFilter = MouseFilterEnum.Stop };
         AddChild(panel);
         panel.SetAnchorsPreset(LayoutPreset.Center);
-        const float w = 960f, h = 620f;
+        // 1040 of the 1152-wide canvas, so the 5-column grid below clears the
+        // scrollbar with room to spare and still leaves a 56px margin each
+        // side. Height stays 620 - the canvas is only 648 tall.
+        const float w = 1040f, h = 620f;
         panel.OffsetLeft = -w / 2f;
         panel.OffsetRight = w / 2f;
         panel.OffsetTop = -h / 2f;
@@ -72,7 +75,7 @@ public partial class PileViewPopup : Control
         var header = new HBoxContainer();
         vbox.AddChild(header);
         var titleLabel = new Label { Text = title, SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        titleLabel.AddThemeFontSizeOverride("font_size", 22);
+        titleLabel.AddThemeFontSizeOverride("font_size", 24);
         header.AddChild(titleLabel);
         var sortButton = new Button { Text = "Sort: Cost" };
         sortButton.Pressed += () =>
@@ -95,10 +98,14 @@ public partial class PileViewPopup : Control
             VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
         };
         vbox.AddChild(scroll);
-        // 3 columns of full-size (224x308) CardView instances - the same
-        // renderer combat hands use - fits the 960-wide panel with room to
-        // spare; 4 columns of full-size cards would overflow it.
-        _grid = new GridContainer { Columns = 3 };
+        // 5 columns of full-size CardView instances - the same renderer combat
+        // hands use, at their natural 176x240. The old comment here claimed
+        // cards were 224x308 and that a 4th column would overflow; both were
+        // stale, and 3 columns left 384px of the panel empty. 5 columns is
+        // 5*176 + 4*14 = 936 inside the panel's 1020px interior (1040 less the
+        // theme's 10+10 content margins), which clears the vertical scrollbar.
+        // Two full rows are visible at a time, so 10 cards per screenful.
+        _grid = new GridContainer { Columns = 5 };
         _grid.AddThemeConstantOverride("h_separation", 14);
         _grid.AddThemeConstantOverride("v_separation", 14);
         scroll.AddChild(_grid);

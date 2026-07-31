@@ -126,7 +126,7 @@ public partial class MetaProgressionScreen : Control
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
-        descriptionLabel.AddThemeFontSizeOverride("font_size", 13);
+        descriptionLabel.AddThemeFontSizeOverride("font_size", 16);
         textColumn.AddChild(descriptionLabel);
 
         var statusLabel = new Label
@@ -177,7 +177,7 @@ public partial class MetaProgressionScreen : Control
             // rather than a zero they never actually earned.
             string score = entry.Score > 0 ? $"{entry.Score:N0} pts" : "-";
             var label = new Label { Text = $"{entry.Outcome,-5} {score,10}    seed {entry.Seed}    {ShortDate(entry.TimestampUtc)}" };
-            label.AddThemeFontSizeOverride("font_size", 13);
+            label.AddThemeFontSizeOverride("font_size", 16);
             _seedHistoryList.AddChild(label);
         }
     }

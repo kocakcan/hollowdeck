@@ -51,16 +51,38 @@ public static class EffectDescriptionFormatter
         var buffed = new List<int>();
         var weakened = new List<int>();
 
-        foreach (var effect in effects)
+        // Thunderclap read "Deal 4 damage to ALL enemies. Apply 1 Vulnerable
+        // to ALL enemies." - the same four words twice, in a 152x88 box that
+        // then had nowhere to put them. When more than one effect would carry
+        // the suffix, hoist it into a single prefix. A card with only one
+        // keeps the inline phrasing, which reads better as a sentence ("Deal
+        // 8 damage to ALL enemies." beats "ALL enemies: Deal 8 damage.") -
+        // Cleave, Whirlwind and Toxic Cloud are all in that group.
+        bool hoisted = effects.Count(e => TargetsAllEnemies(e, ctx)) > 1;
+        if (hoisted) parts.Add("ALL enemies:");
+
+        for (int i = 0; i < effects.Count;)
         {
-            var text = DescribeEffect(effect, ctx, buffed, weakened);
-            if (text.Length > 0) parts.Add(text);
+            // A run of identical effects is how the data expresses a multi-hit
+            // (Twin Strike is authored as two separate 4-damage specs), but it
+            // is not how a card should read - that rendered as "Deal 4 damage.
+            // Deal 4 damage." Collapse the run into one sentence instead.
+            //
+            // Consecutive and byte-identical only: Crippling Blow repeats the
+            // apply_status *action* with different arguments, and must keep
+            // its two distinct sentences.
+            int repeats = 1;
+            while (i + repeats < effects.Count && SameEffect(effects[i], effects[i + repeats])) repeats++;
+
+            var text = DescribeEffect(effects[i], ctx, buffed, weakened, hoisted);
+            if (text.Length > 0) parts.Add(Repeated(text, repeats));
+            i += repeats;
         }
 
         // The vs-Vulnerable hint is appended once for the whole card rather
         // than once per deal_damage effect - Twin Strike (two 4-damage hits)
         // otherwise printed the parenthetical twice, doubling the longest
-        // line in a description box that's only 200x160. Skipped entirely
+        // line in a description box that's only 152x88. Skipped entirely
         // when Targets is known, since then the printed numbers are already
         // the real post-Vulnerable ones and the hint would contradict them.
         int hint = VulnerablePreviewTotal(effects, ctx);
@@ -80,7 +102,27 @@ public static class EffectDescriptionFormatter
     private static int Outgoing(int baseAmount, Combatant? source) =>
         source is null ? baseAmount : DamageMath.ComputeOutgoing(baseAmount, source);
 
-    private static string DescribeEffect(EffectSpec effect, DescribeContext ctx, List<int> buffed, List<int> weakened)
+    // EffectSpec is a plain serialization class, so it has reference equality
+    // and cannot be compared directly. Deliberately not converted to a record:
+    // it is the shape the content JSON deserializes into, and value semantics
+    // are not what the rest of the effect pipeline wants from it.
+    private static bool SameEffect(EffectSpec a, EffectSpec b) =>
+        a.Action == b.Action && a.Amount == b.Amount && a.Status == b.Status && a.Scope == b.Scope;
+
+    // DescribeEffect hands back a finished sentence, so the repetition has to
+    // go inside it, before the full stop.
+    private static string Repeated(string sentence, int times) =>
+        times switch
+        {
+            1 => sentence,
+            2 => $"{sentence.TrimEnd('.')} twice.",
+            _ => $"{sentence.TrimEnd('.')} {times} times.",
+        };
+
+    private static bool TargetsAllEnemies(EffectSpec effect, DescribeContext ctx) =>
+        effect.Scope == EffectScope.Target && ctx.TargetType == CardTargetType.AllEnemies;
+
+    private static string DescribeEffect(EffectSpec effect, DescribeContext ctx, List<int> buffed, List<int> weakened, bool hoistedAllEnemies)
     {
         switch (effect.Action)
         {
@@ -88,14 +130,14 @@ public static class EffectDescriptionFormatter
             {
                 int outgoing = Outgoing(effect.Amount, ctx.Source);
                 Record(effect.Amount, outgoing, buffed, weakened);
-                return $"Deal {DamageAmount(outgoing, effect, ctx, buffed)} damage{Suffix(effect, ctx)}.";
+                return $"Deal {DamageAmount(outgoing, effect, ctx, buffed)} damage{Suffix(effect, ctx, hoistedAllEnemies)}.";
             }
             case "gain_block":
                 return $"Gain {effect.Amount} Block.";
             case "apply_status":
                 return effect.Scope == EffectScope.Self && effect.Status == "Strength"
                     ? $"Gain {effect.Amount} Strength."
-                    : $"Apply {effect.Amount} {effect.Status}{Suffix(effect, ctx)}.";
+                    : $"Apply {effect.Amount} {effect.Status}{Suffix(effect, ctx, hoistedAllEnemies)}.";
             case "draw_cards":
                 return $"Draw {effect.Amount} card{(effect.Amount == 1 ? "" : "s")}.";
             case "heal":
@@ -138,11 +180,10 @@ public static class EffectDescriptionFormatter
     // "to ALL enemies" is the whole point of this suffix: an AllEnemies card
     // has no other tell in its description. SingleEnemy stays bare (dragging
     // the card onto one enemy already says who it hits) and Self effects are
-    // already phrased as "Gain"/"Heal"/"Lose".
-    private static string Suffix(EffectSpec effect, DescribeContext ctx) =>
-        effect.Scope == EffectScope.Target && ctx.TargetType == CardTargetType.AllEnemies
-            ? " to ALL enemies"
-            : "";
+    // already phrased as "Gain"/"Heal"/"Lose". Suppressed when DescribeDetailed
+    // has already said it once as a prefix.
+    private static string Suffix(EffectSpec effect, DescribeContext ctx, bool hoistedAllEnemies) =>
+        !hoistedAllEnemies && TargetsAllEnemies(effect, ctx) ? " to ALL enemies" : "";
 
     private static void Record(int baseAmount, int shown, List<int> buffed, List<int> weakened)
     {

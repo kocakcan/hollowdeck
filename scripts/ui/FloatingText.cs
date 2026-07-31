@@ -14,7 +14,7 @@ public partial class FloatingText : Label
         Text = text;
         Modulate = bigHit ? color.Lerp(UiTheme.Palette.AccentGoldBright, 0.5f) : color;
         Position = position;
-        if (bigHit) AddThemeFontSizeOverride("font_size", 26);
+        if (bigHit) AddThemeFontSizeOverride("font_size", 24);
         PivotOffset = Size / 2f;
 
         Scale = Vector2.One * (bigHit ? 2.2f : 1.6f);

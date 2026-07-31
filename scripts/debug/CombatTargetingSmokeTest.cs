@@ -19,7 +19,7 @@ public partial class CombatTargetingSmokeTest : Node
     private int _pass;
     private int _fail;
 
-    public override void _Ready()
+    public override async void _Ready()
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
@@ -59,8 +59,75 @@ public partial class CombatTargetingSmokeTest : Node
 
         instance.QueueFree();
 
+        await TestHudNeverPaintsOverAnEnemy();
+
         GD.Print($"CombatTargetingSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
+    }
+
+    // The glow is EnemyView's own Button background, so anything drawn over
+    // the enemy erases it - and the stylebox assertions above all still pass
+    // while that happens, which is exactly how this shipped.
+    //
+    // The real bug: TopLeftColumn is declared after EnemyRow (so it paints on
+    // top) and its relic bar grew rightward at 48px per relic, reaching the
+    // leftmost enemy of a 3-enemy fight from 5 relics on. Worst case is
+    // therefore the widest encounter and a late-run relic count, which is what
+    // this builds.
+    private async System.Threading.Tasks.Task TestHudNeverPaintsOverAnEnemy()
+    {
+        RunState.Relics = new List<RelicInstance>();
+        foreach (var definition in RelicDatabase.All)
+        {
+            RunState.Relics.Add(new RelicInstance(definition));
+            if (RunState.Relics.Count == 8) break;
+        }
+        Check("worst_case_relic_count_available", RunState.Relics.Count == 8,
+            $"only {RunState.Relics.Count} relics in the database");
+
+        CombatContext.EnemyDefinitionIds = new List<string> { "cultist", "cultist", "cultist" };
+        var packed = GD.Load<PackedScene>("res://scenes/CombatScreen.tscn");
+        var instance = packed.Instantiate();
+        AddChild(instance);
+
+        var screen = (Control)instance;
+        var enemyRow = instance.GetNode<Control>("EnemyRow");
+        var topLeft = instance.GetNode<Control>("TopLeftColumn");
+
+        // Containers lay out on a deferred pass, so the rects are only real
+        // after a frame - the same wait DeckViewSmokeTest uses before it
+        // measures anything.
+        screen.Size = new Vector2(1152, 648);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("three_enemies_present", enemyRow.GetChildCount() == 3, $"got {enemyRow.GetChildCount()}");
+
+        foreach (var child in enemyRow.GetChildren())
+        {
+            if (child is not EnemyView enemy) continue;
+            foreach (var painted in HudRects(topLeft))
+            {
+                Check($"hud_clear_of_{enemy.Combatant.Definition.Id}_{painted.Name}",
+                    !painted.Rect.Intersects(enemy.GetGlobalRect()),
+                    $"{painted.Name} at {painted.Rect} overlaps an enemy at {enemy.GetGlobalRect()} - " +
+                    "the target-lock glow is that enemy's own background and would be painted over");
+            }
+        }
+
+        instance.QueueFree();
+    }
+
+    // Every descendant of TopLeftColumn that actually draws something. The
+    // column itself is transparent, so its own rect is not the thing to check.
+    private static IEnumerable<(string Name, Rect2 Rect)> HudRects(Node parent)
+    {
+        foreach (var child in parent.GetChildren())
+        {
+            if (child is not Control control) continue;
+            if (control is PanelContainer or Label) yield return (control.Name, control.GetGlobalRect());
+            foreach (var nested in HudRects(control)) yield return nested;
+        }
     }
 
     private void Check(string name, bool condition, string detail)
