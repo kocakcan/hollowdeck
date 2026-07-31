@@ -63,12 +63,18 @@ public partial class CardView : Panel
     // Matches the CostBadge rect in CardView.tscn. Used to pad the name
     // banner clear of the badge that overlaps it.
     private const int CostBadgeWidth = 30;
-    // Body sizes the description may shrink to, largest first. Tightened from
-    // the old {15,14,13,12,11} vector-face ladder: Jersey15 is a bitmap face
-    // designed around 15px, so it stays clean near its design size but breaks
-    // down into uneven stems well below it. Three steps in a narrow band
-    // rather than five stepping down to 11 (see docs/ART_SPEC.md section 7).
-    private static readonly int[] DescriptionFontSizes = { 16, 14, 12 };
+    // Body sizes the description may shrink to, largest first - now a single
+    // entry, because on Tiny5 (8px design em) the only sizes below 16 that
+    // don't resample are 8, which is unreadable.
+    //
+    // The ladder existed to rescue long cards, and it no longer has to: every
+    // card in the data, base and upgraded, fits this box at 16. The worst is
+    // Thunderclap+ at 4 lines x 18px = 72px against 88px of room, measured by
+    // HandLayoutSmokeTest's TestEveryCardDescriptionFitsWithoutTruncation -
+    // so if new content ever does overflow, that test fails rather than the
+    // card silently rendering at an off-grid size. Fix it by shortening the
+    // text or enlarging the box, not by adding a step back here.
+    private static readonly int[] DescriptionFontSizes = { 16 };
 
     public CardInstance? CardInstance { get; private set; }
 
@@ -408,7 +414,7 @@ public partial class CardView : Panel
             AutowrapMode = TextServer.AutowrapMode.WordSmart,
             MouseFilter = MouseFilterEnum.Ignore,
         };
-        body.AddThemeFontSizeOverride("font_size", 13);
+        body.AddThemeFontSizeOverride("font_size", 16);
         body.AddThemeColorOverride("font_color", new Color(0.85f, 0.85f, 0.85f));
         vbox.AddChild(body);
 
@@ -659,6 +665,12 @@ public partial class CardView : Panel
         var mousePos = GetGlobalMousePosition();
         foreach (var enemyView in EnemyView.Instances)
         {
+            // A killed enemy keeps its slot in the row, and its rect, for the
+            // 0.35s of PlayDeathTween. Without this check the corpse still
+            // wins the hit test - it is first in Instances - so a drag over
+            // it locked a target that was fading to invisible and appeared to
+            // show no glow at all.
+            if (enemyView.Combatant.IsDead) continue;
             if (enemyView.GetGlobalRect().HasPoint(mousePos)) return enemyView;
         }
         return null;

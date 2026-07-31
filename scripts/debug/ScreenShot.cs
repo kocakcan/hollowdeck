@@ -7,6 +7,7 @@ using Hollowdeck.Combat;
 using Hollowdeck.Data;
 using Hollowdeck.Map;
 using Hollowdeck.Run;
+using Hollowdeck.UI;
 
 namespace Hollowdeck.Debug;
 
@@ -60,7 +61,7 @@ public partial class ScreenShot : Node
     // for state that only exists after that point - CombatScreen constructs
     // its PlayerCombatant/EnemyCombatants in _Ready, so a fixture can't seed
     // their statuses up front the way it seeds RunState.
-    private record Fixture(string ScenePath, Action Seed, Action? AfterReady = null);
+    private record Fixture(string ScenePath, Action Seed, Action<Node>? AfterReady = null);
 
     private static readonly Dictionary<string, Fixture> Fixtures = new()
     {
@@ -76,6 +77,17 @@ public partial class ScreenShot : Node
         ["map3"] = new("res://scenes/MapScreen.tscn", () => SeedActMap(2)),
         ["combat2"] = new("res://scenes/CombatScreen.tscn", () => SeedActBossCombat(1)),
         ["combat3"] = new("res://scenes/CombatScreen.tscn", () => SeedActBossCombat(2)),
+        // The HUD's worst case, which "combat" (2 enemies, 1 relic) can't
+        // show: the widest encounter beside a late-run relic collection. The
+        // relic bar used to grow rightward across the enemy row from 5 relics
+        // on, painting over the leftmost enemy - and with it the target-lock
+        // glow, which is that enemy's own background.
+        ["combatfull"] = new("res://scenes/CombatScreen.tscn", SeedCrowdedCombat, AfterCombatReady),
+        // The pile popup is spawned on demand by DeckViewButtons rather than
+        // being a screen of its own, so it needs a host screen plus the click
+        // that opens it. Deck is deliberately larger than one row of the grid,
+        // since the thing worth looking at is how the columns pack.
+        ["deckpopup"] = new("res://scenes/MapScreen.tscn", SeedDeckPopup, OpenDeckPopup),
         ["rest"] = new("res://scenes/RestScreen.tscn", SeedRest),
         ["treasure"] = new("res://scenes/TreasureScreen.tscn", SeedTreasure),
         ["event"] = new("res://scenes/EventScreen.tscn", SeedEvent),
@@ -138,7 +150,7 @@ public partial class ScreenShot : Node
 
         var screen = GD.Load<PackedScene>(fixture.ScenePath).Instantiate();
         AddChild(screen);
-        fixture.AfterReady?.Invoke();
+        fixture.AfterReady?.Invoke(screen);
 
         for (int i = 0; i < SettleFrames; i++)
         {
@@ -183,10 +195,11 @@ public partial class ScreenShot : Node
     // hand is guaranteed rather than a lucky roll: Flex and Bash for
     // AfterCombatReady to spend, and Cleave/Whirlwind/Thunderclap left
     // standing as the cards whose text is being verified. Thunderclap is
-    // deliberately the longest description in the game (it takes the "to ALL
-    // enemies" suffix twice), so the shot also proves the description box
-    // still fits its worst case without truncating. Five is the hand size the
-    // fan layout is tuned for, so this stays a representative layout shot.
+    // deliberately the longest description in the game - two effects that both
+    // hit every enemy, so it is the card that forces the "ALL enemies:" prefix
+    // and the one the description box's single 16px size is tightest against.
+    // Five is the hand size the fan layout is tuned for, so this stays a
+    // representative layout shot.
     private static void SeedCombat()
     {
         CombatContext.EnemyDefinitionIds = new List<string> { "cultist", "slime" };
@@ -200,6 +213,22 @@ public partial class ScreenShot : Node
         };
     }
 
+    private static void SeedDeckPopup()
+    {
+        SeedMap();
+        RunState.Deck = CardDatabase.All.Take(13).ToList();
+    }
+
+    private static void OpenDeckPopup(Node screen) => DeckViewButtons.OpenDeck(screen);
+
+    private static void SeedCrowdedCombat()
+    {
+        SeedCombat();
+        CombatContext.EnemyDefinitionIds = new List<string> { "rot_hound", "rot_hound", "ward_acolyte" };
+        RunState.Relics = RelicDatabase.All.Take(8).Select(r => new RelicInstance(r)).ToList();
+        RunState.Potions = PotionDatabase.All.Take(3).Select(p => new PotionInstance(p)).ToList();
+    }
+
     // Card text depends on live combat state that a turn-1 fight doesn't have:
     // the player's Strength, and Vulnerable on the enemy being hit. Reached by
     // actually playing Flex and Bash through TryPlayCard rather than poking
@@ -210,7 +239,7 @@ public partial class ScreenShot : Node
     // Leaves: Strength 2 (every damage number buffed), Vulnerable 2 on the
     // cultist but not the slime (so an AllEnemies card prints a range), and
     // 1 energy (so Cleave is affordable and Whirlwind is dimmed).
-    private static void AfterCombatReady()
+    private static void AfterCombatReady(Node screen)
     {
         var combat = CombatManager.Instance;
         if (combat is null) return;

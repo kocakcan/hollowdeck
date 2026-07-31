@@ -14,7 +14,7 @@
 [gd_resource type="Theme" load_steps=14 format=3]
 
 [ext_resource type="FontFile" path="res://assets/fonts/Silkscreen-Bold.ttf" id="1"]
-[ext_resource type="FontFile" path="res://assets/fonts/Jersey15-Regular.ttf" id="2"]
+[ext_resource type="FontFile" path="res://assets/fonts/Tiny5-Regular.ttf" id="2"]
 
 ; --- Buttons: N2 face, G1 bezel; hover brightens the bezel to G3 rather than
 ; swapping hue, the same "hover is a pure brightness signal" rule CardView's
@@ -201,8 +201,8 @@ CombatDisplayLabel/constants/outline_size = 4
 ; a deliberate exception to the display/body split: Silkscreen is wide enough
 ; that the longest card name in the data ("Reckless Charge+", 16 chars) does
 ; not fit a 176px card at any legal size - 8px would fit but is unreadable.
-; Jersey15 is narrow enough to fit it at 16px with room to spare, and its
-; lowercase reads better on a card face than all-caps anyway.
+; Tiny5 fits it at 16px (122px of the ~130px the banner leaves clear of the
+; cost badge), and its lowercase reads better on a card face than all-caps.
 ; Silkscreen still owns HP/energy/damage numbers via CombatDisplayLabel,
 ; where its unambiguous digits are the whole point.
 CardTitleLabel/base_type = &"Label"

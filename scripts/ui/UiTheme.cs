@@ -103,26 +103,36 @@ public static class UiTheme
     //
     // Two faces, split by job: Silkscreen has no lowercase and is very wide,
     // which makes it wrong for sentences and right for short display strings
-    // (titles, buttons, card/enemy names, HP and damage numbers); Jersey15
-    // has proper lowercase, unambiguous digits, and is narrow enough for card
-    // rules text.
+    // (titles, buttons, card/enemy names, HP and damage numbers); Tiny5 has
+    // proper lowercase, unambiguous digits, and fits card rules text.
     //
     // Pixelify Sans was tried first and rejected on evidence: at 16px its 2,
     // 3, 5 and 8 are mutually ambiguous - "HP: 21/50" read as "81/50" and
     // "Deal 12 damage" as "Deal 13". That is disqualifying for a game whose
-    // entire text content is numbers. Tiny5 was legible but ~15% wider than
-    // Jersey15 on the same string, which costs real room on a card.
+    // entire text content is numbers.
+    //
+    // Jersey 15 was the body face after that, and had the same disease for a
+    // subtler reason: its design em is 27px (the "15" is its *cap height*),
+    // and it was being rendered at 16, i.e. 0.59 device pixels per design
+    // pixel. The rasterizer dropped ~40% of every stem, so "Deal 6 damage"
+    // rendered as "Deal 8 damage" - the exact failure Pixelify Sans was
+    // rejected for, arrived at from the other direction. Tiny5 replaced it:
+    // an 8px design em, so 16 is an exact 2x, with the same 10px cap height
+    // Jersey15@16 had. It is ~16% wider, which was the original reason it
+    // lost to Jersey 15 - a tradeoff only worth making when the narrower face
+    // is actually legible, and it wasn't. Every card still fits at 16.
     //
     // Both are imported with antialiasing, hinting and subpixel positioning
     // disabled (see the .import files) - any of those resamples the glyph off
-    // the pixel grid and undoes the point of a bitmap face.
+    // the pixel grid and undoes the point of a bitmap face. Run
+    // tools/font-grid.py against any candidate face before adopting it.
     public static class Fonts
     {
         public const string DisplayPath = "res://assets/fonts/Silkscreen-Bold.ttf";
-        public const string BodyPath = "res://assets/fonts/Jersey15-Regular.ttf";
+        public const string BodyPath = "res://assets/fonts/Tiny5-Regular.ttf";
 
-        // Display sizes: exact multiples of Silkscreen's 8px design size, so
-        // glyphs land on the pixel grid with no resampling.
+        // Exact multiples of the 8px design em both faces share, so glyphs
+        // land on the pixel grid with no resampling.
         public const int Small = 8;
         public const int Body = 16;
         public const int Heading = 24;

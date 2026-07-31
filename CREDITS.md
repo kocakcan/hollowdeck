@@ -91,7 +91,7 @@ font).
 | Font | Copyright | Use |
 | --- | --- | --- |
 | [Silkscreen](https://fonts.google.com/specimen/Silkscreen) | © 2001 The Silkscreen Project Authors | Display face — titles, buttons, card/enemy names, HP/energy numbers, floating damage text |
-| [Jersey 15](https://fonts.google.com/specimen/Jersey+15) | © 2023 The Soft Type Project Authors | Body face — card descriptions and general UI text |
+| [Tiny5](https://fonts.google.com/specimen/Tiny5) | © 2022–2024 The Tiny5 Project Authors | Body face — card descriptions and general UI text |
 
 Both are bitmap/pixel faces, imported with antialiasing, hinting and subpixel
 positioning disabled so glyphs stay on the pixel grid — see
@@ -108,6 +108,14 @@ Their files have been removed from `assets/fonts/`.
 Pixelify Sans was also trialled as the body face and rejected: at 16px its
 digits `2`, `3`, `5` and `8` are mutually ambiguous, which is disqualifying
 for a game whose text is mostly numbers. Its files were removed too.
+
+Jersey 15 (The Soft Type Project Authors) was the body face after that, and
+was replaced by Tiny5 for the same reason arrived at from the other
+direction: its design em is 27px — the "15" in its name is its cap height —
+so at the 16px the UI rendered it, glyphs fell off the pixel grid and `Deal 6
+damage` came out as `Deal 8 damage`. Silkscreen Regular went at the same
+time; only the Bold weight was ever referenced. Both are removed from
+`assets/fonts/`.
 
 ## UI chrome — procedural, no sourced material
 
