@@ -23,11 +23,20 @@ With no screen names it shoots all of them. Unknown names exit 1 and list the va
 
 ## Screens
 
-`combat` `combat3` `reward` `shop` `map` `map3` `rest` `treasure` `event` `unlocks` `runend`
-`mainmenu` `settings`
+`combat` `combatfull` `combat2` `combat3` `reward` `shop` `map` `map2` `map3` `rest` `treasure`
+`event` `unlocks` `runend` `mainmenu` `settings` `deckpopup`
 
-`map3`/`combat3` are the final act (its own backdrop, title and boss); `map3` is also the longest
-map, which is where node layout runs out of horizontal room first.
+`map2`/`map3` and `combat2`/`combat3` are the later acts — each has its own backdrop tint, title,
+boss sprites and floor count, none of which act 1's shots show. `map3` is also the longest map (10
+floors), which is where node layout runs out of horizontal room first.
+
+`combatfull` is the combat HUD's worst case: 3 enemies, 8 relics, 3 potions. Plain `combat` is 2
+enemies and 1 relic, so it cannot show top-left chrome colliding with the enemy row — which is a
+real bug that shipped, the relic bar growing rightward across the leftmost enemy and painting over
+its target-lock glow. Reach for this one for any HUD or enemy-row layout change.
+
+`deckpopup` opens the pile popup over the map with a 13-card deck, since the popup is spawned on
+demand by `DeckViewButtons` rather than being a screen of its own.
 
 Each one instantiates the real `.tscn` the way `RunManager.ChangeScreen` would, with the global
 statics that screen's `_Ready` reads already seeded (`RunState`, `RewardContext`,
@@ -50,9 +59,16 @@ un-seeded screen renders empty or throws mid-`_Ready`, and the screenshot is wor
 
 ## Adding a screen
 
-One entry in the `Fixtures` dictionary in `scripts/debug/ScreenShot.cs`: scene path plus a seed
-method. Keep the seed realistic (a mid-run deck, believable gold) — a screen shot with empty
-fixtures hides exactly the layout bugs this exists to catch.
+One entry in the `Fixtures` dictionary in `scripts/debug/ScreenShot.cs`: scene path, a seed method,
+and optionally an `Action<Node>` that runs after the screen's `_Ready` and receives the
+instantiated screen. Use that third arg for anything that only exists once the screen has built
+itself — `AfterCombatReady` plays real cards through `TryPlayCard` to get live Strength/Vulnerable
+into the card text, and `deckpopup` uses it to open a popup that no screen owns.
+
+Keep the seed realistic (a mid-run deck, believable gold) — a screenshot with empty fixtures hides
+exactly the layout bugs this exists to catch. Seed the *worst* case, not the average one, when the
+screen has a growable region: `combat` looked fine for three phases while `combatfull`'s relic
+count was the thing that broke it.
 
 ## Two things the harness handles for you
 
@@ -62,10 +78,10 @@ fixtures hides exactly the layout bugs this exists to catch.
   `run_save.json` aside and restores them in a `finally`. Verified: shooting `runend` leaves both
   files byte-identical. Never bypass this by hand-rolling a one-off harness.
 - **Shots are reproducible.** `RngStreams.Init` is re-seeded with a fixed value before every
-  screen, so shop stock, the treasure relic and the rolled event are the same every run. 8 of the
-  11 screens are byte-identical across runs. `combat`, `map` and `reward` differ slightly because
-  they have looping idle animations (card sway, enemy bob, node pulse) — the *content* is still
-  deterministic, only the tween phase moves. Don't chase that as a bug.
+  screen, so shop stock, the treasure relic and the rolled event are the same every run. Most
+  screens are byte-identical across runs; the ones with looping idle animations (`combat*`, `map*`,
+  `reward` — card sway, enemy bob, node pulse) differ slightly because the tween phase moves. The
+  *content* is still deterministic. Don't chase that as a bug.
 
 ## Worth knowing
 
