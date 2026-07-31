@@ -253,11 +253,35 @@ graph had replaced it; and `tools/run-smoke-tests.sh` now runs each suite under 
 because a test that throws inside `_Ready` never reaches `GetTree().Quit()` and hangs the sweep
 instead of failing it.
 
-## Phase 5 — Transitions
+## Phase 5 — Transitions ✅ done
 
-`RunManager.ChangeScreen` is still a hard `ChangeSceneToFile` cut — the last instant snap in a game
-that otherwise tweens everything. One fade there covers all 13 screens. Gate on
-`SettingsManager.ReduceMotion`, as `ScreenBackground.AddDustMotes` already does.
+`RunManager.ChangeScreen` was a hard `ChangeSceneToFile` cut — the last instant snap in a game that
+otherwise tweens everything. One fade there now covers all 13 screens, gated on
+`SettingsManager.ReduceMotion` exactly as `ScreenBackground.AddDustMotes` already was.
+
+`scripts/run/ScreenFade.cs` is a `CanvasLayer` parented to the **RunManager autoload**, which is
+the whole trick: `ChangeSceneToFile` frees the current scene, so anything that has to be visible on
+both sides of the swap cannot live inside one. There is nothing to add to a `.tscn` and nothing a
+new screen has to remember to do. It fades out over `Motion.Fast`, runs the swap, holds full black
+for 0.05s — `ChangeSceneToFile` is itself deferred to end-of-frame, so without the hold the first
+frames of "arriving" still show the screen being left — then fades in over `Motion.Normal`.
+
+Three decisions worth keeping:
+
+- **`Play` takes an `Action`, not a scene path.** A fade has no business knowing what a scene is,
+  and it means `TransitionSmokeTest` can hand it a recorder instead of something that swaps the
+  test's own scene out from under it.
+- **The cover is `MouseFilter.Stop`.** Swallowing clicks for the third of a second the swap takes
+  closes the window where a double-click lands on the outgoing screen's button and then the
+  incoming one's — the input-during-animation class of bug risk 4 exists for.
+- **It is `Ramp.N0`, not `#000`.** A pure-black wash would be the single off-ramp colour on screen,
+  and it is the one that covers the whole screen.
+
+The gate had a consequence worth recording: it reads the *developer's* `user://settings.json`, so
+the three suites that drive a button into `ChangeScreen` would have behaved differently depending
+on a file with nothing to do with them (two of them document an expected engine error that only
+appears on the synchronous path). `HardCutGuard` pins them, using Reduce Motion itself as the seam
+rather than a test-only flag — so the tests exercise a path a player can actually reach.
 
 ## Phase 6 — Content and ship readiness
 

@@ -99,6 +99,10 @@ treat this section as a to-do list.
 ## Key files
 
 - `scripts/run/RunManager.cs` — autoload, run state + scene-transition orchestration
+- `scripts/run/ScreenFade.cs` — the cross-screen fade, on a `CanvasLayer` parented to the
+  `RunManager` autoload (a screen cannot own it: `ChangeSceneToFile` frees the current scene
+  mid-transition). Gated on `SettingsManager.ReduceMotion`; declines rather than shortens, so the
+  hard cut lives on exactly one path
 - `scripts/run/RunState.cs`, `RunSaveManager.cs` — in-run state and its save/resume
 - `scripts/run/MetaProgressionManager.cs` + `RunScore.cs` — score-driven unlock track, meta save
 - `scripts/run/RngStreams.cs` — the four seeded RNG streams
@@ -136,7 +140,7 @@ There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Rea
 failure.
 
 ```bash
-tools/run-smoke-tests.sh                 # all 15; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh                 # all 16; builds first, nonzero exit on any failure
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 
@@ -168,6 +172,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `RunSaveSmokeTest` | in-run save/load round-trip, save v2/v3 tolerance | `RunSaveData`, `RunSaveManager`, `RunState` |
 | `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |
 | `AudioSmokeTest` | stream construction, bus setup, volume round-trip | `scripts/audio/`, `AudioManager`, `SettingsManager` |
+| `TransitionSmokeTest` | cross-screen fade: overlay geometry/layer, the Reduce Motion gate, covered-action firing once | `ScreenFade`, `RunManager.ChangeScreen` |
 | `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon-to-definition coverage, `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
 
 When in doubt run everything — the full sweep takes well under a minute. Restructuring a
@@ -183,6 +188,11 @@ Expected output that is **not** a regression: `MetaProgressionSmokeTest` prints 
 warning with a backtrace (its deliberate corrupt-save case, proving the loader falls back to
 defaults), and `ScreenSmokeTest` and `Phase4ContentSmokeTest` each print one `Parent node is busy
 adding/removing children` engine error from a test clicking a button that changes scene.
+
+A suite that drives a button into `RunManager.ChangeScreen` also needs `HardCutGuard.Protect()`
+alongside `RunSaveGuard`: the Phase 5 fade defers `ChangeSceneToFile` into a tween callback, so
+without pinning Reduce Motion the suite behaves differently depending on the developer's
+`user://settings.json` — including whether the documented "Parent node is busy" error appears.
 
 Tests that touch persistence write only to `user://*_test.json` scratch paths, never the real
 save. Any test that drives a screen far enough to change scenes hits `RunManager.ChangeScreen`,

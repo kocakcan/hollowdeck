@@ -223,6 +223,9 @@ public partial class ActSmokeTest : Node
         // this test would otherwise overwrite the developer's real in-progress
         // run save just by running.
         using var saveGuard = RunSaveGuard.Protect();
+        // And pin the screen change to a hard cut, so this test does not
+        // depend on whether the machine running it has Reduce Motion set.
+        using var cutGuard = HardCutGuard.Protect();
         try
         {
             RngStreams.Init(555);

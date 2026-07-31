@@ -145,6 +145,9 @@ public partial class ScreenSmokeTest : Node
         // this test's 2-card fixture over the developer's real in-progress run
         // save. That is exactly what used to happen on every suite run.
         using var saveGuard = RunSaveGuard.Protect();
+        // And pin the screen change to a hard cut, so this test does not
+        // depend on whether the machine running it has Reduce Motion set.
+        using var cutGuard = HardCutGuard.Protect();
 
         RunState.PlayerMaxHp = 50;
         RunState.PlayerCurrentHp = 20;

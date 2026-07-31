@@ -88,6 +88,13 @@ public partial class ScreenShot : Node
         // that opens it. Deck is deliberately larger than one row of the grid,
         // since the thing worth looking at is how the columns pack.
         ["deckpopup"] = new("res://scenes/MapScreen.tscn", SeedDeckPopup, OpenDeckPopup),
+        // The cross-screen fade, held at a fixed alpha over a real screen.
+        // Deliberately not the live tween: 60 settle frames is longer than the
+        // whole transition, so a real Play() would always be captured already
+        // finished. TransitionSmokeTest proves the alpha ramps; this shot is
+        // for the thing a test cannot see - that the cover spans the viewport
+        // and sits above the screen's own chrome, pile counters included.
+        ["fade"] = new("res://scenes/MapScreen.tscn", SeedMap, HoldFadeMidway),
         ["rest"] = new("res://scenes/RestScreen.tscn", SeedRest),
         // The rest site's second view, reached by pressing Smith. It renders
         // real CardViews now rather than stacked text rows, so it is a layout
@@ -176,6 +183,13 @@ public partial class ScreenShot : Node
     // and reset the stats block each fixture is trying to set.
     private static void ResetRunState()
     {
+        // The fade overlay lives on the RunManager autoload, so unlike the
+        // screen itself it survives from one shot to the next - without this
+        // the "fade" fixture would tint every screen shot after it.
+        var cover = RunManager.Instance.Fade.GetNode<ColorRect>("Cover");
+        cover.Visible = false;
+        cover.Color = new Color(cover.Color, 0f);
+
         RunState.Gold = 129;
         RunState.PlayerMaxHp = 50;
         RunState.PlayerCurrentHp = 34;
@@ -225,6 +239,13 @@ public partial class ScreenShot : Node
     }
 
     private static void OpenDeckPopup(Node screen) => DeckViewButtons.OpenDeck(screen);
+
+    private static void HoldFadeMidway(Node screen)
+    {
+        var cover = RunManager.Instance.Fade.GetNode<ColorRect>("Cover");
+        cover.Visible = true;
+        cover.Color = new Color(cover.Color, 0.62f);
+    }
 
     private static void SeedCrowdedCombat()
     {
