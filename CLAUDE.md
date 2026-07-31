@@ -113,6 +113,10 @@ treat this section as a to-do list.
 - `scripts/data/ActDefinition.cs` + `ActDatabase.cs` — the three acts and what varies per act
 - `data/*/*.json` — the content layer; the schema is the data-vs-code split everything depends on
 - `scenes/CombatScreen.tscn` — card drag/hover/targeting
+- `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic
+  status block, framed panel, art plinth), attached from `_Ready` like `ScreenBackground` and
+  `DeckViewButtons`. Owns those node paths; `ScreenChrome.HpLabelPath` and friends are what the
+  smoke tests address rather than literals.
 
 ## Conventions
 
@@ -141,6 +145,11 @@ asset rules (grid, ramp, hard alpha, no SVG) checked against the raw PNG bytes, 
 can't do because `GD.Load` returns an imported texture. It's skipped with a warning if `cargo`
 isn't installed.
 
+Each suite runs under a 90-second watchdog (override with `SUITE_TIMEOUT`). A test that throws
+inside `_Ready` — a `GetNode` against a path a restructured `.tscn` no longer has is the usual way
+— never reaches its `GetTree().Quit()`, so Godot sits in an idle main loop and the sweep *stalls*
+rather than failing. The watchdog reports that as `TIMEOUT` and exits nonzero.
+
 Run these after touching anything under `scripts/` or any `.tscn`, before reporting work done.
 
 | Test | Covers | Run when you touch |
@@ -152,9 +161,9 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic | intent pickers, statuses, elite rewards |
 | `HandLayoutSmokeTest` | hand fan spacing at 11+ cards, every card's text fits its box | `RefreshHand`, `HandFanLayout`, `CardView` text |
 | `DeckViewSmokeTest` | pile popups, pile counters, combat-end z-order | `PileViewPopup`, `DeckViewButtons`, `PileCounterBar` |
-| `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders and fits | `MapGenerator`, `MapScreen`, `MapNode`, `acts.json` |
+| `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders, fits *and fills* the canvas | `MapGenerator`, `MapScreen`, `MapNode`, `acts.json` |
 | `EventSmokeTest` | event DB, outcome keys, `EventScreen` | `scripts/events/`, `events.json` |
-| `ScreenSmokeTest` | Reward/Shop/Treasure/Rest load and populate | any non-combat screen or its `.tscn` |
+| `ScreenSmokeTest` | Reward/Shop/Treasure/Rest load, populate and show their art | any non-combat screen, `ScreenChrome`, or its `.tscn` |
 | `ActSmokeTest` | acts load, act progression, per-act content is distinct | `acts.json`, `ActDefinition`, `RunState.AdvanceAct` |
 | `RunSaveSmokeTest` | in-run save/load round-trip, save v2/v3 tolerance | `RunSaveData`, `RunSaveManager`, `RunState` |
 | `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |

@@ -15,10 +15,14 @@ namespace Hollowdeck.UI;
 public partial class MapScreen : Control
 {
     private const float OriginX = 60f;
-    private const float OriginY = 60f;
     private const float MaxFloorSpacing = 130f;
-    private const float ColumnSpacing = 80f;
-    private const float NodeSize = 56f;
+    private const float MaxColumnSpacing = 150f;
+
+    // 2x the 32px icon grid. Was 56, which is 1.75x - a fractional scale, and
+    // the button's ExpandIcon was resampling every node icon to reach it. See
+    // BuildButtons: the icon is a child TextureRect at an exact integer scale
+    // now rather than the Button's own Icon property.
+    private const float NodeSize = PixelSpec.IconGrid * 2;
 
     // Right-hand margin the rightmost (boss) node must stay inside. Floor
     // spacing is derived from it rather than fixed at MaxFloorSpacing: act 3's
@@ -27,10 +31,18 @@ public partial class MapScreen : Control
     // roomier 130.
     private const float RightMargin = 90f;
 
+    // Vertical band the graph is allowed to occupy: below the run-status
+    // block, above the footer row. Column spacing is derived from what is left
+    // exactly as floor spacing is derived from the width, which is what
+    // reclaimed the bottom 45% of this screen - the old layout stacked every
+    // floor downward from a fixed y=60 at a fixed 80px pitch, so a four-deep
+    // act ended at y=328 and the rest of the canvas was empty (ROADMAP
+    // Phase 4).
+    private const float TopMargin = 116f;
+    private const float BottomMargin = 88f;
+    private const float DesignHeight = 648f;
+
     private Control _nodeButtons = null!;
-    private Label _goldLabel = null!;
-    private Label _hpLabel = null!;
-    private HBoxContainer _relicsRow = null!;
     private readonly Dictionary<string, Vector2> _nodeCenters = new();
 
     public override void _Ready()
@@ -39,27 +51,39 @@ public partial class MapScreen : Control
         ScreenBackground.Attach(this, act.MapBackground, Color.FromString(act.MapTint, Colors.White));
         DeckViewButtons.Attach(this);
         _nodeButtons = GetNode<Control>("NodeButtons");
-        _goldLabel = GetNode<Label>("GoldLabel");
-        _hpLabel = GetNode<Label>("HpLabel");
-        _relicsRow = GetNode<HBoxContainer>("RelicsRow");
         GetNode<Button>("BackButton").Pressed += OnBackPressed;
 
-        BuildActTitle(act);
+        // Gold, HP and the relic row all used to be hand-placed Labels on this
+        // scene - the relics as a bare 30x30 TextureRect strip pinned to
+        // y=570, which is why a lone relic rendered as an unframed icon
+        // floating in the map's dead space.
+        ScreenChrome.AddTitle(this, $"Act {RunState.ActIndex + 1} — {act.Name}");
+        ScreenChrome.AddRunStatus(this);
+
         BuildLayout();
         BuildButtons();
-        RefreshInfo();
         QueueRedraw();
     }
 
+    // Draws from _nodeCenters, which BuildLayout filled from the graph that
+    // was live when this screen was built - deliberately not re-read from
+    // RunState here. A freed-but-not-yet-collected MapScreen still gets one
+    // more _Draw at the end of the frame, and by then RunState.MapNodes can
+    // already be the *next* act's graph (AdvanceAct regenerates it, and the
+    // smoke tests do it twice in a row), whose ids this instance has never
+    // seen. That threw a KeyNotFoundException out of _Draw every suite run.
     public override void _Draw()
     {
         foreach (var node in RunState.MapNodes)
         {
-            var from = _nodeCenters[node.Id];
+            if (!_nodeCenters.TryGetValue(node.Id, out var from)) continue;
             bool isChoosableNow = node.Id == RunState.CurrentNodeId;
             foreach (var nextId in node.NextNodeIds)
             {
-                DrawCurvedPath(from, _nodeCenters[nextId], isChoosableNow);
+                if (_nodeCenters.TryGetValue(nextId, out var to))
+                {
+                    DrawCurvedPath(from, to, isChoosableNow);
+                }
             }
         }
     }
@@ -87,47 +111,41 @@ public partial class MapScreen : Control
         DrawPolyline(points, color, highlighted ? 3f : 1.5f, antialiased: true);
     }
 
-    // Which act this is, by name - the only on-screen signal that clearing a
-    // boss moved the run somewhere new (the map itself regenerates, but a fresh
-    // graph on its own reads as "same place, different route"). Built in code
-    // rather than added to MapScreen.tscn for the same reason ScreenBackground
-    // and DeckViewButtons are: one place to change, no scene edit.
-    private void BuildActTitle(ActDefinition act)
-    {
-        const float width = 552f;
-        var label = new Label
-        {
-            Text = $"Act {RunState.ActIndex + 1} — {act.Name}",
-            Position = new Vector2((1152f - width) / 2f, 12f),
-            CustomMinimumSize = new Vector2(width, 0),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            MouseFilter = MouseFilterEnum.Ignore,
-            ThemeTypeVariation = "CombatDisplayLabel",
-        };
-        label.AddThemeFontSizeOverride("font_size", 24);
-        label.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
-        AddChild(label);
-    }
-
     private void BuildLayout()
     {
         // Derived from the longest act that has to fit, not a constant - see
         // RightMargin. GroupBy's key is the floor index, so Max() + 1 is the
         // floor count of whatever act is being rendered.
         int floorCount = RunState.MapNodes.Count == 0 ? 1 : RunState.MapNodes.Max(n => n.Floor) + 1;
-        float available = 1152f - OriginX - NodeSize - RightMargin;
+        float availableWidth = 1152f - OriginX - NodeSize - RightMargin;
         float floorSpacing = floorCount <= 1
             ? MaxFloorSpacing
-            : Mathf.Min(MaxFloorSpacing, available / (floorCount - 1));
+            : Mathf.Min(MaxFloorSpacing, availableWidth / (floorCount - 1));
 
-        foreach (var floor in RunState.MapNodes.GroupBy(n => n.Floor))
+        // Same derivation, vertically: the widest floor decides the pitch, so
+        // a 4-deep act spreads across the whole band and a 2-deep one does not
+        // stretch into a ladder.
+        var floors = RunState.MapNodes.GroupBy(n => n.Floor).ToList();
+        int widestFloor = floors.Count == 0 ? 1 : floors.Max(f => f.Count());
+        float availableHeight = DesignHeight - TopMargin - BottomMargin - NodeSize;
+        float columnSpacing = widestFloor <= 1
+            ? MaxColumnSpacing
+            : Mathf.Min(MaxColumnSpacing, availableHeight / (widestFloor - 1));
+        float bandCenterY = TopMargin + (availableHeight + NodeSize) / 2f;
+
+        foreach (var floor in floors)
         {
             var nodes = floor.OrderBy(n => n.Column).ToList();
+            // Each floor is centred on the band rather than stacked downward
+            // from the top: a floor with two nodes used to sit in the top two
+            // slots with a gap under it, which read as a graph that had run
+            // out of room rather than one that had branched.
+            float startY = bandCenterY - (nodes.Count - 1) * columnSpacing / 2f;
             for (int i = 0; i < nodes.Count; i++)
             {
                 var center = new Vector2(
                     OriginX + floor.Key * floorSpacing + NodeSize / 2f,
-                    OriginY + i * ColumnSpacing + NodeSize / 2f);
+                    startY + i * columnSpacing);
                 _nodeCenters[nodes[i].Id] = center;
             }
         }
@@ -137,7 +155,7 @@ public partial class MapScreen : Control
     // around the same center so the layout/path math above is untouched)
     // plus an always-on glow, instead of relying solely on its icon/"BOSS"
     // text to carry that weight like every other node type does.
-    private const float BossNodeSize = NodeSize + 18f;
+    private const float BossNodeSize = PixelSpec.IconGrid * 3;
 
     private void BuildButtons()
     {
@@ -163,12 +181,24 @@ public partial class MapScreen : Control
                 button.AddThemeStyleboxOverride("disabled", ChromeStyles.BossNodeGlowStyle());
             }
             // Icon-only node buttons when art exists; text label fallback.
+            //
+            // As a centred child TextureRect at an exact 2x (3x for the boss),
+            // not the Button's own Icon with ExpandIcon: ExpandIcon stretches
+            // the texture to whatever the content rect happens to be, which is
+            // a fractional scale of the 32px grid and blurs the icon under
+            // Nearest into uneven pixel widths (ART_SPEC section 2).
             var icon = ArtAssets.MapIcon(node.Type);
             if (icon is not null)
             {
-                button.Icon = icon;
-                button.ExpandIcon = true;
-                button.IconAlignment = HorizontalAlignment.Center;
+                // Left on the default top-left anchors and positioned by hand.
+                // LayoutPreset.Center re-bases Position on the parent's centre
+                // rather than its corner, so centring by offset on top of it
+                // moves the icon a further half-node down and right - which is
+                // exactly how it rendered.
+                var rect = ScreenChrome.PixelIcon(icon, isBoss ? 3 : 2);
+                rect.Size = rect.CustomMinimumSize;
+                rect.Position = (new Vector2(size, size) - rect.CustomMinimumSize) / 2f;
+                button.AddChild(rect);
             }
             else
             {
@@ -235,46 +265,6 @@ public partial class MapScreen : Control
         MapNodeType.Event => "Event",
         _ => "?",
     };
-
-    // Relics render as an icon row (same treatment as CombatScreen's relic
-    // bar) rather than a comma-joined name list, which wrapped into the map
-    // area once the list grew.
-    private void RefreshInfo()
-    {
-        _goldLabel.Text = $"Gold: {RunState.Gold}";
-        _hpLabel.Text = $"HP: {RunState.PlayerCurrentHp}/{RunState.PlayerMaxHp}";
-
-        if (RunState.Relics.Count == 0)
-        {
-            _relicsRow.AddChild(new Label
-            {
-                Text = "Relics: none yet",
-                Modulate = new Color(1f, 1f, 1f, 0.6f),
-            });
-            return;
-        }
-
-        foreach (var relic in RunState.Relics)
-        {
-            var tooltip = $"{relic.Definition.Name}\n{relic.Definition.Description}";
-            if (ArtAssets.RelicIcon(relic.Definition.Id) is { } icon)
-            {
-                _relicsRow.AddChild(new TextureRect
-                {
-                    Texture = icon,
-                    CustomMinimumSize = new Vector2(30, 30),
-                    ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
-                    StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
-                    TooltipText = tooltip,
-                    MouseFilter = MouseFilterEnum.Stop,
-                });
-            }
-            else
-            {
-                _relicsRow.AddChild(new Label { Text = relic.Definition.Name, TooltipText = tooltip });
-            }
-        }
-    }
 
     private void OnNodeChosen(MapNode node)
     {

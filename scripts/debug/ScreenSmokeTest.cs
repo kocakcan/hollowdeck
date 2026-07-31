@@ -82,10 +82,22 @@ public partial class ScreenSmokeTest : Node
         int relicsBefore = RunState.Relics.Count;
 
         var screen = LoadScene("res://scenes/TreasureScreen.tscn");
+        // The relic's name moved to its own display-face label above the
+        // description when the screen gained an art plinth; OutcomeLabel is
+        // now the description alone.
+        var nameLabel = screen.GetNode<Label>("CenterContainer/VBoxContainer/NameLabel");
         var label = screen.GetNode<Label>("CenterContainer/VBoxContainer/OutcomeLabel");
+        var artSlot = screen.GetNode<CenterContainer>("CenterContainer/VBoxContainer/ArtSlot");
         var continueButton = screen.GetNode<Button>("CenterContainer/VBoxContainer/ContinueButton");
 
+        Check("treasure_names_the_relic_it_granted",
+            nameLabel.Text != "Treasure" && RunState.Relics.Any(r => r.Definition.Name == nameLabel.Text),
+            $"name='{nameLabel.Text}'");
         Check("treasure_label_updated_from_default", label.Text != "Treasure!", $"text='{label.Text}'");
+        // The whole point of the screen's rework: the relic is shown, not just
+        // described. A missing icon file would silently drop back to text.
+        Check("treasure_shows_the_relic_art", artSlot.GetChildCount() == 1,
+            $"art children={artSlot.GetChildCount()}");
         Check("treasure_grants_a_relic", RunState.Relics.Count == relicsBefore + 1,
             $"relics={RunState.Relics.Count}");
         Check("treasure_continue_button_has_a_handler", continueButton.GetSignalConnectionList("pressed").Count > 0,
@@ -100,9 +112,11 @@ public partial class ScreenSmokeTest : Node
         RunState.Potions = new List<PotionInstance>();
 
         var screen = LoadScene("res://scenes/ShopScreen.tscn");
-        var goldLabel = screen.GetNode<Label>("GoldLabel");
+        // Gold moved into the shared run-status block, and the relic/potion
+        // stock out of a scrolling list into a row of framed tiles.
+        var goldLabel = screen.GetNode<Label>(ScreenChrome.GoldLabelPath);
         var cardRow = screen.GetNode<HBoxContainer>("CardOffersRow");
-        var offers = screen.GetNode<VBoxContainer>("OffersScroll/OffersList");
+        var offers = screen.GetNode<HBoxContainer>("OffersRow");
 
         Check("shop_gold_label_shows_current_gold", goldLabel.Text.Contains("200"), $"text='{goldLabel.Text}'");
         var cardViews = cardRow.GetChildren().SelectMany(c => c.GetChildren()).OfType<CardView>().ToList();
@@ -111,9 +125,16 @@ public partial class ScreenSmokeTest : Node
             "a shop CardView still has Interactive=true (would try to drag-to-play)");
         Check("shop_has_relic_and_potion_offer_rows", offers.GetChildCount() == 4, $"rows={offers.GetChildCount()}");
 
-        var firstRowDescription = offers.GetChild(0).GetChild<Label>(1);
-        Check("shop_offer_shows_description", firstRowDescription.Text.Length > 0,
-            $"text='{firstRowDescription.Text}'");
+        // Every tile is Frame(VBox) - the description is the label with the
+        // longest text, since name/kind are one word each.
+        var firstTileLabels = offers.GetChild(0).GetChild(0).GetChildren().OfType<Label>().ToList();
+        Check("shop_offer_shows_description", firstTileLabels.Any(l => l.Text.Length > 12),
+            $"labels=[{string.Join(" | ", firstTileLabels.Select(l => l.Text))}]");
+        // The tiles are the reason the stock left the ItemList: each shows the
+        // thing it sells, not just its name.
+        Check("shop_offer_shows_its_icon",
+            offers.GetChild(0).GetChild(0).GetChildren().OfType<CenterContainer>().Count() == 1,
+            "offer tile has no icon slot");
         screen.QueueFree();
     }
 
@@ -130,7 +151,9 @@ public partial class ScreenSmokeTest : Node
         RunState.Deck = new List<CardDefinition> { CardDatabase.Get("strike"), CardDatabase.Get("defend") };
 
         var screen = LoadScene("res://scenes/RestScreen.tscn");
-        var hpLabel = screen.GetNode<Label>("HpLabel");
+        // HP moved out of a bare top-left Label into the shared run-status
+        // block ScreenChrome builds for every non-combat screen.
+        var hpLabel = screen.GetNode<Label>(ScreenChrome.HpLabelPath);
         Check("rest_shows_current_hp", hpLabel.Text.Contains("20") && hpLabel.Text.Contains("50"),
             $"text='{hpLabel.Text}'");
 
@@ -138,19 +161,29 @@ public partial class ScreenSmokeTest : Node
         var upgradeView = screen.GetNode<Control>("UpgradeCenterContainer");
         Check("rest_starts_on_main_choices", choicesView.Visible && !upgradeView.Visible,
             $"choices visible={choicesView.Visible}, upgrade visible={upgradeView.Visible}");
+        Check("rest_shows_the_campfire",
+            screen.GetNode<CenterContainer>("CenterContainer/VBoxContainer/ArtSlot").GetChildCount() == 1,
+            "the rest site has no campfire art");
 
-        var smithButton = screen.GetNode<Button>("CenterContainer/VBoxContainer/SmithButton");
+        var smithButton = screen.GetNode<Button>("CenterContainer/VBoxContainer/ChoiceColumn/SmithButton");
         Check("rest_smith_button_enabled_with_unupgraded_cards", !smithButton.Disabled, "SmithButton was disabled");
         smithButton.EmitSignal(Button.SignalName.Pressed);
         Check("rest_smith_switches_to_upgrade_view", !choicesView.Visible && upgradeView.Visible,
             $"choices visible={choicesView.Visible}, upgrade visible={upgradeView.Visible}");
 
-        var upgradeList = screen.GetNode<VBoxContainer>("UpgradeCenterContainer/UpgradeVBox/ScrollContainer/UpgradeList");
+        // A GridContainer of CardView columns now, not a VBox of text rows.
+        var upgradeList = screen.GetNode<GridContainer>("UpgradeCenterContainer/UpgradeVBox/ScrollContainer/UpgradeList");
         Check("rest_upgrade_list_has_a_row_per_card", upgradeList.GetChildCount() == 2,
             $"rows={upgradeList.GetChildCount()}");
 
         var strikeRow = upgradeList.GetChild(0);
-        var strikeButton = strikeRow.GetChild<Button>(0);
+        // Each column renders the *upgraded* card, which is what the player is
+        // choosing to end up with.
+        var strikeView = strikeRow.GetChildren().OfType<CardView>().FirstOrDefault();
+        Check("rest_upgrade_choice_previews_the_upgraded_card",
+            strikeView?.CardInstance?.Definition.Id == "strike+",
+            $"id='{strikeView?.CardInstance?.Definition.Id}'");
+        var strikeButton = strikeRow.GetChildren().OfType<Button>().First();
         int deckCountBefore = RunState.Deck.Count;
         // Picking a card calls OnLeavePressed -> ChangeSceneToFile on the
         // scene currently on the call stack, which logs one harmless

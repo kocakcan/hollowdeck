@@ -10,39 +10,43 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
 
-[node name="TitleLabel" type="Label" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 16.0
-text = "Shop"
-
-[node name="GoldLabel" type="Label" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 48.0
-text = "Gold: 0"
-
 [node name="CardOffersRow" type="HBoxContainer" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 88.0
-offset_right = 1000.0
-offset_bottom = 434.0
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+grow_horizontal = 2
+offset_left = -540.0
+offset_top = 64.0
+offset_right = 540.0
+offset_bottom = 348.0
+alignment = 1
+theme_override_constants/separation = 20
 
-[node name="OffersScroll" type="ScrollContainer" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 444.0
-offset_right = 500.0
-offset_bottom = 600.0
-horizontal_scroll_mode = 0
-
-[node name="OffersList" type="VBoxContainer" parent="OffersScroll"]
-layout_mode = 2
-size_flags_horizontal = 3
+[node name="OffersRow" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+grow_horizontal = 2
+offset_left = -556.0
+offset_top = 360.0
+offset_right = 556.0
+offset_bottom = 580.0
+alignment = 1
+theme_override_constants/separation = 16
 
 [node name="LeaveButton" type="Button" parent="."]
-layout_mode = 0
-offset_left = 24.0
-offset_top = 610.0
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 0
+grow_vertical = 0
+offset_left = -170.0
+offset_top = -52.0
+offset_right = -20.0
+offset_bottom = -14.0
 text = "Leave Shop"
