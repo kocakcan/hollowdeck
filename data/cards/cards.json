@@ -387,5 +387,29 @@
 	"effects": [
 	  { "action": "apply_status", "status": "Strength", "amount": 4, "scope": "Self" }
 	]
+  },
+  {
+	"id": "metallicize",
+	"name": "Metallicize",
+	"cost": 1,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "apply_status", "status": "Metallicize", "amount": 3, "scope": "Self" }
+	]
+  },
+  {
+	"id": "demon_form",
+	"name": "Demon Form",
+	"cost": 2,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "apply_status", "status": "Ritual", "amount": 2, "scope": "Self" }
+	]
   }
 ]

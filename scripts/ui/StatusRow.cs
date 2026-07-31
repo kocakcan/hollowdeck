@@ -108,6 +108,11 @@ public static class StatusRow
         StatusType.Weak => $"Weak {amount}: attacks deal {(int)((1 - DamageMath.WeakMultiplier) * 100)}% less damage. Wears off by 1 each turn.",
         StatusType.Vulnerable => $"Vulnerable {amount}: takes {(int)((DamageMath.VulnerableMultiplier - 1) * 100)}% more damage. Wears off by 1 each turn.",
         StatusType.Poison => $"Poison {amount}: loses {amount} HP each turn (ignores Block), then Poison drops by 1.",
+        // Both spell out "does not wear off" - every other status in the game
+        // decays, so persistence is the surprising half and the reason a Power
+        // is worth a card that never comes back.
+        StatusType.Metallicize => $"Metallicize {amount}: gains {amount} Block at the start of each turn. Does not wear off.",
+        StatusType.Ritual => $"Ritual {amount}: gains {amount} Strength at the start of each turn. Does not wear off.",
         _ => $"{status} {amount}",
     };
 }

@@ -276,6 +276,17 @@ public partial class ScreenShot : Node
         {
             combat.TryPlayCard(bash, combat.Enemies.FirstOrDefault());
         }
+
+        // Ritual is granted directly (Demon Form costs 2 and the turn-1 hand
+        // has 1 energy left after Flex and Bash), but Metallicize is actually
+        // played - and it has to be, not just granted. The status row is
+        // rebuilt from CombatantsChanged, which only a real resolution fires;
+        // granting both and stopping there left the HUD showing the row it
+        // built before either existed.
+        combat.Player.AddStatus(StatusType.Ritual, 2);
+        var metallicize = new CardInstance(CardDatabase.Get("metallicize"));
+        combat.Player.Piles.Hand.Add(metallicize);
+        combat.TryPlayCard(metallicize);
     }
 
     private static void SeedReward()
