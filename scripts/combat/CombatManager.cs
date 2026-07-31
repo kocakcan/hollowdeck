@@ -247,7 +247,11 @@ public partial class CombatManager : Node
         _cardsThisTurn++;
         MostCardsInOneTurn = Math.Max(MostCardsInOneTurn, _cardsThisTurn);
         Player.Piles.Hand.Remove(card);
+        // Exhaust is checked first so a Power that also declares exhaust: true
+        // still reads as exhausted - the two would otherwise disagree about
+        // which pile wins, and Exhaust is the one with player-visible cost.
         if (card.Definition.Exhaust) Player.Piles.Exhaust.Add(card);
+        else if (card.Definition.Type == CardType.Power) Player.Piles.Powers.Add(card);
         else Player.Piles.Discard.Add(card);
         HandChanged?.Invoke();
 

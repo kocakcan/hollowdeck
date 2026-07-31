@@ -9,7 +9,7 @@ networking, desktop only (Windows/Mac/Linux).
 
 The core loop is playable end-to-end — new run, map, combat, events, shop, rest, treasure,
 rewards, bosses, run-end scoring, unlocks, and mid-run save/resume. Current content is three
-acts: **30 cards, 22 relics, 12 potions, 24 enemies (6 of them bosses), 5 events**. Each act has
+acts: **31 cards, 22 relics, 12 potions, 24 enemies (6 of them bosses), 5 events**. Each act has
 its own enemy pools and a two-boss pool the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
 what's still open.
 
@@ -148,7 +148,7 @@ the seven hooks (extending `SimpleHookEffectRelic` to the other five hooks is on
 
 There's no test framework. Each `scenes/debug/*SmokeTest.tscn` runs assertions in `_Ready`,
 prints `PASS`/`FAIL` per check and a `<Name>: N passed, M failed` summary, then exits nonzero if
-anything failed. 16 suites, 557 checks:
+anything failed. 16 suites, 576 checks:
 
 ```bash
 tools/run-smoke-tests.sh                 # all of them; builds first, nonzero exit on any failure

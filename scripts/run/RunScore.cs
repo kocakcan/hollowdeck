@@ -14,10 +14,6 @@ namespace Hollowdeck.Run;
 // below. They were set when a run was a single act; a full three-act run now
 // banks three bosses' worth of points and climbs further up the unlock track,
 // so they want a pass alongside the act balance pass (see ROADMAP.md).
-//
-// Pauper (no rare cards) is deliberately absent: every entry in cards.json
-// is currently Rarity.Common, so it would award unconditionally. Add it once
-// rarities are actually assigned across the pool.
 public static class RunScore
 {
     public const int PointsPerFloor = 5;
@@ -58,6 +54,11 @@ public static class RunScore
 
     public const int HighlanderPoints = 100;
     public const int CollectorPoints = 25;
+
+    // StS: 100 points for finishing with no rare cards. Kept as-is - it is a
+    // self-imposed restriction rather than a threshold scaled to pool size,
+    // so Hollowdeck's smaller numbers do not change what it is worth.
+    public const int PauperPoints = 100;
 
     // StS: 15 unknown rooms across three acts. Hollowdeck generates only a
     // handful of Event nodes per act.
@@ -122,6 +123,17 @@ public static class RunScore
 
         int collectorSets = nonStarters.GroupBy(c => c.Id).Count(g => g.Count() >= 4);
         Add("Collector", collectorSets * CollectorPoints);
+
+        // Pauper: cleared the run without picking up a single Rare. Measured
+        // over the whole deck rather than nonStarters, because a starter card
+        // being Rare would make the category unearnable by construction and
+        // that should show up as a content bug, not as silently dead points.
+        //
+        // This is the category the file used to carry a comment apologising
+        // for: while every entry in cards.json was Rarity.Common it would have
+        // awarded unconditionally, so it was left out. Rarities are assigned
+        // now (12/13/6 across the pool), so it means something.
+        if (deck.Count > 0 && deck.All(c => c.Rarity != Rarity.Rare)) Add("Pauper", PauperPoints);
 
         if (stats.EventRoomsVisited >= MysteryRooms) Add("Mystery Machine", MysteryPoints);
 

@@ -287,12 +287,35 @@ rather than a test-only flag — so the tests exercise a path a player can actua
 
 Demoted, not dropped. Still genuinely open:
 
-- **Card scaffolding before card volume.** `CardType` has no `Power`. `Rarity` exists on
-  `CardDefinition` and already drives border colour, but no card in `cards.json` declares one and
-  neither shop nor reward weighting reads it — see `RunScore.cs:17`, which can't award a rare-card
-  bonus for exactly this reason. Add `Power`, populate `rarity`, wire it into weighting *before*
-  bulk-authoring, so new content lands against the final shape.
-- **Cards 30 → 80–120**, and more enemies per act (24 today is ~4 normal encounters' variety each).
+- ✅ **Card scaffolding before card volume.** Done, and it was the right order: every card authored
+  from here lands against the final shape instead of being retrofitted.
+  - `CardType.Power` exists and means something. A played Power goes to `PileManager.Powers` —
+    deliberately not Discard (it would cycle back and be re-playable) and not Exhaust, which is
+    *a cost* and which the HUD renders as one, ember tint and counter cell included. It picks up
+    `UiTheme.Palette.PowerFill`, the third fill claimed back in Phase 1 precisely so it would not
+    have to be chosen under deadline.
+  - **Rarity is assigned across the whole pool** — 12 Common / 13 Uncommon / 6 Rare. Common is the
+    basic curve you build out of, Uncommon a stronger or conditional version of something Common
+    already does, Rare run-defining (every one is an exhaust card or an energy swing).
+  - **`CardPool` weights every draw** 60/37/3, and reward picks, shop stock and the random-card
+    event outcome all go through it. All three previously shuffled the unlocked pool uniformly and
+    took the first N, which made a Rare exactly as likely as a Strike. It draws a *tier* first and
+    then a card within it, so authoring more Uncommons doesn't silently re-tune the odds of every
+    other tier.
+  - **`RunScore` gained Pauper** (100 points, cleared with no Rare in the deck) — the category the
+    file used to carry a comment apologising for, since it would have awarded unconditionally while
+    every card was Common.
+  - One Power ships, `Inflame` (2 energy, Rare, gain 4 Strength), so the type is live end-to-end
+    rather than untested scaffolding — the `reward` screenshot fixture now shows one card of each
+    type so both frame channels are visible in a single shot.
+
+  *Outstanding, and the real gap:* Powers can only be one-shot permanent buffs today, because the
+  only per-turn machinery in combat is the status tick. A Power like Metallicize ("gain 3 Block at
+  the start of each turn") needs either a new `StatusType` that grants on tick, or a combat-side
+  hook analogous to `RelicBehavior.OnTurnStart`. Until one of those lands, a Power is a Skill that
+  doesn't come back — a real distinction, but a thin one, and not enough to author a dozen against.
+  Do this before bulk Power authoring, for the same reason this bullet came before card volume.
+- **Cards 31 → 80–120**, and more enemies per act (24 today is ~4 normal encounters' variety each).
 - **Balance the three-act curve.** Authored and smoke-tested but never actually played: enemies
   scale ~1.4x per act against a 50 HP start with +8 max HP and 30% heal per act cleared. Act III
   against a deck with only ~20 card rewards is the open question. Unlock-track thresholds were
@@ -318,9 +341,10 @@ Demoted, not dropped. Still genuinely open:
   vibe — otherwise it becomes the fourth palette.
 - **Phases 2 and 3 can run in parallel.** Layout works on node trees and themes; `artgen` works on
   PNGs landing at paths `ArtAssets.cs` already resolves by convention. Neither blocks the other.
-- **Phase 6's internal order still holds** — scaffolding before volume. Authoring 50 cards and then
-  retrofitting `Power` and rarity is the expensive order. But content is no longer the gate on the
-  project as a whole.
+- **Phase 6's internal order still holds** — scaffolding before volume, and the scaffolding half is
+  now done: `Power`, rarity across the pool, and rarity-weighted offers all landed before a single
+  bulk-authored card. The same rule applies one level down: the per-turn Power hook comes before
+  authoring Powers, or the first dozen get retrofitted the way 50 cards would have.
 
 ## Known cost, accepted
 

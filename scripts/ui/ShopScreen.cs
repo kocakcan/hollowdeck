@@ -60,7 +60,10 @@ public partial class ShopScreen : Control
         // conflated into a single badge. Relics/potions have no CardView
         // equivalent, so they get the tile treatment below.
         var cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
-        foreach (var card in Sample(MetaProgressionManager.Instance.UnlockedCards().ToList(), 4, rng))
+        // Cards go through CardPool so the stock is rarity-weighted the same
+        // way a fight reward is; relics and potions keep the plain uniform
+        // Sample below, since neither carries a rarity tier today.
+        foreach (var card in CardPool.Sample(MetaProgressionManager.Instance.UnlockedCards(), 4, rng))
         {
             AddCardOffer(card, cardScene);
         }
@@ -91,6 +94,7 @@ public partial class ShopScreen : Control
         RefreshOffers();
     }
 
+    // Uniform sampling, for the pools that have no rarity to weight by.
     private static List<T> Sample<T>(List<T> pool, int count, System.Random rng)
     {
         var copy = new List<T>(pool);

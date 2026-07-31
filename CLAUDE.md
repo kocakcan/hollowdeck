@@ -45,6 +45,14 @@ not new classes — a one-class-per-card approach becomes unmaintainable at hund
 scale. `IScriptedEffect` exists as an escape hatch for the rare card that doesn't decompose into
 existing effects.
 
+**A card carries two independent channels, and both are live.** `CardType`
+(`Attack`/`Skill`/`Power`) drives the frame fill; `Rarity` (`Common`/`Uncommon`/`Rare`) drives the
+border *and* how often the card is offered — `CardPool` weights every reward, shop and event draw
+60/37/3, so a Rare is an event rather than one row in a shuffled list. Playing a `Power` moves it
+to `PileManager.Powers`, which is neither Discard (it would cycle back) nor Exhaust (a cost the HUD
+renders as one). Powers are currently limited to one-shot permanent buffs; a per-turn effect hook
+analogous to `RelicBehavior.OnTurnStart` is what would make them a full card class.
+
 **Autoloads** (declared in `project.godot`, in this order — `AudioManager` must come before
 `SettingsManager` because the settings sliders address audio bus indices):
 
@@ -92,8 +100,8 @@ and cosmetic jitter can never desync a deterministic run.
 
 An earlier shard *shop* was removed — don't reintroduce shard-purchase language.
 
-`ROADMAP.md` tracks what's genuinely still open (CI, packaged export, `InputMap` actions, Power
-card type, rarity in data, wider status roster, a balance pass over the three-act curve). Don't
+`ROADMAP.md` tracks what's genuinely still open (CI, packaged export, `InputMap` actions, card
+volume, wider status roster, a balance pass over the three-act curve). Don't
 treat this section as a to-do list.
 
 ## Key files
@@ -106,6 +114,8 @@ treat this section as a to-do list.
 - `scripts/run/RunState.cs`, `RunSaveManager.cs` — in-run state and its save/resume
 - `scripts/run/MetaProgressionManager.cs` + `RunScore.cs` — score-driven unlock track, meta save
 - `scripts/run/RngStreams.cs` — the four seeded RNG streams
+- `scripts/run/CardPool.cs` — rarity-weighted sampling; the single place "which cards does the
+  player get offered" is decided (reward picks, shop stock, the random-card event outcome)
 - `scripts/combat/CombatManager.cs` — turn loop, intent telegraphing, targeting sub-state
 - `scripts/effects/EffectRegistry.cs` + `IEffect.cs` — the composable effect system every
   card/relic/potion/enemy-move definition keys into
@@ -158,7 +168,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 
 | Test | Covers | Run when you touch |
 |---|---|---|
-| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text | `scripts/effects/`, `PileManager`, `cards.json` |
+| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text, rarity coverage, `CardPool` weighting, Power routing | `scripts/effects/`, `PileManager`, `CardPool`, `cards.json` |
 | `CombatSmokeTest` | `CombatScreen.tscn` boots and wires up | `CombatScreen`, `CombatManager` |
 | `CombatTargetingSmokeTest` | enemy target-lock glow | `EnemyView`, `CardView` drag/targeting |
 | `RelicSmokeTest` | relic hooks fire through combat | `scripts/relics/`, relic hooks, `relics.json` |
