@@ -342,10 +342,25 @@ Demoted, not dropped. Still genuinely open:
   defines. Extending it to the other five makes future simple relics data rows instead of classes.
 - **Input actions.** There is no `[input]` section in `project.godot`, so rebinding isn't missing
   UI — there's no `InputMap` layer to rebind. Resolution/windowed-size options are also missing.
-- **CI.** `tools/run-smoke-tests.sh` runs 15 suites and 463 checks from one command and exits
-  nonzero on failure. What's missing is the trigger: there is no `.github/` at all. Coverage is the
-  deeper gap — drag/targeting, the project's own stated highest-risk area, has only the target-lock
-  glow asserted.
+- ✅ **CI.** `.github/workflows/ci.yml` runs the whole sweep on every push to `main` and every PR:
+  16 suites, 587 checks, plus `artgen validate` over 121 assets. Godot is pinned to the same
+  4.7.1-stable mono build the csproj SDK and `project.godot` declare, and cached.
+
+  Two things were worth getting right. **Importing assets first** — `.godot/` is gitignored, so a
+  fresh checkout has no imported resources and every `ResourceLoader.Exists()` returns false; that
+  is the same failure a newly generated icon caused locally, and without the import step CI would
+  fail on assets sitting right there in the tree. And **an artgen drift check** — its output is
+  committed and generation is pure, so regenerating has to be a no-op; editing an icon's `fn` and
+  forgetting to re-run would otherwise ship art that no longer matches the code claiming to produce
+  it.
+
+  Verified in both directions: green on the first run with counts identical to local (so nothing
+  silently skipped or platform-dependent), then deliberately broken with an un-regenerated icon
+  edit to confirm it actually goes red and names the offending file.
+
+  *Outstanding:* coverage is the deeper gap — drag/targeting, the project's own stated
+  highest-risk area, still has only the target-lock glow asserted. CI makes that gap cheaper to
+  close, it does not close it.
 - **Packaged export pass** on Windows/Mac/Linux, and a **balance and bug-bash pass** once content
   lands, hunting the input-during-animation bugs the state machine was designed to prevent.
 
