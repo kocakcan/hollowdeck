@@ -29,3 +29,4 @@ tools/artgen/target/
 # the negation below unreachable.
 .claude/*
 !.claude/skills/
+__pycache__/
