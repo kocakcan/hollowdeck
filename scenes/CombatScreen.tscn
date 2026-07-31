@@ -118,7 +118,7 @@ alignment = 1
 layout_mode = 0
 offset_left = 20.0
 offset_top = 16.0
-offset_right = 480.0
+offset_right = 168.0
 offset_bottom = 160.0
 mouse_filter = 2
 theme_override_constants/separation = 6
@@ -131,10 +131,12 @@ size_flags_horizontal = 0
 layout_mode = 2
 text = "Gold: 0"
 
-[node name="RelicBar" type="HBoxContainer" parent="TopLeftColumn"]
+[node name="RelicBar" type="GridContainer" parent="TopLeftColumn"]
 layout_mode = 2
 size_flags_horizontal = 0
-theme_override_constants/separation = 4
+columns = 3
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
 
 [node name="PlayerStatusRow" type="HBoxContainer" parent="TopLeftColumn"]
 layout_mode = 2

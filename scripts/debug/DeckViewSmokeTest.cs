@@ -96,6 +96,25 @@ public partial class DeckViewSmokeTest : Node
             Check("deck_popup_entries_are_equal_width", widths.Count == 1,
                 $"distinct widths found: {string.Join(", ", widths)}");
 
+            // The column count and the panel width have to move together: the
+            // grid is left-aligned inside the scroll area, so too many columns
+            // silently clip the last one behind the panel edge rather than
+            // wrapping or shrinking. Measured, not assumed - the previous
+            // comment in PileViewPopup asserted a card size it no longer had.
+            var panel = popup.GetChild<PanelContainer>(1);
+            Check("deck_popup_grid_is_five_wide", grid.Columns == 5, $"columns={grid.Columns}");
+
+            // This deck is only 4 cards, so the grid never actually lays out a
+            // full row - measure what a full row *would* be instead, or the
+            // check passes for any column count.
+            float cardWidth = widths.Count == 1 ? widths[0] : 0f;
+            float separation = grid.GetThemeConstant("h_separation");
+            float fullRow = grid.Columns * cardWidth + (grid.Columns - 1) * separation;
+            Check("deck_popup_full_row_fits_inside_the_panel",
+                cardWidth > 0f && fullRow <= panel.Size.X,
+                $"a full row is {fullRow}px ({grid.Columns} x {cardWidth} + {grid.Columns - 1} x {separation}) " +
+                $"inside a {panel.Size.X}px panel - the last column would be clipped");
+
             popup.QueueFree();
         }
 

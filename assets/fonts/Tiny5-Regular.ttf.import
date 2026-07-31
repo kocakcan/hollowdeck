@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://clp8atpd53e50"
-path="res://.godot/imported/Silkscreen-Regular.ttf-0088f200f2f1c02c371962cb8d277333.fontdata"
+uid="uid://ds1ojxrmuut6v"
+path="res://.godot/imported/Tiny5-Regular.ttf-9725221fe74b33ad4c58becad1f695c6.fontdata"
 
 [deps]
 
-source_file="res://assets/fonts/Silkscreen-Regular.ttf"
-dest_files=["res://.godot/imported/Silkscreen-Regular.ttf-0088f200f2f1c02c371962cb8d277333.fontdata"]
+source_file="res://assets/fonts/Tiny5-Regular.ttf"
+dest_files=["res://.godot/imported/Tiny5-Regular.ttf-9725221fe74b33ad4c58becad1f695c6.fontdata"]
 
 [params]
 

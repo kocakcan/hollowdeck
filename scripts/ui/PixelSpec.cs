@@ -31,9 +31,25 @@ public static class PixelSpec
     public const int HudIconScale = 1;     // 32 -> 32
     public const int TileScale = 2;        // 64 -> 128
 
+    // The design em, in pixels, of both faces (section 7). Godot's font_size
+    // *is* the em, so a legal size is an exact integer multiple of this -
+    // anything else lands the glyph grid on fractional device pixels and the
+    // rasterizer has to drop stems, which is what makes a pixel face look
+    // mangled rather than merely small.
+    //
+    // Both faces are 8 on purpose. The body face used to be Jersey 15, whose
+    // em is 27px, rendered at 12-24 - i.e. 0.59 device pixels per design
+    // pixel, dropping ~40% of every stem. "Deal 6 damage" rendered as "Deal 8
+    // damage". Nothing caught it because the "15" in Jersey 15 is the cap
+    // height, not the em, and ART_SPEC recorded that 15 as the design size.
+    // Run tools/font-grid.py against any candidate face before adopting it.
+    public const int FontDesignEm = 8;
+
     // Legal bitmap font sizes (section 7). Anything else resamples the glyph
     // bitmap and defeats the point of a bitmap face.
     public static readonly int[] FontSizes = { 8, 16, 24, 32 };
+
+    public static bool IsLegalFontSize(int size) => size > 0 && size % FontDesignEm == 0;
 
     // Rounds an arbitrary desired scale to the nearest legal integer, floored
     // at 1 so a layout can never scale a sprite out of existence. Call this

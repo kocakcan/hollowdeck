@@ -159,22 +159,26 @@ expressed in pixels.
 
 ## 7. Type
 
-Two bitmap faces, split by job. Sizes are tied to each face's design size, because a bitmap glyph
-rendered away from its design size resamples and grows uneven stems.
+Two bitmap faces, split by job. Sizes are tied to each face's **design em**, because a bitmap
+glyph rendered away from it resamples and grows uneven stems.
 
-| Face | Job | Design size | Legal sizes |
+| Face | Job | Design em | Legal sizes |
 | --- | --- | --- | --- |
-| **Silkscreen Bold** | Display — titles, buttons, card/enemy names, HP, energy, damage numbers | 8px | 8, 16, 24, 32 (exact multiples) |
-| **Jersey 15** | Body — card rules text, descriptions, general UI | 15px | 16 primary; 14 and 12 as the card auto-fit fallback band |
+| **Silkscreen Bold** | Display — titles, buttons, card/enemy names, HP, energy, damage numbers | 8px | 8, 16, 24, 32 |
+| **Tiny5** | Body — card rules text, descriptions, general UI | 8px | 16 everywhere (8 is unreadable, 24+ too big for a card) |
 
-Silkscreen has no lowercase and is very wide — right for short strings, wrong for sentences.
-Jersey 15 has proper lowercase and descenders and is narrow enough for card text.
+Both faces share an 8px em, so the legal set is one list: **exact multiples of 8, no exceptions
+and no fallback band.** Silkscreen has no lowercase and is very wide — right for short strings,
+wrong for sentences. Tiny5 has proper lowercase and descenders and unambiguous digits.
 
-The display face gets exact multiples of 8. The body face gets a **narrow band** around its 15px
-design size rather than exact multiples, because card rules text varies enough in length that a
-single size cannot fit every card, and the alternative (dropping from 16 straight to 8) is
-unreadable on a 1152x648 canvas. Three steps, 16 → 14 → 12, is the compromise; below 12 Jersey 15
-loses stem consistency and the card should be re-laid-out instead.
+"Design em" means the number Godot's `font_size` sets, which is the em box in pixels — **not** the
+cap height, and not whatever number is in the font's name. Get it with:
+
+```bash
+tools/font-grid.py assets/fonts/*.ttf
+```
+
+Run that before adopting any face. If `design em` comes back as `none`, it is not a pixel font.
 
 Import settings for both: `antialiasing=0`, `hinting=0`, `subpixel_positioning=0`,
 `keep_rounding_remainders=false`, `oversampling=1.0`. Any of those left at the engine default
@@ -184,8 +188,19 @@ resamples the glyph off the pixel grid.
 
 - **Pixelify Sans** — at 16px its `2`, `3`, `5` and `8` are mutually ambiguous. `HP: 21/50` read as
   `81/50`; `Deal 12 damage` read as `Deal 13`. Disqualifying for a game made of numbers.
-- **Tiny5** — legible and unambiguous, but ~15% wider than Jersey 15 on the same string, which is
-  real estate a card does not have.
+- **Jersey 15** — shipped as the body face for three phases and had the *same* disease, which this
+  document caused by recording its design size as 15px. That 15 is its **cap height**; its em is
+  **27px**. Rendered at 16 it got 0.59 device pixels per design pixel and the rasterizer dropped
+  ~40% of every stem, so `Deal 6 damage` rendered as `Deal 8 damage`. Its smallest crisp size has a
+  15px cap height, far too big for a 176x240 card, so the face cannot be rescued by re-sizing. The
+  rest of the family doesn't help either — measured, Jersey 10/20/25 are 56/34/41px ems.
+- **Micro 5** — an 11px em, so it is only crisp at 11, 22, 33. Nothing in the UI wants those.
+
+The "narrow band" of 16 → 14 → 12 that used to live here was a workaround for Jersey 15 having no
+usable legal size at all. It is gone: **every card in the data fits its 152x88 description box at
+16**, asserted by `HandLayoutSmokeTest`. Content that overflows should be shortened or given a
+bigger box — collapsing repeated effect text ("Deal 4 damage twice.", "ALL enemies:" hoisted to a
+prefix) is what bought the room, and is the move to reach for first.
 
 ### The cost
 
@@ -213,6 +228,12 @@ an integer scale, that every asset is on a legal grid, that no SVG survives, tha
 are the bitmap pair, and two things that keep the two halves honest: that `artgen`'s `palette.rs`
 still matches `PixelSpec.Ramp` entry-for-entry, and that every icon filename is a live definition
 id (in both directions).
+
+It also scans the theme, every `.tscn` and every `scripts/ui/*.cs` for a rendered font size and
+fails any that is not a multiple of §7's 8px em. That check exists because the sizes that drifted
+off-grid were all local `AddThemeFontSizeOverride` calls and `.tscn` overrides — none of which
+went anywhere near a constant a test was watching, which is how the body face rendered mangled
+text for three phases with the whole suite green.
 
 Fixing a violation is usually `artgen clamp`, which snaps colours onto the ramp and hardens alpha.
 Both of its passes are idempotent, so it is safe to re-run over the whole tree after a palette

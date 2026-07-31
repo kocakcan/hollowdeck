@@ -226,8 +226,11 @@ public partial class EffectSmokeTest : Node
 
         var thunderclap = CardDatabase.Get("thunderclap");
         var clapText = EffectDescriptionFormatter.Describe(thunderclap.Effects, new DescribeContext(TargetType: thunderclap.Target));
-        Check("description_all_enemies_self_scope_unaffected",
-            clapText.Contains("Deal 4 damage to ALL enemies") && clapText.Contains("Apply 1 Vulnerable to ALL enemies"),
+        // Two effects would each carry the suffix, so it is hoisted to a
+        // single prefix instead of being repeated - the phrasing that let
+        // Thunderclap fit its description box at one on-grid font size.
+        Check("description_all_enemies_hoists_shared_suffix",
+            clapText == "ALL enemies: Deal 4 damage. Apply 1 Vulnerable. (~6 vs Vulnerable)",
             $"text='{clapText}'");
     }
 
@@ -261,7 +264,7 @@ public partial class EffectSmokeTest : Node
         var twinStrike = CardDatabase.Get("twin_strike");
         var twinText = EffectDescriptionFormatter.Describe(twinStrike.Effects);
         Check("description_vulnerable_hint_appears_once",
-            twinText == "Deal 4 damage. Deal 4 damage. (~12 vs Vulnerable)", $"text='{twinText}'");
+            twinText == "Deal 4 damage twice. (~12 vs Vulnerable)", $"text='{twinText}'");
     }
 
     private static EnemyCombatant MakeEnemy() => new()
