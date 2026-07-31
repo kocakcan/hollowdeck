@@ -11,6 +11,18 @@ public class PileManager
     public List<CardInstance> Discard = new();
     public List<CardInstance> Exhaust = new();
 
+    // Powers played this fight. Its own pile rather than reusing Exhaust,
+    // which would be functionally identical - both are "out of the fight" -
+    // but says the wrong thing: Exhaust is a cost, and the combat HUD renders
+    // it as one (the ember-tinted exit tween, the exhaust badge, its own
+    // counter cell). A Power leaving play is the card working, not the card
+    // being burned.
+    //
+    // Combat-only state like the other four: PileManager is rebuilt fresh from
+    // RunState.Deck at the start of every fight, so nothing here is serialized
+    // and this needs no save version bump.
+    public List<CardInstance> Powers = new();
+
     public PileManager(IEnumerable<CardDefinition> startingDeck)
     {
         DrawPile = startingDeck.Select(d => new CardInstance(d)).ToList();

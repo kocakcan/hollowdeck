@@ -48,6 +48,7 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "cards", name: "bloodletting", draw: bloodletting },
         Icon { category: "cards", name: "impale", draw: impale },
         Icon { category: "cards", name: "last_stand", draw: last_stand },
+        Icon { category: "cards", name: "inflame", draw: inflame },
     ]
 }
 
@@ -474,6 +475,38 @@ fn meditate() -> Canvas {
     canvas.poly(&[(3, 26), (16, 20), (29, 26), (16, 30)], P2);
     canvas.poly(&[(8, 26), (16, 23), (24, 26), (16, 28)], P3);
     sparkle(&mut canvas, 16, 2, 3, P4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The first Power. A fist wreathed in flame — it quotes `raised_fist` like
+/// Flex and the Strength status do, because it grants the same stat, but the
+/// gold wrist wrap is replaced by fire climbing past the knuckles: Flex is a
+/// buff you keep re-applying, this one burns itself into the fight and leaves
+/// the deck.
+fn inflame() -> Canvas {
+    let mut canvas = new_icon();
+
+    raised_fist(&mut canvas);
+
+    // Fire under the fist, not around it. Flames flanking it at the same
+    // height were tried first and read as dark shoulders — at 32px there is
+    // no room either side of the fist for a flame to taper, so it lands as
+    // mass, and once outlined the whole thing became one blob.
+    //
+    // Below the wrist there is room, and "held up out of a fire" is the same
+    // reading with a silhouette that survives.
+    flame(&mut canvas, 16, 31, 13, E2, E3);
+    flame(&mut canvas, 9, 31, 8, E1, E2);
+    flame(&mut canvas, 23, 31, 8, E1, E2);
+
+    // Embers rising past the knuckles, in the bright end of the ember ramp so
+    // they read against the fist rather than into it.
+    canvas.disc(5, 8, 1, E3);
+    canvas.disc(27, 11, 1, E4);
+    canvas.disc(29, 4, 1, E3);
+    canvas.disc(3, 17, 1, E4);
+
     finish(&mut canvas);
     canvas
 }

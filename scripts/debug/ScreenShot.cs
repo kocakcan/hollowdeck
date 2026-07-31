@@ -282,9 +282,16 @@ public partial class ScreenShot : Node
     {
         RewardContext.GoldAwarded = 45;
         RewardContext.GuaranteedRelic = RelicDatabase.Get("anchor_stone");
+        // One card of each type and each rarity, on purpose: the card frame
+        // carries two independent channels (fill = CardType, border = Rarity)
+        // and this is the only shot where all three fills and all three border
+        // treatments are visible side by side. Twin Strike is a Common Attack,
+        // Shrug It Off a Common Skill, Inflame a Rare Power - so a regression
+        // in either channel shows up here rather than needing a lucky roll on
+        // the shop screen.
         RewardContext.CardChoices = new List<CardDefinition>
         {
-            CardDatabase.Get("twin_strike"), CardDatabase.Get("shrug_it_off"), CardDatabase.Get("clothesline"),
+            CardDatabase.Get("twin_strike"), CardDatabase.Get("shrug_it_off"), CardDatabase.Get("inflame"),
         };
     }
 

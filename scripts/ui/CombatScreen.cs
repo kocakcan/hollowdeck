@@ -1237,14 +1237,9 @@ public partial class CombatScreen : Control
     private static List<CardDefinition> SampleCardChoices(int count)
     {
         // Same unlock-filtered pool ShopScreen and the random-card event
-        // outcome draw from (MetaProgressionManager.UnlockTrack).
-        var pool = MetaProgressionManager.Instance.UnlockedCards().ToList();
-        var rng = RngStreams.Shop;
-        for (int i = pool.Count - 1; i > 0; i--)
-        {
-            int j = rng.Next(i + 1);
-            (pool[i], pool[j]) = (pool[j], pool[i]);
-        }
-        return pool.Take(count).ToList();
+        // outcome draw from (MetaProgressionManager.UnlockTrack), and the same
+        // rarity weighting - this used to be a uniform shuffle here, which
+        // made a Rare exactly as likely as a Strike.
+        return CardPool.Sample(MetaProgressionManager.Instance.UnlockedCards(), count, RngStreams.Shop);
     }
 }

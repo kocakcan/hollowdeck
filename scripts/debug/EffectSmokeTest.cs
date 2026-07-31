@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
@@ -35,6 +36,9 @@ public partial class EffectSmokeTest : Node
         TestEffectDescriptionFormatter();
         TestAllEnemiesWording();
         TestLiveTargetDamage();
+        TestEveryCardDeclaresARarity();
+        TestCardPoolIsRarityWeighted();
+        TestPowerCardsLeavePlay();
 
         GD.Print($"EffectSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -265,6 +269,126 @@ public partial class EffectSmokeTest : Node
         var twinText = EffectDescriptionFormatter.Describe(twinStrike.Effects);
         Check("description_vulnerable_hint_appears_once",
             twinText == "Deal 4 damage twice. (~12 vs Vulnerable)", $"text='{twinText}'");
+    }
+
+    // Rarity is a real content field now, not decoration. Every card declaring
+    // one explicitly is what stops the enum's Common default from quietly
+    // absorbing a card someone forgot to tier - which is exactly the state the
+    // whole pool was in before Phase 6, and why RunScore could not have a
+    // Pauper category.
+    private void TestEveryCardDeclaresARarity()
+    {
+        var byRarity = CardDatabase.All.GroupBy(c => c.Rarity)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Every tier populated: a weighting table that can roll a tier with no
+        // cards in it would just re-roll forever or silently skew.
+        foreach (var rarity in new[] { Rarity.Common, Rarity.Uncommon, Rarity.Rare })
+        {
+            Check($"pool_has_{rarity.ToString().ToLowerInvariant()}_cards",
+                byRarity.GetValueOrDefault(rarity) > 0, $"none authored at {rarity}");
+        }
+
+        // Rare has to stay genuinely rare. Not an exact count - content will
+        // grow - but a ceiling, because a pool that drifts to a third Rares
+        // makes both the weighting and the Pauper category meaningless.
+        int rare = byRarity.GetValueOrDefault(Rarity.Rare);
+        Check("rares_are_at_most_a_quarter_of_the_pool", rare * 4 <= CardDatabase.All.Count,
+            $"{rare} rare of {CardDatabase.All.Count}");
+
+        // The starting deck can never contain a Rare, or Pauper is unearnable
+        // by construction and silently dead.
+        var starters = CardDatabase.All.Where(c => RunState.StarterCardIds.Contains(c.Id)).ToList();
+        Check("starter_cards_are_not_rare", starters.All(c => c.Rarity != Rarity.Rare),
+            string.Join(", ", starters.Where(c => c.Rarity == Rarity.Rare).Select(c => c.Id)));
+    }
+
+    // The behaviour the tier exists for. Sampling uniformly (which is what
+    // every call site did before CardPool) would put Rares at roughly their
+    // share of the pool - about 19% here - rather than the ~3% the weights
+    // ask for.
+    private void TestCardPoolIsRarityWeighted()
+    {
+        var rng = new System.Random(1234);
+        int rares = 0, draws = 0;
+        for (int trial = 0; trial < 400; trial++)
+        {
+            foreach (var card in CardPool.Sample(CardDatabase.All, 3, rng))
+            {
+                draws++;
+                if (card.Rarity == Rarity.Rare) rares++;
+            }
+        }
+
+        // Wide band on purpose: this asserts the weighting is *applied*, not
+        // that a seeded RNG hits a precise ratio. Uniform sampling would land
+        // near 19%, so anything under 10% proves the weights are doing work.
+        double share = (double)rares / draws;
+        Check("card_pool_keeps_rares_rare", share is > 0.001 and < 0.10,
+            $"rare share={share:P1} over {draws} draws");
+
+        // Without replacement: a reward screen must never offer the same card
+        // twice.
+        var single = CardPool.Sample(CardDatabase.All, 3, rng);
+        Check("card_pool_samples_without_replacement",
+            single.Select(c => c.Id).Distinct().Count() == single.Count,
+            string.Join(", ", single.Select(c => c.Id)));
+
+        // Asking for more than exists returns the pool, not an infinite loop.
+        var everything = CardPool.Sample(CardDatabase.All, CardDatabase.All.Count + 5, rng);
+        Check("card_pool_caps_at_pool_size", everything.Count == CardDatabase.All.Count,
+            $"got {everything.Count} of {CardDatabase.All.Count}");
+    }
+
+    // A Power leaves the fight when played: not to Discard (it would cycle
+    // back and be re-playable) and not to Exhaust (which is a cost, and the
+    // HUD renders it as one).
+    private void TestPowerCardsLeavePlay()
+    {
+        var powers = CardDatabase.All.Where(c => c.Type == CardType.Power).ToList();
+        Check("pool_has_at_least_one_power", powers.Count > 0,
+            "CardType.Power exists but no card in cards.json uses it");
+        if (powers.Count == 0) return;
+
+        var combat = new CombatManager();
+        AddChild(combat);
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 50, CurrentHp = 50,
+            MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(CardDatabase.All),
+        };
+        var enemy = EnemyFactory.Create(EnemyDatabase.Get("cultist"));
+        combat.StartCombat(player, new List<EnemyCombatant> { enemy }, new List<RelicInstance>());
+
+        var power = new CardInstance(powers[0]);
+        player.Piles.Hand.Add(power);
+        int discardBefore = player.Piles.Discard.Count;
+        int exhaustBefore = player.Piles.Exhaust.Count;
+        combat.TryPlayCard(power);
+
+        Check("power_goes_to_the_powers_pile", player.Piles.Powers.Contains(power),
+            $"powers={player.Piles.Powers.Count}");
+        Check("power_does_not_go_to_discard", player.Piles.Discard.Count == discardBefore,
+            $"discard {discardBefore} -> {player.Piles.Discard.Count}");
+        Check("power_does_not_go_to_exhaust", player.Piles.Exhaust.Count == exhaustBefore,
+            $"exhaust {exhaustBefore} -> {player.Piles.Exhaust.Count}");
+        Check("power_left_the_hand", !player.Piles.Hand.Contains(power), "still in hand");
+
+        // And its effect actually landed - a Power that leaves play without
+        // doing anything is the failure mode this routing could hide.
+        Check("power_effect_resolved", player.GetStatus(StatusType.Strength) > 0,
+            $"strength={player.GetStatus(StatusType.Strength)}");
+
+        // Reshuffling the discard back into the draw pile must not bring it
+        // back: this is the whole difference between a Power and a Skill.
+        player.Piles.DrawPile.Clear();
+        player.Piles.DrawHand(5);
+        Check("power_never_returns_to_the_draw_pile",
+            !player.Piles.DrawPile.Contains(power) && !player.Piles.Hand.Contains(power),
+            "the played Power came back around");
+
+        combat.QueueFree();
     }
 
     private static EnemyCombatant MakeEnemy() => new()

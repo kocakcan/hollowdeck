@@ -246,8 +246,9 @@ public partial class MetaProgressionSmokeTest : Node
         var breakdown = RunScore.Evaluate(stats, deck, gold: 250, relicCount: 2);
         int total = RunScore.Total(breakdown);
 
-        // 294 above + Money Money (25 at 250 gold) + Highlander (100).
-        Check("run_score_total", total == 419, $"total={total} breakdown=[{string.Join(", ", breakdown)}]");
+        // 294 above + Money Money (25 at 250 gold) + Highlander (100)
+        // + Pauper (100 - the deck is Strike/Strike/Cleave/Flex, all Common).
+        Check("run_score_total", total == 519, $"total={total} breakdown=[{string.Join(", ", breakdown)}]");
         Check("run_score_omits_zero_categories", breakdown.All(e => e.Points > 0), "a zero-point row was listed");
         Check("run_score_gold_tier_not_cumulative",
             breakdown.Count(e => e.Label is "Money Money" or "Raining Money" or "I Like Gold") == 1,
@@ -262,6 +263,22 @@ public partial class MetaProgressionSmokeTest : Node
         var emptyBreakdown = RunScore.Evaluate(new RunStats(), new List<CardDefinition>(), gold: 0, relicCount: 0);
         Check("run_score_empty_run_scores_zero", RunScore.Total(emptyBreakdown) == 0,
             $"total={RunScore.Total(emptyBreakdown)}");
+
+        // Pauper, the category that could not exist while every card was
+        // Common. It has to be denied by a single Rare anywhere in the deck.
+        Check("run_score_pauper_awarded_for_a_rare_free_deck",
+            breakdown.Any(e => e.Label == "Pauper"), "no Pauper row for an all-Common deck");
+
+        var rare = CardDatabase.All.First(c => c.Rarity == Rarity.Rare);
+        var rareDeck = new List<CardDefinition> { CardDatabase.Get("cleave"), rare };
+        var rareBreakdown = RunScore.Evaluate(new RunStats(), rareDeck, gold: 0, relicCount: 0);
+        Check("run_score_pauper_denied_by_one_rare",
+            rareBreakdown.All(e => e.Label != "Pauper"), $"Pauper awarded to a deck holding {rare.Id}");
+
+        // And it must not award to a run that never had a deck at all - which
+        // "no card is Rare" is vacuously true for.
+        Check("run_score_pauper_not_awarded_to_an_empty_deck",
+            emptyBreakdown.All(e => e.Label != "Pauper"), "Pauper awarded for an empty deck");
     }
 
     private void TestMetaProgressionScreenLoads()

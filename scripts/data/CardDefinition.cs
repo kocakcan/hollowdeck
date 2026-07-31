@@ -2,14 +2,18 @@ using System.Collections.Generic;
 
 namespace Hollowdeck.Data;
 
-public enum CardType { Attack, Skill }
+// Power is the genre's third card class: played once, then it leaves the fight
+// entirely rather than cycling back through the discard pile. See
+// PileManager.Powers for where it goes and why that is a pile of its own
+// rather than Exhaust.
+public enum CardType { Attack, Skill, Power }
 public enum CardTargetType { SingleEnemy, AllEnemies, Self, None }
 
-// Common is the zero value so cards.json entries that omit "rarity" (all 30
-// do, as of this field's introduction) deserialize to Common for free via
-// the same tolerant-deserialization pattern already used for save data -
-// rarity assignment across the existing card pool is a content/balance
-// decision for later, not a default this field should invent.
+// Common is the zero value, so a cards.json entry that omits "rarity" still
+// deserializes - the same tolerant-deserialization pattern used for save data.
+// Every card in the pool now declares one explicitly, and
+// EffectSmokeTest asserts the distribution stays sane, so the default is a
+// safety net rather than something content relies on.
 public enum Rarity { Common, Uncommon, Rare }
 
 // No Description field - display text is generated from Effects by

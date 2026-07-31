@@ -147,7 +147,15 @@ public static class ChromeStyles
 
         var style = new StyleBoxFlat
         {
-            BgColor = type == CardType.Attack ? UiTheme.Palette.AttackFill : UiTheme.Palette.SkillFill,
+            // PowerFill was claimed in UiTheme when the type/rarity channel
+            // split landed, precisely so the third fill would not have to be
+            // picked under deadline when Power arrived. This is that.
+            BgColor = type switch
+            {
+                CardType.Attack => UiTheme.Palette.AttackFill,
+                CardType.Power => UiTheme.Palette.PowerFill,
+                _ => UiTheme.Palette.SkillFill,
+            },
             BorderColor = borderColor,
         };
 
