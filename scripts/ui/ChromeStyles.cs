@@ -108,6 +108,50 @@ public static class ChromeStyles
         button.AddThemeStyleboxOverride("disabled", EmphasisState(PixelSpec.Ramp.N1, PixelSpec.Ramp.N3));
     }
 
+    // Godot's Slider defines no focus stylebox at all - unlike Button and
+    // CheckButton, which get one from hollowdeck_theme.tres - so a focused
+    // volume slider looked exactly like an unfocused one. On a screen that is
+    // almost entirely sliders, that meant keyboard navigation had no visible
+    // position. Recolouring the track is the closest equivalent the control
+    // offers, and it makes the same two changes sb_btn_focus does: FocusRing,
+    // and double thickness.
+    public static void ApplyFocusableSliderStyle(HSlider slider)
+    {
+        SetSliderFocus(slider, focused: false);
+        slider.FocusEntered += () => SetSliderFocus(slider, focused: true);
+        slider.FocusExited += () => SetSliderFocus(slider, focused: false);
+    }
+
+    // Both halves, because either one alone has a value at which it is
+    // invisible: the filled portion covers the whole track at max volume
+    // (which is the default, so the first screenshot of this showed no focus
+    // at all), and the fill is nothing to look at at zero.
+    private static void SetSliderFocus(HSlider slider, bool focused)
+    {
+        slider.AddThemeStyleboxOverride("slider", SliderTrackStyle(focused));
+        slider.AddThemeStyleboxOverride("grabber_area", SliderFillStyle(focused));
+        slider.AddThemeStyleboxOverride("grabber_area_highlight", SliderFillStyle(focused));
+    }
+
+    // Mirrors sb_slider in hollowdeck_theme.tres - the unfocused branch must
+    // stay identical to it, or a slider would visibly change on first paint.
+    private static StyleBoxFlat SliderTrackStyle(bool focused)
+    {
+        var style = new StyleBoxFlat
+        {
+            BgColor = PixelSpec.Ramp.N1,
+            BorderColor = focused ? UiTheme.Palette.FocusRing : PixelSpec.Ramp.G1,
+            ContentMarginTop = 4,
+            ContentMarginBottom = 4,
+        };
+        style.SetBorderWidthAll(focused ? UiTheme.BorderWidth.Thick : UiTheme.BorderWidth.Normal);
+        return style;
+    }
+
+    // Mirrors sb_slider_grabber, same rule as above.
+    private static StyleBoxFlat SliderFillStyle(bool focused) =>
+        new() { BgColor = focused ? UiTheme.Palette.FocusRing : PixelSpec.Ramp.G3 };
+
     private static StyleBoxFlat EmphasisState(Color fill, Color border)
     {
         var style = new StyleBoxFlat { BgColor = fill, BorderColor = border };
@@ -190,6 +234,23 @@ public static class ChromeStyles
         {
             BgColor = new Color(0.16f, 0.18f, 0.22f),
             BorderColor = new Color(0.55f, 0.6f, 0.68f),
+        };
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
+        return style;
+    }
+
+    // The lit keycap: which card the *keyboard* is currently on. Deliberately
+    // not a border-colour change on the card frame itself - that channel is
+    // already spoken for by rarity, and the brightened-border hover state sits
+    // right next to it, so a third meaning there would be unreadable. Lighting
+    // the badge instead puts the signal on the very thing that says which key
+    // to press, and can't collide with any rarity.
+    public static StyleBoxFlat HotkeyBadgeSelectedStyle()
+    {
+        var style = new StyleBoxFlat
+        {
+            BgColor = UiTheme.Palette.AccentGoldBright,
+            BorderColor = UiTheme.Palette.FocusRing,
         };
         style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
         return style;

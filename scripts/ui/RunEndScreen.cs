@@ -61,6 +61,10 @@ public partial class RunEndScreen : Control
         var viewUnlocksButton = GetNode<Button>("CenterContainer/Columns/VBoxContainer/ViewUnlocksButton");
         viewUnlocksButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         viewUnlocksButton.Pressed += OnViewUnlocksPressed;
+
+        // No cancel action: the run is over, and there is nothing to back out
+        // to that isn't already one of these two buttons.
+        ScreenKeyboardNav.Attach(this, () => restartButton);
     }
 
     // The two endings have to look different at a glance, and the only thing

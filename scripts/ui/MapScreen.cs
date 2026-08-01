@@ -45,6 +45,12 @@ public partial class MapScreen : Control
     private Control _nodeButtons = null!;
     private readonly Dictionary<string, Vector2> _nodeCenters = new();
 
+    // Where the keyboard starts. Godot's focus navigation skips Disabled
+    // controls, and BuildButtons disables every unreachable node, so from here
+    // Tab and the arrow keys only ever visit legal moves - the map needed no
+    // navigation code of its own, only somewhere to begin.
+    private Button? _firstReachableButton;
+
     public override void _Ready()
     {
         var act = RunState.CurrentAct;
@@ -63,6 +69,12 @@ public partial class MapScreen : Control
         BuildLayout();
         BuildButtons();
         QueueRedraw();
+
+        // Falls back to Back if the act somehow offers no move, so the screen
+        // is never a keyboard dead end.
+        ScreenKeyboardNav.Attach(this,
+            () => (Control?)_firstReachableButton ?? GetNode<Button>("BackButton"),
+            OnBackPressed);
     }
 
     // Draws from _nodeCenters, which BuildLayout filled from the graph that
@@ -207,6 +219,7 @@ public partial class MapScreen : Control
             if (isReachable)
             {
                 button.Pressed += () => OnNodeChosen(node);
+                _firstReachableButton ??= button;
             }
             _nodeButtons.AddChild(button);
         }

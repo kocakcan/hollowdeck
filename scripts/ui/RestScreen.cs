@@ -20,6 +20,10 @@ public partial class RestScreen : Control
     private Control _upgradeView = null!;
     private GridContainer _upgradeList = null!;
 
+    private ScreenKeyboardNavListener? _keyboardNav;
+    private Button _healButton = null!;
+    private Button _cancelButton = null!;
+
     public override void _Ready()
     {
         ScreenBackground.Attach(this, "dirt", new Color(0.5f, 0.42f, 0.35f));
@@ -37,10 +41,10 @@ public partial class RestScreen : Control
         title.AddThemeColorOverride("font_color", PixelSpec.Ramp.N7);
 
         int healAmount = Mathf.RoundToInt(RunState.PlayerMaxHp * HealFraction);
-        var healButton = GetNode<Button>("CenterContainer/VBoxContainer/ChoiceColumn/HealButton");
-        healButton.Text = $"Rest - Heal {healAmount} HP";
-        ChromeStyles.ApplyEmphasisButtonStyle(healButton);
-        healButton.Pressed += () => OnHealPressed(healAmount);
+        _healButton = GetNode<Button>("CenterContainer/VBoxContainer/ChoiceColumn/HealButton");
+        _healButton.Text = $"Rest - Heal {healAmount} HP";
+        ChromeStyles.ApplyEmphasisButtonStyle(_healButton);
+        _healButton.Pressed += () => OnHealPressed(healAmount);
 
         var smithButton = GetNode<Button>("CenterContainer/VBoxContainer/ChoiceColumn/SmithButton");
         smithButton.Disabled = !RunState.Deck.Any(c => !CardUpgrade.IsUpgraded(c));
@@ -55,9 +59,27 @@ public partial class RestScreen : Control
         GetNode<Label>("UpgradeCenterContainer/UpgradeVBox/UpgradeTitleLabel")
             .AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
 
-        var cancelButton = GetNode<Button>("UpgradeCenterContainer/UpgradeVBox/CancelButton");
-        cancelButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
-        cancelButton.Pressed += ShowMainChoices;
+        _cancelButton = GetNode<Button>("UpgradeCenterContainer/UpgradeVBox/CancelButton");
+        _cancelButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
+        _cancelButton.Pressed += ShowMainChoices;
+
+        // Two views swapped by Visible, so where focus belongs depends on
+        // which one is showing - a hidden control drops out of focus
+        // navigation entirely. Escape backs out of the upgrade picker first
+        // and only leaves the site from the main choices, which is the same
+        // shape as the two Cancel/Leave buttons.
+        _keyboardNav = ScreenKeyboardNav.Attach(this, PreferredFocus, OnCancelRequested);
+    }
+
+    private Control? PreferredFocus() => _upgradeView.Visible
+        ? _upgradeList.GetChildren().SelectMany(c => c.GetChildren()).OfType<Button>().FirstOrDefault()
+          ?? (Control)_cancelButton
+        : _healButton;
+
+    private void OnCancelRequested()
+    {
+        if (_upgradeView.Visible) ShowMainChoices();
+        else OnLeavePressed();
     }
 
     // The campfire the map already draws for this node type, at sprite scale.
@@ -162,12 +184,17 @@ public partial class RestScreen : Control
 
         _choicesView.Visible = false;
         _upgradeView.Visible = true;
+        // Hiding a view frees nothing but does remove its controls from focus
+        // navigation, and the Smith button that was just pressed is now in the
+        // hidden half - so focus has to move with the swap, both ways.
+        _keyboardNav?.Regrab();
     }
 
     private void ShowMainChoices()
     {
         _upgradeView.Visible = false;
         _choicesView.Visible = true;
+        _keyboardNav?.Regrab();
     }
 
     // Replaces just this one list entry, not the shared CardDefinition

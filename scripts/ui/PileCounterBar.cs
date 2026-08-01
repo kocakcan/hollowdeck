@@ -33,6 +33,7 @@ public partial class PileCounterBar : HBoxContainer
     public const int CellHeight = 44;
 
     private readonly List<PileCounterCell> _cells = new();
+    private readonly bool _focusable;
     private readonly PileCounterCell _deck;
     private readonly PileCounterCell? _draw;
     private readonly PileCounterCell? _discard;
@@ -45,7 +46,16 @@ public partial class PileCounterBar : HBoxContainer
         // bezels still divide them.
         AddThemeConstantOverride("separation", 0);
 
-        _deck = AddCell("Deck  (D)", PixelSpec.Ramp.G1, PixelSpec.Ramp.G2, PixelSpec.Ramp.G4,
+        // Combat drives its own keyboard input and puts every widget at
+        // FocusModeEnum.None so arrow keys only ever cycle cards. Everywhere
+        // else these cells are ordinary Buttons on a screen navigated by
+        // focus, and excluding them there just made the deck unreachable by
+        // Tab for no reason. The flag that already distinguishes the two
+        // contexts decides it.
+        _focusable = !includeCombatPiles;
+
+        _deck = AddCell(PileTooltip("Deck", "hd_pile_deck"),
+            PixelSpec.Ramp.G1, PixelSpec.Ramp.G2, PixelSpec.Ramp.G4,
             () => DeckViewButtons.OpenDeck(screen));
 
         // The ! on Instance here is safe for the same reason it is in
@@ -53,17 +63,29 @@ public partial class PileCounterBar : HBoxContainer
         // CombatScreen, whose own CombatManager child outlives these cells.
         if (includeCombatPiles)
         {
-            _draw = AddCell("Draw pile  (Q)", PixelSpec.Ramp.B1, PixelSpec.Ramp.B2, PixelSpec.Ramp.B4,
+            _draw = AddCell(PileTooltip("Draw pile", "hd_pile_draw"),
+                PixelSpec.Ramp.B1, PixelSpec.Ramp.B2, PixelSpec.Ramp.B4,
                 () => DeckViewButtons.OpenPile(screen, "Draw Pile", CombatManager.Instance!.Player.Piles.DrawPile));
-            _discard = AddCell("Discard pile  (W)", PixelSpec.Ramp.N3, PixelSpec.Ramp.N5, PixelSpec.Ramp.N7,
+            _discard = AddCell(PileTooltip("Discard pile", "hd_pile_discard"),
+                PixelSpec.Ramp.N3, PixelSpec.Ramp.N5, PixelSpec.Ramp.N7,
                 () => DeckViewButtons.OpenPile(screen, "Discard Pile", CombatManager.Instance!.Player.Piles.Discard));
             // Burnt sienna (E2) rather than the brighter E3 the ember family
             // usually leads with: E3 beside the Deck cell's G4 gold is the one
             // pair on this strip that does not separate at 16px. Reading dim
             // and scorched is also just correct for a pile of burned cards.
-            _exhaust = AddCell("Exhaust pile  (E)", PixelSpec.Ramp.E0, PixelSpec.Ramp.E1, PixelSpec.Ramp.E2,
+            _exhaust = AddCell(PileTooltip("Exhaust pile", "hd_pile_exhaust"),
+                PixelSpec.Ramp.E0, PixelSpec.Ramp.E1, PixelSpec.Ramp.E2,
                 () => DeckViewButtons.OpenPile(screen, "Exhaust Pile", CombatManager.Instance!.Player.Piles.Exhaust));
         }
+    }
+
+    // The hotkey half comes out of the InputMap rather than being spelled into
+    // the string, so rebinding hd_pile_* can't leave four cells advertising
+    // keys that no longer do anything.
+    private static string PileTooltip(string name, StringName action)
+    {
+        var key = ScreenKeyboardNav.KeyHint(action);
+        return key.Length > 0 ? $"{name}  ({key})" : name;
     }
 
     // Exact, not GetCombinedMinimumSize(): every cell is a fixed pixel size by
@@ -121,7 +143,7 @@ public partial class PileCounterBar : HBoxContainer
 
     private PileCounterCell AddCell(string tooltip, Color dark, Color mid, Color light, Action onPressed)
     {
-        var cell = new PileCounterCell(tooltip, dark, mid, light);
+        var cell = new PileCounterCell(tooltip, dark, mid, light, _focusable);
         cell.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         cell.Pressed += onPressed;
         AddChild(cell);
@@ -141,14 +163,16 @@ public partial class PileCounterCell : Button
     private readonly Label _count;
     private int _lastValue = -1;
 
-    public PileCounterCell(string tooltip, Color dark, Color mid, Color light)
+    public PileCounterCell(string tooltip, Color dark, Color mid, Color light, bool focusable)
     {
         CustomMinimumSize = new Vector2(PileCounterBar.CellWidth, PileCounterBar.CellHeight);
         TooltipText = tooltip;
-        // Same reasoning as EnemyView/PotionView: keep these out of Godot's
-        // automatic arrow-key focus navigation, which would otherwise compete
-        // with CombatScreen's own arrow-key card/target cycling.
-        FocusMode = FocusModeEnum.None;
+        // In combat, same reasoning as EnemyView/PotionView: keep these out of
+        // Godot's automatic arrow-key focus navigation, which would otherwise
+        // compete with CombatScreen's own arrow-key card/target cycling. On
+        // every other screen there is no such competition and the cells should
+        // be reachable like any other button - see PileCounterBar's ctor.
+        FocusMode = focusable ? FocusModeEnum.All : FocusModeEnum.None;
 
         var column = new VBoxContainer
         {

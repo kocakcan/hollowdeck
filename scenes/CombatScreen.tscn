@@ -149,12 +149,13 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -100.0
-offset_top = -80.0
-offset_right = 100.0
-offset_bottom = -50.0
+offset_left = -280.0
+offset_top = -86.0
+offset_right = 280.0
+offset_bottom = -40.0
 horizontal_alignment = 1
-text = "Choose a target (right-click to cancel)"
+text = "Choose a target
+Click it, or Left/Right to aim and Space to confirm - Esc cancels"
 visible = false
 
 [node name="TurnBannerPanel" type="PanelContainer" parent="."]
@@ -187,11 +188,11 @@ mouse_filter = 2
 
 [node name="EndTurnButton" type="Button" parent="."]
 layout_mode = 0
-offset_left = 952.0
+offset_left = 912.0
 offset_top = 568.0
 offset_right = 1132.0
 offset_bottom = 632.0
-text = "End Turn"
+text = "End Turn (Enter)"
 
 [node name="CombatEndPanel" type="Control" parent="."]
 layout_mode = 0
@@ -233,8 +234,8 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -60.0
+offset_left = -110.0
 offset_top = -10.0
-offset_right = 60.0
+offset_right = 110.0
 offset_bottom = 20.0
-text = "Continue"
+text = "Continue (Space)"

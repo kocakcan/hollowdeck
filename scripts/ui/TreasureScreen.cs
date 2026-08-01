@@ -69,6 +69,7 @@ public partial class TreasureScreen : Control
         ChromeStyles.ApplyEmphasisButtonStyle(continueButton);
         continueButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         continueButton.Pressed += OnContinuePressed;
+        ScreenKeyboardNav.Attach(this, () => continueButton);
 
         column.SizeFlagsHorizontal = SizeFlags.ShrinkCenter;
     }

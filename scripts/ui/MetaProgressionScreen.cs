@@ -33,11 +33,21 @@ public partial class MetaProgressionScreen : Control
         _nextUnlockBar = GetNode<ProgressBar>("Margin/Root/NextUnlockBar");
         _unlockTrackList = GetNode<VBoxContainer>("Margin/Root/Columns/TrackColumn/TrackScroll/UnlockTrackList");
         _seedHistoryList = GetNode<VBoxContainer>("Margin/Root/Columns/HistoryColumn/HistoryScroll/SeedHistoryList");
-        GetNode<Button>("Margin/Root/BackButton").Pressed += OnBackPressed;
+        var backButton = GetNode<Button>("Margin/Root/BackButton");
+        backButton.Pressed += OnBackPressed;
+
+        // Both lists are Panel/Label rows with nothing focusable inside them,
+        // so the ScrollContainers themselves have to take focus or the track
+        // is unscrollable without a mouse wheel. Focused, they answer Up/Down
+        // directly.
+        GetNode<ScrollContainer>("Margin/Root/Columns/TrackColumn/TrackScroll").FocusMode = FocusModeEnum.All;
+        GetNode<ScrollContainer>("Margin/Root/Columns/HistoryColumn/HistoryScroll").FocusMode = FocusModeEnum.All;
 
         RefreshSummary();
         RefreshUnlockTrack();
         RefreshSeedHistory();
+
+        ScreenKeyboardNav.Attach(this, () => backButton, OnBackPressed);
     }
 
     private void RefreshSummary()

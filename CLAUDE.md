@@ -99,6 +99,24 @@ are exactly where these games accumulate input-during-animation bugs if left imp
    intent.
 5. Repeat to victory/defeat → RewardScreen.
 
+**Input is two layers, and the game is fully playable without a mouse.** Every binding is a named
+`hd_*` action in `project.godot`'s `[input]` — never a raw `Key.X` switch — so there is one place
+to look and a future rebinding UI has something to rebind. Above that, the two surfaces are
+navigated differently *on purpose*:
+
+- **Non-combat screens use Godot's own focus system.** They are stock `Button`s, so Tab/arrow
+  navigation and the skipping of `Disabled` controls come free — which is why the map needs no
+  navigation code at all: unreachable nodes are already disabled. `ScreenKeyboardNav.Attach` is the
+  one line each screen adds, giving it an initial focus owner, a re-grab after it rebuilds
+  controls, and `hd_cancel`.
+- **Combat drives its own `_UnhandledInput`.** Cards are fanned `Panel`s and targeting is a
+  `CombatState` sub-state, so `EnemyView`, `PotionView`, End Turn and Continue all stay
+  `FocusModeEnum.None` — focus navigation would fight the arrow-key card cycling. Don't "fix" those
+  by making them focusable.
+
+`ScreenKeyboardNav.KeyHint(action)` reads a binding back out of the `InputMap` for on-screen hints,
+so a badge or tooltip can't drift from the key that actually fires.
+
 **RNG** is split into separate seeded streams in `RngStreams` — `Combat`, `EnemyAI`, `Shop`,
 `Map` — all derived from the run seed, so drawing an extra card can't shift what the shop stocks
 and cosmetic jitter can never desync a deterministic run.
@@ -146,6 +164,10 @@ treat this section as a to-do list.
 - **Save instance IDs referencing definitions, never embedded definitions**, so balance tweaks
   don't break existing saves (`CardInstance` vs `CardDefinition`). Deserialization ignores
   unknown fields on purpose.
+- **New keys are `hd_*` actions in `project.godot`, checked with `IsActionPressed`.** Never a raw
+  keycode compare. `IsActionPressed` defaults `exact_match` to false, so a modifier binding
+  (`Shift+1`) also matches its unmodified action (`hd_card_1`) unless you pass `exactMatch: true` —
+  which is why the potion keys are `Z`/`X`/`C`.
 - **`dotnet build` before running or testing anything** — C# is compiled ahead of time, so
   otherwise you exercise the previous binary.
 - Godot is not on `PATH` on this machine; use the full path to the Mono build, or `$GODOT`.
@@ -157,7 +179,7 @@ There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Rea
 failure.
 
 ```bash
-tools/run-smoke-tests.sh                 # all 16; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh                 # all 17; builds first, nonzero exit on any failure
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 
@@ -196,6 +218,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `AudioSmokeTest` | stream construction, bus setup, volume round-trip | `scripts/audio/`, `AudioManager`, `SettingsManager` |
 | `TransitionSmokeTest` | cross-screen fade: overlay geometry/layer, the Reduce Motion gate, covered-action firing once | `ScreenFade`, `RunManager.ChangeScreen` |
 | `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon-to-definition coverage, `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
+| `KeyboardSmokeTest` | `hd_*` InputMap coverage and no duplicate keycodes, which control each screen focuses on load, combat's card/potion keys, potion aiming, Continue at combat end | `project.godot` `[input]`, `ScreenKeyboardNav`, any screen's focus wiring, `CombatScreen._UnhandledInput` |
 
 When in doubt run everything — the full sweep takes well under a minute. Restructuring a
 `.tscn` will break tests that assert on `GetNode` paths, on purpose — that's the alarm working;
@@ -208,8 +231,15 @@ viewport texture.
 
 Expected output that is **not** a regression: `MetaProgressionSmokeTest` prints a JSON parse
 warning with a backtrace (its deliberate corrupt-save case, proving the loader falls back to
-defaults), and `ScreenSmokeTest` and `Phase4ContentSmokeTest` each print one `Parent node is busy
-adding/removing children` engine error from a test clicking a button that changes scene.
+defaults), and `ScreenSmokeTest`, `Phase4ContentSmokeTest` and `KeyboardSmokeTest` each print one
+`Parent node is busy adding/removing children` engine error from a test clicking a button that
+changes scene.
+
+A suite whose last act changes scene must capture `GetTree()` into a local *before* it, and do
+nothing asynchronous afterwards: `ChangeSceneToFile` replaces the tree's current scene, which is
+the test itself, and `GetTree()` on the now-detached node comes back null — the run then hangs with
+no summary and no `Quit()`, which the watchdog reports as a `TIMEOUT`. `ActSmokeTest` and
+`KeyboardSmokeTest` both document this at their `_Ready`.
 
 A suite that drives a button into `RunManager.ChangeScreen` also needs `HardCutGuard.Protect()`
 alongside `RunSaveGuard`: the Phase 5 fade defers `ChangeSceneToFile` into a tween callback, so

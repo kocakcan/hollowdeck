@@ -24,6 +24,7 @@ public partial class EventScreen : Control
     private VBoxContainer _choicesList = null!;
     private Label _resultLabel = null!;
     private Button _continueButton = null!;
+    private ScreenKeyboardNavListener? _keyboardNav;
 
     public override void _Ready()
     {
@@ -69,7 +70,15 @@ public partial class EventScreen : Control
             button.Pressed += () => OnChoiceChosen(choice);
             _choicesList.AddChild(button);
         }
+
+        // No cancel action: an event is a decision you have to make, and the
+        // choices are the only way out. Focus follows the same rule as the
+        // screen does - the choices while there are any, then Continue.
+        _keyboardNav = ScreenKeyboardNav.Attach(this, PreferredFocus);
     }
+
+    private Control? PreferredFocus() =>
+        _choicesList.GetChildren().OfType<Button>().FirstOrDefault() ?? (Control?)_continueButton;
 
     private void OnChoiceChosen(EventChoice choice)
     {
@@ -85,5 +94,9 @@ public partial class EventScreen : Control
         // snapshot taken in _Ready - without this it would keep showing the
         // numbers the player walked in with.
         ScreenChrome.RefreshRunStatus(this);
+        // The button that was just pressed is one of the ones freed above, so
+        // the screen is left with no focus owner at exactly the moment
+        // Continue appears. PreferredFocus now finds no choices and returns it.
+        _keyboardNav?.Regrab();
     }
 }

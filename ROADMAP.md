@@ -340,10 +340,40 @@ Demoted, not dropped. Still genuinely open:
   the new statuses, not speculatively — those two landed with two Powers, which is the pattern.
 - **Close the relic-hook gap.** `SimpleHookEffectRelic` covers 2 of the 7 hooks `RelicBehavior`
   defines. Extending it to the other five makes future simple relics data rows instead of classes.
-- **Input actions.** There is no `[input]` section in `project.godot`, so rebinding isn't missing
-  UI — there's no `InputMap` layer to rebind. Resolution/windowed-size options are also missing.
+- ✅ **Input actions, and full keyboard support.** `project.godot` now has an `[input]` section:
+  every binding is a named `hd_*` action and all three input handlers check `IsActionPressed`
+  rather than switching on a raw keycode, so there is finally an `InputMap` layer to rebind.
+
+  The prompt for it was the seam, not the layer. Combat was *already* keyboard-driven — arrows,
+  Space, number keys, `D`/`Q`/`W`/`E` — and then the victory panel's Continue was mouse-only,
+  because `Enter` mapped to `OnEndTurnRequested`, which early-returns at `CombatState.CombatEnd`.
+  Playing a whole fight on the keyboard and then reaching for the mouse for one button is what
+  made the gap obvious.
+
+  Outside combat it was the reverse. Every screen is stock `Button`s already sitting at Godot's
+  default `FocusModeEnum.All`, so Tab and arrow navigation worked — but **nothing in the repo ever
+  called `GrabFocus`**, so no screen had a focus owner and the first key press went nowhere. The
+  fix is `ScreenKeyboardNav.Attach`, one line per screen. Godot skipping `Disabled` controls means
+  the map needed no navigation code at all: unreachable nodes were already disabled.
+
+  Deliberately *not* unified: combat keeps its own `_UnhandledInput` and its widgets stay
+  `FocusModeEnum.None`. Cards are fanned `Panel`s and targeting is a `CombatState` sub-state; focus
+  navigation there would fight the arrow-key cycling it exists to protect.
+
+  Three things the work turned up that were not on the list. Potion targeting (`AwaitingTarget`)
+  had **no** keyboard path at all — only Escape, because both cycle and confirm gated on
+  `PlayerTurn`. A card played with Space skipped `CardView.PlayResolveTween` and flew to the
+  discard counter instead, because the keyboard called `TryPlayCard` directly and left the node
+  parented under the hand area; both paths now share `CardView.TryPlayFromHand`. And the theme's
+  focus stylebox was G4 at 2px — the same gold `ChromeStyles.EmphasisState` paints on hover, drawn
+  inside a 4px bezel, so focus was invisible where it wasn't ambiguous. It's G5 at 4px now, with
+  focus styles added for `CheckButton` and (in code, since `Slider` has no focus stylebox) the
+  volume sliders.
+
+  *Outstanding:* the rebinding **UI** itself, now that there's a layer under it. Gamepad support is
+  also much cheaper than it was. Resolution/windowed-size options are still missing.
 - ✅ **CI.** `.github/workflows/ci.yml` runs the whole sweep on every push to `main` and every PR:
-  16 suites, 587 checks, plus `artgen validate` over 121 assets. Godot is pinned to the same
+  17 suites, 661 checks, plus `artgen validate` over 121 assets. Godot is pinned to the same
   4.7.1-stable mono build the csproj SDK and `project.godot` declare, and cached.
 
   Two things were worth getting right. **Importing assets first** — `.godot/` is gitignored, so a

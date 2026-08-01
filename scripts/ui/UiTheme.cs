@@ -27,6 +27,15 @@ public static class UiTheme
         public static readonly Color AccentGold = PixelSpec.Ramp.G3;
         public static readonly Color AccentGoldBright = PixelSpec.Ramp.G4;
 
+        // "The keyboard is here" - the focus ring on every focusable Control,
+        // and the lit hotkey badge on a keyboard-selected card. One step above
+        // AccentGoldBright on purpose: the theme's focus box and the hover
+        // border ChromeStyles.EmphasisState paints were both G4, so a focused
+        // button was indistinguishable from a hovered one and keyboard
+        // navigation had no visible position at all. Whatever this is, it must
+        // not equal AccentGoldBright.
+        public static readonly Color FocusRing = PixelSpec.Ramp.G5;
+
         // Card type fill only - border now comes from Rarity (see below), not
         // CardType, so fill and border read as two independent channels
         // instead of one dimension fighting a second painted on top of it.

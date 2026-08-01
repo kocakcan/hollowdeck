@@ -38,6 +38,8 @@ public partial class ShopScreen : Control
     // "this item is broken" rather than "you don't have the gold".
     private readonly List<(Button Button, int Price)> _offerButtons = new();
 
+    private ScreenKeyboardNavListener? _keyboardNav;
+
     public override void _Ready()
     {
         ScreenBackground.Attach(this, "cobble", new Color(0.7f, 0.7f, 0.75f));
@@ -90,6 +92,13 @@ public partial class ShopScreen : Control
                 return true;
             }, ArtAssets.PotionIcon(potion.Id));
         }
+
+        // Attached before RefreshOffers so its first Regrab happens with the
+        // affordable/unaffordable state already applied - starting focus on a
+        // button that is about to be disabled would immediately lose it.
+        _keyboardNav = ScreenKeyboardNav.Attach(this,
+            () => _offerButtons.FirstOrDefault(o => !o.Button.Disabled).Button ?? leaveButton,
+            OnLeavePressed);
 
         RefreshOffers();
     }
@@ -202,6 +211,12 @@ public partial class ShopScreen : Control
         {
             button.Disabled = RunState.Gold < price;
         }
+
+        // Buying is what disables buttons, including the one that was just
+        // pressed - and Godot drops focus off a control the moment it becomes
+        // Disabled. Without this, one purchase leaves the shop with no focus
+        // owner and the keyboard stops working mid-screen.
+        _keyboardNav?.Regrab();
     }
 
     private void OnLeavePressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.Map);
