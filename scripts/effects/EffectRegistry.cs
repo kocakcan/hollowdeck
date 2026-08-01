@@ -16,6 +16,8 @@ public static class EffectRegistry
         ["heal"] = new HealEffect(),
         ["gain_energy"] = new GainEnergyEffect(),
         ["lose_hp"] = new LoseHpEffect(),
+        ["discard_cards"] = new DiscardCardsEffect(),
+        ["exhaust_hand"] = new ExhaustHandEffect(),
     };
 
     // Single dispatch point for gameplay SFX - every card/potion/enemy-move
@@ -30,6 +32,11 @@ public static class EffectRegistry
         ["draw_cards"] = "card_draw",
         ["heal"] = "heal",
         ["gain_energy"] = "energy_gain",
+        // Both move cards between piles, which is what card_draw already
+        // sounds like - a bespoke cue per pile transition would be three
+        // near-identical shuffles.
+        ["discard_cards"] = "card_draw",
+        ["exhaust_hand"] = "card_draw",
     };
 
     public static void Execute(EffectContext ctx, EffectSpec spec)

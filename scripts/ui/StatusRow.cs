@@ -100,7 +100,8 @@ public static class StatusRow
         tween.TweenCallback(Callable.From(ghost.QueueFree));
     }
 
-    private static bool IsDebuff(StatusType status) => status is StatusType.Weak or StatusType.Vulnerable or StatusType.Poison;
+    private static bool IsDebuff(StatusType status) =>
+        status is StatusType.Weak or StatusType.Vulnerable or StatusType.Poison or StatusType.Frail;
 
     private static string Describe(StatusType status, int amount) => status switch
     {
@@ -113,6 +114,13 @@ public static class StatusRow
         // is worth a card that never comes back.
         StatusType.Metallicize => $"Metallicize {amount}: gains {amount} Block at the start of each turn. Does not wear off.",
         StatusType.Ritual => $"Ritual {amount}: gains {amount} Strength at the start of each turn. Does not wear off.",
+        StatusType.Regen => $"Regen {amount}: heals {amount} HP at the start of each turn. Does not wear off.",
+        // Phrased to mirror Strength/Weak word for word - these are the same
+        // two effects applied to Block, and the wording is what says so.
+        // Percentages come off BlockMath for the same no-drift reason the
+        // Weak/Vulnerable lines take theirs off DamageMath.
+        StatusType.Dexterity => $"Dexterity {amount}: gains +{amount} Block.",
+        StatusType.Frail => $"Frail {amount}: gains {(int)((1 - BlockMath.FrailMultiplier) * 100)}% less Block. Wears off by 1 each turn.",
         _ => $"{status} {amount}",
     };
 }

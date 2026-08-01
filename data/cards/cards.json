@@ -411,5 +411,326 @@
 	"effects": [
 	  { "action": "apply_status", "status": "Ritual", "amount": 2, "scope": "Self" }
 	]
+  },
+  {
+	"id": "deflect",
+	"name": "Deflect",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "gain_block", "amount": 4, "scope": "Self" }
+	]
+  },
+  {
+	"id": "brace",
+	"name": "Brace",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "gain_block", "amount": 3, "scope": "Self" },
+	  { "action": "apply_status", "status": "Dexterity", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "sand_kick",
+	"name": "Sand Kick",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 5, "scope": "Target" },
+	  { "action": "apply_status", "status": "Frail", "amount": 2, "scope": "Target" }
+	]
+  },
+  {
+	"id": "pommel_strike",
+	"name": "Pommel Strike",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 7, "scope": "Target" },
+	  { "action": "draw_cards", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "sweeping_blow",
+	"name": "Sweeping Blow",
+	"cost": 1,
+	"type": "Attack",
+	"target": "AllEnemies",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 5, "scope": "Target" },
+	  { "action": "gain_block", "amount": 3, "scope": "Self" }
+	]
+  },
+  {
+	"id": "wild_swing",
+	"name": "Wild Swing",
+	"cost": 0,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 6, "scope": "Target" },
+	  { "action": "discard_cards", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "dagger_throw",
+	"name": "Dagger Throw",
+	"cost": 0,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": true,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 4, "scope": "Target" }
+	]
+  },
+  {
+	"id": "hunker_down",
+	"name": "Hunker Down",
+	"cost": 2,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "gain_block", "amount": 10, "scope": "Self" },
+	  { "action": "apply_status", "status": "Dexterity", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "venomous_nick",
+	"name": "Venomous Nick",
+	"cost": 0,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 2, "scope": "Target" },
+	  { "action": "apply_status", "status": "Poison", "amount": 2, "scope": "Target" }
+	]
+  },
+  {
+	"id": "war_paint",
+	"name": "War Paint",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "apply_status", "status": "Strength", "amount": 1, "scope": "Self" },
+	  { "action": "apply_status", "status": "Dexterity", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "bandage_up",
+	"name": "Bandage Up",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "heal", "amount": 4, "scope": "Self" }
+	]
+  },
+  {
+	"id": "intimidate",
+	"name": "Intimidate",
+	"cost": 1,
+	"type": "Skill",
+	"target": "AllEnemies",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+	]
+  },
+  {
+	"id": "entrench",
+	"name": "Entrench",
+	"cost": 2,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "gain_block", "amount": 8, "scope": "Self" },
+	  { "action": "apply_status", "status": "Dexterity", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "rupture",
+	"name": "Rupture",
+	"cost": 2,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "deal_damage", "amount": 9, "scope": "Target" },
+	  { "action": "apply_status", "status": "Poison", "amount": 4, "scope": "Target" }
+	]
+  },
+  {
+	"id": "feint",
+	"name": "Feint",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "deal_damage", "amount": 6, "scope": "Target" },
+	  { "action": "gain_block", "amount": 5, "scope": "Self" },
+	  { "action": "apply_status", "status": "Frail", "amount": 2, "scope": "Target" }
+	]
+  },
+  {
+	"id": "blade_flurry",
+	"name": "Blade Flurry",
+	"cost": 2,
+	"type": "Attack",
+	"target": "AllEnemies",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "deal_damage", "amount": 6, "scope": "Target" },
+	  { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+	]
+  },
+  {
+	"id": "sever",
+	"name": "Sever",
+	"cost": 2,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "deal_damage", "amount": 12, "scope": "Target" },
+	  { "action": "apply_status", "status": "Frail", "amount": 2, "scope": "Target" },
+	  { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+	]
+  },
+  {
+	"id": "scorched_earth",
+	"name": "Scorched Earth",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "exhaust_hand", "amount": 0, "scope": "Self" },
+	  { "action": "draw_cards", "amount": 3, "scope": "Self" }
+	]
+  },
+  {
+	"id": "gambit",
+	"name": "Gambit",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "discard_cards", "amount": 2, "scope": "Self" },
+	  { "action": "gain_energy", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "mending_light",
+	"name": "Mending Light",
+	"cost": 2,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "apply_status", "status": "Regen", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "stone_skin",
+	"name": "Stone Skin",
+	"cost": 2,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "apply_status", "status": "Dexterity", "amount": 3, "scope": "Self" }
+	]
+  },
+  {
+	"id": "phoenix_heart",
+	"name": "Phoenix Heart",
+	"cost": 2,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "apply_status", "status": "Regen", "amount": 3, "scope": "Self" },
+	  { "action": "apply_status", "status": "Metallicize", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "aegis",
+	"name": "Aegis",
+	"cost": 2,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "gain_block", "amount": 18, "scope": "Self" },
+	  { "action": "apply_status", "status": "Dexterity", "amount": 3, "scope": "Self" }
+	]
+  },
+  {
+	"id": "all_in",
+	"name": "All In",
+	"cost": 1,
+	"type": "Attack",
+	"target": "AllEnemies",
+	"exhaust": true,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "exhaust_hand", "amount": 0, "scope": "Self" },
+	  { "action": "deal_damage", "amount": 18, "scope": "Target" }
+	]
+  },
+  {
+	"id": "annihilate",
+	"name": "Annihilate",
+	"cost": 2,
+	"type": "Attack",
+	"target": "AllEnemies",
+	"exhaust": true,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "deal_damage", "amount": 12, "scope": "Target" },
+	  { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+	]
   }
 ]

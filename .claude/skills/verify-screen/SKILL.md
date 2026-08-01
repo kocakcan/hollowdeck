@@ -24,7 +24,7 @@ With no screen names it shoots all of them. Unknown names exit 1 and list the va
 ## Screens
 
 `combat` `combatfull` `combat2` `combat3` `reward` `shop` `map` `map2` `map3` `rest` `restupgrade`
-`treasure` `event` `unlocks` `runend` `mainmenu` `settings` `deckpopup` `fade`
+`treasure` `event` `eventpicker` `unlocks` `runend` `mainmenu` `settings` `deckpopup` `fade`
 
 `map2`/`map3` and `combat2`/`combat3` are the later acts — each has its own backdrop tint, title,
 boss sprites and floor count, none of which act 1's shots show. `map3` is also the longest map (10
@@ -39,6 +39,12 @@ its target-lock glow. Reach for this one for any HUD or enemy-row layout change.
 demand by `DeckViewButtons` rather than being a screen of its own. `restupgrade` is the same idea
 for the rest site's second view — it presses Smith first, and seeds seven un-upgraded cards so the
 shot shows the picker's grid wrapping rather than one tidy row.
+
+`eventpicker` is the event screen's card grid, which the two `ICardPickerOutcome` outcomes open.
+It searches for an RNG seed that rolls an event carrying a picker (a search, not a magic number:
+authoring one more event shifts every index) and then presses that choice. Worth shooting for any
+`CardPicker` change — the first version of this screen let the event's own text show through the
+gaps in the grid, which no assertion caught and the shot showed instantly.
 
 `fade` holds the cross-screen transition's cover at a fixed 62% over the map. Deliberately not the
 live tween — 60 settle frames is longer than the whole fade, so a real `Play()` would always be

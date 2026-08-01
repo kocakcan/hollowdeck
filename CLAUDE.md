@@ -52,13 +52,26 @@ border *and* how often the card is offered — `CardPool` weights every reward, 
 to `PileManager.Powers`, which is neither Discard (it would cycle back) nor Exhaust (a cost the HUD
 renders as one).
 
-**What a Power buys is a status that pays out every turn.** `Metallicize` (Block) and `Ritual`
-(Strength) are granted in `CombatManager.ApplyTurnStartGrants` and never decay, which is what no
-recurring Skill can offer. They are statuses rather than a `PowerBehavior` hook deliberately: a
-hook would mean one C# class per Power, the one-class-per-card pattern the effect system exists to
-avoid (risk 1), whereas a status keeps a Power an ordinary data row. The ordering is load-bearing —
-both combatants clear `Block` on their own turn, so a grant that lands before that clear is wiped
-the instant it is given; the player's clear is in `EndEnemyTurn`, the enemy's is mid-loop.
+**What a Power buys is a status that pays out every turn.** `Metallicize` (Block), `Ritual`
+(Strength) and `Regen` (HP) are granted in `CombatManager.ApplyTurnStartGrants` and never decay,
+which is what no recurring Skill can offer. They are statuses rather than a `PowerBehavior` hook
+deliberately: a hook would mean one C# class per Power, the one-class-per-card pattern the effect
+system exists to avoid (risk 1), whereas a status keeps a Power an ordinary data row. The ordering
+is load-bearing — both combatants clear `Block` on their own turn, so a grant that lands before
+that clear is wiped the instant it is given; the player's clear is in `EndEnemyTurn`, the enemy's
+is mid-loop. (`Regen` heals, so it is indifferent to that ordering; it lives with the other two
+because it is the same *kind* of thing.)
+
+**The status roster is nine, in mirrored pairs.** `Strength`/`Weak` scale damage through
+`DamageMath`; `Dexterity`/`Frail` scale Block through `BlockMath`, which is a deliberate copy of
+`DamageMath`'s shape rather than four more methods on it — nothing applies Strength to Block, and
+keeping them apart is what stops a later edit reaching for the wrong multiplier. `Vulnerable` and
+`Poison` sit on the target side; the three turn-start grants above make up the rest. Buffs
+(`Strength`, `Dexterity`, and the grants) never decay; debuffs (`Weak`, `Vulnerable`, `Frail`)
+wear off by 1 a turn at the two `DecayStatus` sites, and `Poison` decays as it ticks. A new status
+needs an icon in `tools/artgen/src/icons/misc.rs`, an arm in `StatusRow.Describe`, and — easy to
+forget, and silent when missed — an entry in `CardUpgrade.ShouldScale`, or upgrading a card that
+grants it produces an identical `+`.
 
 **Autoloads** (declared in `project.godot`, in this order — `AudioManager` must come before
 `SettingsManager` because the settings sliders address audio bus indices):
@@ -125,9 +138,12 @@ and cosmetic jitter can never desync a deterministic run.
 
 An earlier shard *shop* was removed — don't reintroduce shard-purchase language.
 
-`ROADMAP.md` tracks what's genuinely still open (CI, packaged export, `InputMap` actions, card
-volume, wider status roster, a balance pass over the three-act curve). Don't
-treat this section as a to-do list.
+Content stands at **58 cards** (24 Common / 23 Uncommon / 11 Rare), **15 events**, 22 relics, 12
+potions, 24 enemies, 3 acts. Nine statuses, nine effect actions, fifteen event outcome keys.
+
+`ROADMAP.md` tracks what's genuinely still open (packaged export, the rest of the way to 80–120
+cards, more enemies per act, the remaining five relic hooks, a balance pass over the three-act
+curve). Don't treat this section as a to-do list.
 
 ## Key files
 
@@ -146,7 +162,15 @@ treat this section as a to-do list.
   card/relic/potion/enemy-move definition keys into
 - `scripts/relics/RelicBehavior.cs` — the 7 relic hooks; `SimpleHookEffectRelic.cs` is the
   data-only path (currently `OnCombatStart`/`OnTurnStart` only)
-- `scripts/events/EventOutcomeRegistry.cs` — the 8 event outcome keys
+- `scripts/events/EventOutcomeRegistry.cs` — the 15 event outcome keys. Thirteen resolve
+  instantly; two (`remove_chosen_card`, `upgrade_chosen_card`) implement `ICardPickerOutcome` and
+  come back from `Begin()` as *pending*, for `EventScreen` to open a card grid against. A picker
+  must be the last spec in a choice and may not appear inside a `gamble` — both enforced by
+  `EventSmokeTest`, not just documented
+- `scripts/ui/CardPicker.cs` — the "choose one of these cards" grid, shared by the rest site's
+  Smith and by the two event picker outcomes
+- `scripts/effects/BlockMath.cs` — Dexterity/Frail, the exact mirror of `DamageMath`'s
+  Strength/Weak, split for the same no-drift reason
 - `scripts/map/MapGenerator.cs` — branching node DAG, per-act (floor count, encounter pools and
   boss pool all come from the `ActDefinition` passed in)
 - `scripts/data/ActDefinition.cs` + `ActDatabase.cs` — the three acts and what varies per act

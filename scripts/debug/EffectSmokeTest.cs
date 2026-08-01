@@ -42,7 +42,12 @@ public partial class EffectSmokeTest : Node
         TestEveryCardDeclaresARarity();
         TestCardPoolIsRarityWeighted();
         TestPowerCardsLeavePlay();
+        TestDexterityAndFrailBlock();
+        TestDiscardAndExhaustHand();
+        TestExhaustHandCardDoesNotEatItself();
+        TestNewStatusDescriptions();
         await TestTurnStartGrantingStatuses();
+        await TestRegenHealsEachTurn();
 
         GD.Print($"EffectSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -402,6 +407,136 @@ public partial class EffectSmokeTest : Node
     // their own turn, and a grant that lands before that clear is wiped the
     // instant it is given.
     //
+    // All In carries exhaust_hand *and* deals damage, so the order matters:
+    // if the card were still in hand when its own effect ran, it would exhaust
+    // itself mid-resolution. It isn't - ResolveCard moves the played card to
+    // its destination pile before touching its EffectSpecs - but that is an
+    // ordering two files apart, so it gets a test rather than a comment.
+    private void TestExhaustHandCardDoesNotEatItself()
+    {
+        var combat = new CombatManager();
+        AddChild(combat);
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 50, CurrentHp = 50,
+            MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(CardDatabase.All),
+        };
+        var enemy = EnemyFactory.Create(EnemyDatabase.Get("cultist"));
+        combat.StartCombat(player, new List<EnemyCombatant> { enemy }, new List<RelicInstance>());
+
+        player.Piles.Hand.Clear();
+        player.Piles.Exhaust.Clear();
+        var allIn = new CardInstance(CardDatabase.Get("all_in"));
+        player.Piles.Hand.Add(allIn);
+        foreach (var id in new[] { "strike", "defend", "cleave" })
+        {
+            player.Piles.Hand.Add(new CardInstance(CardDatabase.Get(id)));
+        }
+
+        int enemyHpBefore = enemy.CurrentHp;
+        combat.TryPlayCard(allIn);
+
+        Check("exhaust_hand_card_exhausts_the_other_three_and_itself",
+            player.Piles.Hand.Count == 0 && player.Piles.Exhaust.Count == 4,
+            $"hand={player.Piles.Hand.Count} exhaust={player.Piles.Exhaust.Count}");
+        // The real assertion: the damage landed. If All In had exhausted
+        // itself, resolution would have stopped and the enemy would be untouched.
+        Check("exhaust_hand_card_still_resolves_its_own_damage",
+            enemy.CurrentHp < enemyHpBefore,
+            $"enemy hp {enemyHpBefore} -> {enemy.CurrentHp}");
+
+        combat.QueueFree();
+    }
+
+    // Dexterity and Frail are Strength and Weak applied to Block, and the
+    // thing worth pinning is that they are read off whoever *gains* the Block
+    // rather than off ctx.Source - which is why the last case here hands the
+    // block to a combatant other than the caster.
+    private void TestDexterityAndFrailBlock()
+    {
+        var player = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 50 };
+        var ctx = new EffectContext { Source = player, Targets = new List<Combatant> { player }, Combat = null! };
+
+        player.AddStatus(StatusType.Dexterity, 3);
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "gain_block", Amount = 5 });
+        Check("dexterity_adds_flat_block", player.Block == 8, $"block={player.Block}");
+
+        // Frail multiplies *after* Dexterity, exactly as Weak applies after
+        // Strength: (5 + 3) * 0.75 = 6.
+        player.Block = 0;
+        player.AddStatus(StatusType.Frail, 2);
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "gain_block", Amount = 5 });
+        Check("frail_cuts_block_after_dexterity", player.Block == 6, $"block={player.Block}");
+
+        var ally = MakeEnemy();
+        var crossCtx = new EffectContext
+        {
+            Source = player,
+            Targets = new List<Combatant> { ally },
+            Combat = null!,
+        };
+        EffectRegistry.Execute(crossCtx, new EffectSpec { Action = "gain_block", Amount = 5 });
+        Check("block_reads_the_receivers_statuses_not_the_casters", ally.Block == 5,
+            $"block={ally.Block} - 8 means the caster's Dexterity leaked onto someone else");
+    }
+
+    private void TestDiscardAndExhaustHand()
+    {
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 50, CurrentHp = 50,
+            Piles = new PileManager(CardDatabase.All),
+        };
+        var ctx = new EffectContext { Source = player, Targets = new List<Combatant> { player }, Combat = null! };
+
+        player.Piles.DrawHand(5);
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "discard_cards", Amount = 2 });
+        Check("discard_cards_moves_hand_to_discard",
+            player.Piles.Hand.Count == 3 && player.Piles.Discard.Count == 2,
+            $"hand={player.Piles.Hand.Count} discard={player.Piles.Discard.Count}");
+
+        // Asking for more than the hand holds must empty it rather than throw.
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "discard_cards", Amount = 99 });
+        Check("discard_cards_stops_at_an_empty_hand", player.Piles.Hand.Count == 0,
+            $"hand={player.Piles.Hand.Count}");
+
+        player.Piles.DrawHand(4);
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "exhaust_hand", Amount = 0 });
+        Check("exhaust_hand_empties_the_hand_into_exhaust",
+            player.Piles.Hand.Count == 0 && player.Piles.Exhaust.Count == 4,
+            $"hand={player.Piles.Hand.Count} exhaust={player.Piles.Exhaust.Count}");
+    }
+
+    // The formatter's "Gain N X" vs "Apply N X" split is by scope, not by
+    // status name - it used to special-case Strength, which read correctly
+    // right up until a second self-status shipped. These three are the ones
+    // that would have broken it.
+    private void TestNewStatusDescriptions()
+    {
+        string Describe(params EffectSpec[] effects) =>
+            EffectDescriptionFormatter.Describe(effects.ToList(), new DescribeContext());
+
+        Check("dexterity_reads_as_gained",
+            Describe(new EffectSpec { Action = "apply_status", Status = "Dexterity", Amount = 2, Scope = EffectScope.Self })
+                == "Gain 2 Dexterity.", "self-scoped statuses must say Gain");
+
+        Check("regen_reads_as_gained",
+            Describe(new EffectSpec { Action = "apply_status", Status = "Regen", Amount = 3, Scope = EffectScope.Self })
+                == "Gain 3 Regen.", "self-scoped statuses must say Gain");
+
+        Check("frail_reads_as_applied",
+            Describe(new EffectSpec { Action = "apply_status", Status = "Frail", Amount = 2, Scope = EffectScope.Target })
+                == "Apply 2 Frail.", "target-scoped statuses must say Apply");
+
+        Check("discard_and_exhaust_hand_have_description_text",
+            Describe(new EffectSpec { Action = "discard_cards", Amount = 2, Scope = EffectScope.Self })
+                == "Discard 2 cards at random."
+            && Describe(new EffectSpec { Action = "exhaust_hand", Scope = EffectScope.Self })
+                == "Exhaust your hand.",
+            "a missing formatter arm renders the effect invisible on the card");
+    }
+
     // Metallicize is tested on the enemy and Ritual on the player, which is
     // not arbitrary: nothing reduces the enemy's Block in this fixture (the
     // player never attacks), so its value is exact, whereas the player is
@@ -446,6 +581,44 @@ public partial class EffectSmokeTest : Node
             $"strength={player.GetStatus(StatusType.Strength)} after two rounds");
         Check("metallicize_does_not_accumulate_across_turns", enemy.Block == 4,
             $"block={enemy.Block} after two rounds");
+
+        combat.QueueFree();
+    }
+
+    // Regen is the third turn-start grant, and the one that heals rather than
+    // granting Block or Strength - so unlike Metallicize it is indifferent to
+    // where the Block clear falls, and unlike Ritual it has a ceiling. Both
+    // of those are what this checks.
+    private async System.Threading.Tasks.Task TestRegenHealsEachTurn()
+    {
+        var combat = new CombatManager();
+        AddChild(combat);
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 200, CurrentHp = 100,
+            MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(CardDatabase.All),
+        };
+        var enemy = EnemyFactory.Create(EnemyDatabase.Get("cultist"));
+        combat.StartCombat(player, new List<EnemyCombatant> { enemy }, new List<RelicInstance>());
+
+        player.AddStatus(StatusType.Regen, 5);
+        int hpBefore = player.CurrentHp;
+
+        await RunOneRound(combat);
+
+        // The enemy hits back, so this asserts the delta rather than an exact
+        // total: HP is higher than the damage taken alone would leave it.
+        Check("regen_heals_at_turn_start",
+            player.CurrentHp > hpBefore - 20 && player.GetStatus(StatusType.Regen) == 5,
+            $"hp={player.CurrentHp} from {hpBefore}, regen={player.GetStatus(StatusType.Regen)}");
+
+        // Never past MaxHp - Regen ticks every turn forever, so an unclamped
+        // heal would run the bar off the end of the fight.
+        player.CurrentHp = player.MaxHp - 1;
+        await RunOneRound(combat);
+        Check("regen_never_exceeds_max_hp", player.CurrentHp <= player.MaxHp,
+            $"hp={player.CurrentHp}/{player.MaxHp}");
 
         combat.QueueFree();
     }

@@ -28,6 +28,9 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "status", name: "poison", draw: poison },
         Icon { category: "status", name: "metallicize", draw: metallicize },
         Icon { category: "status", name: "ritual", draw: ritual },
+        Icon { category: "status", name: "dexterity", draw: dexterity },
+        Icon { category: "status", name: "frail", draw: frail },
+        Icon { category: "status", name: "regen", draw: regen },
         // Intents
         Icon { category: "intents", name: "attack", draw: intent_attack },
         Icon { category: "intents", name: "defend", draw: intent_defend },
@@ -247,6 +250,92 @@ fn ritual() -> Canvas {
     canvas.disc(16, 24, 2, P4);
     finish(&mut canvas);
     canvas
+}
+
+/// Dexterity: three rising chevrons, brightest at the top.
+///
+/// Explicitly *not* a shield, for the reason `metallicize` already gives — the
+/// silhouette is spoken for three times over (defend intent, Block potion,
+/// cracked Vulnerable) and a fourth variant would read as one of those at 1x.
+/// Stacked chevrons say "the number goes up" with no outline shape at all,
+/// which is also what makes the `frail` inversion below legible.
+fn dexterity() -> Canvas {
+    let mut canvas = new_icon();
+    for (y, colour) in [(21, B2), (14, B3), (7, B4)] {
+        chevron(&mut canvas, 16, y, 10, 7, 3, colour, true);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// Frail: the same three chevrons, falling instead of rising, in the neutral
+/// family and with the lowest one snapped.
+///
+/// The pairing is the whole icon. Dexterity/Frail are Strength/Weak applied to
+/// Block, and `weak` is likewise the inverse of the buff intent's rising arrow
+/// with notches cut out of it — same trick, same reading, so the four debuffs
+/// stay one visual language.
+fn frail() -> Canvas {
+    let mut canvas = new_icon();
+    for (y, colour) in [(4, N6), (11, N5), (18, N4)] {
+        chevron(&mut canvas, 16, y, 10, 7, 3, colour, false);
+    }
+    // The break: a notch bitten out of the bottom chevron's apex, refilled
+    // dark, so the stack reads as collapsing rather than merely pointing down.
+    canvas.erase_poly(&[(12, 24), (20, 24), (20, 30), (12, 30)]);
+    canvas.poly(&[(13, 25), (16, 28), (19, 25), (19, 29), (13, 29)], N2);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Regen: a heart with a sprout coming out of it.
+///
+/// The heart is a silhouette nothing else in the set uses — the healing potion
+/// is a flask and HP is a number, so there is no collision to design around.
+/// The sprout is the half that says *recurring*: a bare heart is "health", a
+/// heart growing something is health that comes back, which is the only thing
+/// separating Regen from a one-off heal.
+fn regen() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Two lobes and a taper. Drawn in three passes (body, face, highlight)
+    // rather than one filled poly, so the heart has interior shading at the
+    // 1x size the HUD actually draws it at.
+    canvas.disc(11, 15, 6, R2);
+    canvas.disc(21, 15, 6, R2);
+    canvas.poly(&[(5, 17), (27, 17), (16, 30)], R2);
+    canvas.disc(11, 14, 4, R4);
+    canvas.disc(21, 14, 4, R4);
+    canvas.poly(&[(7, 16), (25, 16), (16, 27)], R4);
+    canvas.disc(11, 13, 2, R5);
+
+    // The sprout rises out of the notch between the lobes, which is the one
+    // place a stem can sit without breaking the heart's outline.
+    canvas.vline(16, 2, 8, V2);
+    canvas.disc(12, 5, 2, V3);
+    canvas.disc(20, 3, 2, V3);
+    canvas.set(12, 4, V4);
+    canvas.set(20, 2, V4);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// A single chevron band: two thick strokes meeting at an apex. `up` points
+/// the apex at the top of the band, `false` at the bottom.
+fn chevron(
+    canvas: &mut Canvas,
+    cx: i32,
+    y: i32,
+    half_width: i32,
+    height: i32,
+    weight: i32,
+    colour: Rgb,
+    up: bool,
+) {
+    let (apex, ends) = if up { (y, y + height) } else { (y + height, y) };
+    canvas.thick_line(cx - half_width, ends, cx, apex, weight, colour);
+    canvas.thick_line(cx, apex, cx + half_width, ends, weight, colour);
 }
 
 // -- intents ---------------------------------------------------------------

@@ -43,5 +43,141 @@
       { "label": "Let it take what it wants (lose a relic)", "outcome": "lose_relic", "amount": 0, "resultText": "Something of yours is gone." },
       { "label": "Bribe it with gold instead (lose 20 gold)", "outcome": "lose_gold", "amount": 20, "resultText": "It fades, satisfied." }
     ]
+  },
+  {
+    "id": "bone_orchard",
+    "title": "The Bone Orchard",
+    "description": "Trees of fused bone stand in rows, their branches hung with small white fruit.",
+    "choices": [
+      { "label": "Take one and swallow it (gain 6 max HP)", "outcome": "gain_max_hp", "amount": 6, "resultText": "It is chalk on the tongue, and then it is strength." },
+      { "label": "Walk the rows and leave", "outcome": "none", "amount": 0, "resultText": "You do not eat what grows here." }
+    ]
+  },
+  {
+    "id": "flooded_crypt",
+    "title": "A Flooded Crypt",
+    "description": "Black water fills the stair to the chin. Something gold glints two steps under.",
+    "choices": [
+      {
+        "label": "Dive for it (lose 8 HP, gain 40 gold)",
+        "outcomes": [
+          { "outcome": "lose_hp", "amount": 8 },
+          { "outcome": "gain_gold", "amount": 40 }
+        ],
+        "resultText": "You come up shaking, coins clenched in a fist you cannot open."
+      },
+      { "label": "Leave it to the water", "outcome": "none", "amount": 0, "resultText": "The glint is still there when you look back." }
+    ]
+  },
+  {
+    "id": "whetstone_altar",
+    "title": "The Whetstone Altar",
+    "description": "A wheel of grey stone, still wet, turning with no hand on it.",
+    "choices": [
+      { "label": "Sharpen something (upgrade a card of your choice)", "outcome": "upgrade_chosen_card", "amount": 0, "resultText": "" },
+      { "label": "Leave the wheel turning", "outcome": "none", "amount": 0, "resultText": "You keep your edges as they are." }
+    ]
+  },
+  {
+    "id": "the_confessor",
+    "title": "The Confessor",
+    "description": "A figure in a slatted mask waits behind a grille. It does not ask; it simply waits.",
+    "choices": [
+      { "label": "Confess a weakness (remove a card of your choice)", "outcome": "remove_chosen_card", "amount": 0, "resultText": "" },
+      { "label": "Say nothing (heal 6 HP)", "outcome": "heal", "amount": 6, "resultText": "The silence is its own kind of rest." }
+    ]
+  },
+  {
+    "id": "alchemists_remains",
+    "title": "An Alchemist's Remains",
+    "description": "A body slumped over its own workbench, one hand on a flask, the other on a purse.",
+    "choices": [
+      { "label": "Take the flask (gain a potion)", "outcome": "gain_potion", "amount": 0, "resultText": "Still warm. Still sealed." },
+      { "label": "Take the purse (gain 25 gold)", "outcome": "gain_gold", "amount": 25, "resultText": "Heavier than it looked." }
+    ]
+  },
+  {
+    "id": "hollow_bargain",
+    "title": "The Hollow Bargain",
+    "description": "A voice with no source offers a trade, and is very clear about the price.",
+    "choices": [
+      {
+        "label": "Accept (gain a relic, lose 10 max HP)",
+        "outcomes": [
+          { "outcome": "gain_relic", "amount": 0 },
+          { "outcome": "lose_max_hp", "amount": 10 }
+        ],
+        "resultText": "The weight arrives. So does the hollow where it was paid from."
+      },
+      { "label": "Refuse", "outcome": "none", "amount": 0, "resultText": "The voice does not argue. That is the worst of it." }
+    ]
+  },
+  {
+    "id": "starving_hound",
+    "title": "A Starving Hound",
+    "description": "Something too thin to still be walking stands between you and the path, and does not growl.",
+    "choices": [
+      {
+        "label": "Feed it (lose 6 HP, gain a relic)",
+        "outcomes": [
+          { "outcome": "lose_hp", "amount": 6 },
+          { "outcome": "gain_relic", "amount": 0 }
+        ],
+        "resultText": "It eats from your hand, then drops something at your feet and is gone."
+      },
+      { "label": "Drive it off (lose 12 HP)", "outcome": "lose_hp", "amount": 12, "resultText": "It goes. It takes a piece of you with it." }
+    ]
+  },
+  {
+    "id": "gamblers_skull",
+    "title": "The Gambler's Skull",
+    "description": "A skull sits on a flat stone with four knucklebones in its jaw, arranged as if mid-throw.",
+    "choices": [
+      {
+        "label": "Roll the bones",
+        "outcome": "gamble",
+        "amount": 0,
+        "alternatives": [
+          { "outcome": "gain_gold", "amount": 50 },
+          { "outcome": "lose_gold", "amount": 25 },
+          { "outcome": "gain_relic", "amount": 0 },
+          { "outcome": "lose_hp", "amount": 10 }
+        ],
+        "resultText": "The bones settle."
+      },
+      { "label": "Walk away", "outcome": "none", "amount": 0, "resultText": "The skull keeps its throw." }
+    ]
+  },
+  {
+    "id": "mirror_pool",
+    "title": "The Mirror Pool",
+    "description": "Still water that shows you a half-step behind where you are standing.",
+    "choices": [
+      { "label": "Study the reflection (upgrade a random card)", "outcome": "upgrade_random_card", "amount": 0, "resultText": "You watch yourself do it better, and learn the difference." },
+      {
+        "label": "Drink (gain 5 max HP, lose 10 gold)",
+        "outcomes": [
+          { "outcome": "gain_max_hp", "amount": 5 },
+          { "outcome": "lose_gold", "amount": 10 }
+        ],
+        "resultText": "It tastes of coin. Some of yours is missing."
+      }
+    ]
+  },
+  {
+    "id": "hanged_scholar",
+    "title": "The Hanged Scholar",
+    "description": "A body in academic robes, hung from a beam, notes still pinned to its sleeves.",
+    "choices": [
+      { "label": "Cut him down and read the notes (gain a random card)", "outcome": "gain_random_card", "amount": 0, "resultText": "His last work is legible, and useful." },
+      {
+        "label": "Take his purse and go (gain 30 gold, lose 3 max HP)",
+        "outcomes": [
+          { "outcome": "gain_gold", "amount": 30 },
+          { "outcome": "lose_max_hp", "amount": 3 }
+        ],
+        "resultText": "You do not look up as you leave. Something in you gives anyway."
+      }
+    ]
   }
 ]

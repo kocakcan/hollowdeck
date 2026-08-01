@@ -133,7 +133,19 @@ public static class EffectDescriptionFormatter
                 return $"Deal {DamageAmount(outgoing, effect, ctx, buffed)} damage{Suffix(effect, ctx, hoistedAllEnemies)}.";
             }
             case "gain_block":
-                return $"Gain {effect.Amount} Block.";
+            {
+                // Block goes through BlockMath for the same reason damage goes
+                // through DamageMath: once Dexterity and Frail exist, the
+                // authored amount stops being the amount the player gets, and
+                // this arm was the one that printed the raw number. Recorded
+                // so CardView tints an adjusted figure the way it already
+                // tints Strength/Weak-adjusted damage.
+                int block = ctx.Source is null
+                    ? effect.Amount
+                    : BlockMath.ComputeOutgoing(effect.Amount, ctx.Source);
+                Record(effect.Amount, block, buffed, weakened);
+                return $"Gain {block} Block.";
+            }
             // "Gain" for anything you put on yourself, "Apply" for anything
             // you put on someone else. This used to special-case Strength by
             // name, which read correctly right up until the first other
@@ -151,6 +163,10 @@ public static class EffectDescriptionFormatter
                 return $"Gain {effect.Amount} Energy.";
             case "lose_hp":
                 return $"Lose {effect.Amount} HP.";
+            case "discard_cards":
+                return $"Discard {effect.Amount} card{(effect.Amount == 1 ? "" : "s")} at random.";
+            case "exhaust_hand":
+                return "Exhaust your hand.";
             default:
                 return "";
         }

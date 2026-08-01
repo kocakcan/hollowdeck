@@ -51,6 +51,33 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "cards", name: "inflame", draw: inflame },
         Icon { category: "cards", name: "metallicize", draw: metallicize },
         Icon { category: "cards", name: "demon_form", draw: demon_form },
+        // Attacks
+        Icon { category: "cards", name: "sand_kick", draw: sand_kick },
+        Icon { category: "cards", name: "pommel_strike", draw: pommel_strike },
+        Icon { category: "cards", name: "sweeping_blow", draw: sweeping_blow },
+        Icon { category: "cards", name: "wild_swing", draw: wild_swing },
+        Icon { category: "cards", name: "dagger_throw", draw: dagger_throw },
+        Icon { category: "cards", name: "venomous_nick", draw: venomous_nick },
+        Icon { category: "cards", name: "rupture", draw: rupture },
+        Icon { category: "cards", name: "feint", draw: feint },
+        Icon { category: "cards", name: "blade_flurry", draw: blade_flurry },
+        Icon { category: "cards", name: "sever", draw: sever },
+        Icon { category: "cards", name: "all_in", draw: all_in },
+        Icon { category: "cards", name: "annihilate", draw: annihilate },
+        // Skills and Powers
+        Icon { category: "cards", name: "deflect", draw: deflect },
+        Icon { category: "cards", name: "brace", draw: brace },
+        Icon { category: "cards", name: "hunker_down", draw: hunker_down },
+        Icon { category: "cards", name: "entrench", draw: entrench },
+        Icon { category: "cards", name: "aegis", draw: aegis },
+        Icon { category: "cards", name: "stone_skin", draw: stone_skin },
+        Icon { category: "cards", name: "war_paint", draw: war_paint },
+        Icon { category: "cards", name: "bandage_up", draw: bandage_up },
+        Icon { category: "cards", name: "intimidate", draw: intimidate },
+        Icon { category: "cards", name: "scorched_earth", draw: scorched_earth },
+        Icon { category: "cards", name: "gambit", draw: gambit },
+        Icon { category: "cards", name: "mending_light", draw: mending_light },
+        Icon { category: "cards", name: "phoenix_heart", draw: phoenix_heart },
     ]
 }
 
@@ -574,7 +601,594 @@ fn demon_form() -> Canvas {
     canvas
 }
 
+// -- attacks: the Dexterity/Frail generation --------------------------------
+
+/// A boot throwing a spray of grit. Sand Kick applies Frail, and the whole
+/// point of the icon is that it is *not* a weapon — the card is a Common
+/// Attack, but what lands is dirt in the eyes, which is also why it debuffs
+/// rather than hits hard. The one Attack in the set allowed to break the
+/// weapon rule, because a blade here would promise damage it doesn't deal.
+fn sand_kick() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Boot: shin, then a forward-jutting sole.
+    canvas.poly(&[(4, 6), (12, 6), (13, 20), (5, 20)], N4);
+    canvas.poly(&[(4, 18), (22, 20), (22, 26), (4, 26)], N3);
+    canvas.hline(4, 25, 19, N5);
+    canvas.hline(4, 18, 9, N5);
+
+    // The grit, thrown forward and up in a widening cone. Irregular sizes
+    // on purpose - an even scatter reads as a pattern, not as debris.
+    for (x, y, r) in [(24, 20, 2), (28, 16, 2), (25, 11, 1), (29, 24, 1), (22, 8, 2), (30, 8, 1)] {
+        canvas.disc(x, y, r, G2);
+    }
+    for (x, y) in [(26, 18), (23, 13), (29, 21)] {
+        canvas.set(x, y, G4);
+    }
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// A sword held reversed, striking with the pommel. Pommel Strike draws a
+/// card, and a hit that leaves you *better set up* is the one Attack that
+/// should not lead with its edge — so the icon inverts Strike's own geometry
+/// rather than inventing a new weapon.
+fn pommel_strike() -> Canvas {
+    let mut canvas = new_icon();
+    sword(&mut canvas, (22, 8), (5, 27), BLADE, BLADE_EDGE);
+    // The pommel enlarged and brought forward, with the impact burst Bash
+    // uses, so the business end reads as the blunt one.
+    canvas.disc(25, 5, 4, GUARD);
+    canvas.disc(25, 5, 2, G4);
+    impact(&mut canvas, 25, 5, G5);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A low horizontal arc with the shared shield behind it: Sweeping Blow hits
+/// everything and gives Block, so the icon carries both halves the way Iron
+/// Wave does, but swung flat rather than held.
+fn sweeping_blow() -> Canvas {
+    let mut canvas = new_icon();
+
+    // The sweep is carved first and the shield laid over it. Order matters:
+    // the crescent is cut with erases, and anything already on the canvas
+    // when they run gets cut too - the shield was drawn first once and the
+    // erase_rect took the whole of it, leaving a bare arc.
+    canvas.disc(16, 16, 15, BLADE_EDGE);
+    canvas.disc(16, 16, 13, BLADE);
+    canvas.erase_disc(16, 13, 14);
+    canvas.erase_rect(0, 0, GRID, 18);
+    canvas.thick_line(2, 25, 9, 29, 2, WOOD);
+
+    shield(&mut canvas, 16, 1, 20, 19, SHIELD_FACE, SHIELD_RIM);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// A blade swung so hard cards come loose. Wild Swing discards at random, and
+/// the loose cards are the cost made visible — they quote Focus's card-stack
+/// glyph so the two read as the same object arriving and leaving.
+fn wild_swing() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Blade angled hard across the icon, tip into the *top-left* corner. The
+    // first version pointed it top-right into the loose cards, and a pale
+    // quadrilateral sitting on a blade tip reads as a hammer head - the cards
+    // have to be clear of the weapon's line entirely.
+    blade(&mut canvas, (22, 29), (3, 8), 2.0, BLADE, BLADE_EDGE);
+    canvas.thick_line(19, 26, 26, 31, 2, GUARD);
+
+    // Two cards knocked loose to the right, drawn as tall leaning rectangles
+    // rather than tumbling diamonds - a rotated square is a gem at this size,
+    // and only the long edges say "card".
+    canvas.poly(&[(20, 2), (29, 5), (25, 17), (16, 14)], N0);
+    canvas.poly(&[(21, 4), (27, 6), (24, 15), (18, 13)], N8);
+    canvas.disc(22, 9, 1, N3);
+    canvas.poly(&[(23, 18), (31, 22), (28, 31), (20, 27)], N0);
+    canvas.poly(&[(24, 20), (29, 23), (27, 29), (22, 26)], N7);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// A dagger in flight, point-first, with the motion lines Quick Slash uses.
+/// Shorter than any blade in the set and drawn with no grip in a hand, which
+/// is what says "thrown" — and it exhausts, so it is gone once it lands.
+fn dagger_throw() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.line(2, 8, 12, 12, N5);
+    canvas.line(2, 16, 11, 18, N5);
+    canvas.line(3, 24, 12, 23, N5);
+    blade(&mut canvas, (12, 21), (28, 9), 2.0, BLADE, BLADE_EDGE);
+    canvas.thick_line(9, 18, 15, 25, 2, GUARD);
+    canvas.disc(8, 23, 2, GRIP);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The smallest blade in the poison family, carrying the same V-ramp drip
+/// Venom Strike and the Poison status use. A nick, not a wound: the blade is
+/// short and the drip is the larger shape, because the damage is 2 and the
+/// Poison is the card.
+fn venomous_nick() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (6, 26), (19, 12), 1.5, BLADE, BLADE_EDGE);
+    canvas.thick_line(3, 23, 9, 29, 2, GUARD);
+    droplet(&mut canvas, 23, 12, 5, V2, V4);
+    canvas.disc(20, 20, 2, V1);
+    canvas.disc(27, 21, 1, V1);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The heavy poison card: the same drip, burst open. Where Venomous Nick is
+/// one droplet leaving the blade, Rupture is the droplet hitting something —
+/// the splash crown is what separates 2 Poison from 4 at a glance.
+fn rupture() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Pool first, for the same ordering reason as Sweeping Blow - it is built
+    // with erases and would take the blade with it.
+    canvas.disc(16, 27, 11, V1);
+    canvas.erase_rect(0, 0, GRID, 24);
+    canvas.disc(16, 27, 8, V2);
+    canvas.erase_rect(0, 0, GRID, 25);
+
+    blade(&mut canvas, (2, 6), (19, 19), 2.0, BLADE, BLADE_EDGE);
+    canvas.thick_line(1, 3, 6, 9, 2, GUARD);
+
+    // Thrown droplets over the pool: the splash crown that separates 4 Poison
+    // from Venomous Nick's single drip.
+    for (x, y, r) in [(8, 20, 2), (22, 15, 3), (28, 21, 2)] {
+        droplet(&mut canvas, x, y, r, V2, V4);
+    }
+    canvas.disc(13, 27, 1, V4);
+    canvas.disc(21, 29, 1, V4);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// A blade coming in from behind a raised shield. Feint hits, blocks and
+/// applies Frail all at once, so it borrows from both halves of the set —
+/// but the shield is in front, because the card is a trick rather than a
+/// trade.
+fn feint() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (28, 28), (10, 4), 1.5, BLADE, BLADE_EDGE);
+    shield(&mut canvas, 14, 10, 20, 21, SHIELD_FACE, SHIELD_RIM);
+    // The Frail mark: the same fracture the Vulnerable status and Crippling
+    // Blow use, so a cracked surface always means a debuff landed.
+    crack(&mut canvas, &[(14, 12), (11, 18), (17, 22), (13, 29)], N0);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Three blades fanned out. The AoE Attacks each solve "hits everything"
+/// differently on purpose — Cleave has one axe arc, Whirlwind closes it into
+/// a ring — and a fan is the third answer: one strike per enemy rather than
+/// one strike across them.
+fn blade_flurry() -> Canvas {
+    let mut canvas = new_icon();
+    for (tip_x, tip_y) in [(3, 3), (16, 1), (29, 3)] {
+        blade(&mut canvas, (16, 29), (tip_x, tip_y), 1.5, BLADE, BLADE_EDGE);
+    }
+    canvas.thick_line(11, 26, 21, 26, 2, GUARD);
+    canvas.disc(16, 30, 2, GUARD);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A blade already through its target, drawn as a clean diagonal cut with the
+/// two halves of the cut surface pulling apart. Sever is the biggest single
+/// hit in the Uncommons and applies both Frail and Vulnerable — the gap is
+/// the icon, not the sword.
+fn sever() -> Canvas {
+    let mut canvas = new_icon();
+
+    // The object being cut: a stone block, split along the blade's line.
+    canvas.poly(&[(4, 5), (20, 5), (16, 17), (2, 17)], N4);
+    canvas.poly(&[(5, 7), (18, 7), (15, 15), (4, 15)], N5);
+    canvas.poly(&[(14, 19), (30, 19), (27, 30), (11, 30)], N4);
+    canvas.poly(&[(15, 21), (28, 21), (25, 28), (13, 28)], N5);
+
+    blade(&mut canvas, (2, 29), (30, 2), 1.5, BLADE, BLADE_EDGE);
+    sparkle(&mut canvas, 22, 11, 3, G5);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Every card you hold, thrown at once. All In exhausts the hand for one huge
+/// AoE hit, so the icon is the cost rather than the damage: a fan of cards
+/// going up in flame, with the blade behind them.
+fn all_in() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (2, 30), (17, 12), 1.5, BLADE, BLADE_EDGE);
+
+    // One flame behind, three overlapping cards in front.
+    //
+    // Two earlier versions drew separated upright cards with a flame over
+    // each and both read as a candelabra - three tall pale shapes with fire
+    // on top is a candle, whatever the proportions. The fix is not sizing but
+    // arrangement: cards that *overlap* read as a held hand, and a single
+    // flame behind them cannot be mistaken for three wicks.
+    flame(&mut canvas, 16, 18, 16, E2, E4);
+    canvas.disc(16, 9, 4, E3);
+
+    for (index, (x, lean)) in [(2, -3), (10, 0), (18, 3)].iter().enumerate() {
+        canvas.poly(&[(*x, 31), (*x + 12, 31), (*x + 12 + lean, 16), (*x + lean, 16)], N0);
+        canvas.poly(
+            &[(*x + 1, 30), (*x + 11, 30), (*x + 11 + lean, 18), (*x + 1 + lean, 18)],
+            if index == 2 { N8 } else { N6 },
+        );
+        // A pip, so they read as playing cards rather than as blank tiles.
+        canvas.disc(*x + 6 + lean, 23, 1, N2);
+    }
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Two blades driven through a burst. Annihilate is the other AoE Rare and
+/// had to differ from All In at a glance: All In is cards, this is nothing but
+/// weapon, and the X is the one blade arrangement the set has kept in reserve
+/// (Twin Strike is parallel, precisely so this could be crossed).
+fn annihilate() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (2, 4), (28, 28), 2.0, BLADE, BLADE_EDGE);
+    blade(&mut canvas, (30, 4), (4, 28), 2.0, BLADE, BLADE_EDGE);
+    canvas.disc(16, 16, 5, E1);
+    canvas.disc(16, 16, 3, E3);
+    impact(&mut canvas, 16, 16, E3);
+    finish(&mut canvas);
+    canvas
+}
+
+// -- skills: the block family ----------------------------------------------
+
+/// The cheapest shield in the set, drawn small and off-centre. Deflect is 0
+/// energy for 4 Block, and the icon says "a bit of Block" by literally being
+/// a smaller Defend rather than by changing shape.
+fn deflect() -> Canvas {
+    let mut canvas = new_icon();
+    shield(&mut canvas, 18, 8, 18, 20, SHIELD_FACE, SHIELD_RIM);
+    // A glancing stroke off the rim, so the shield is deflecting something
+    // rather than just being small.
+    canvas.line(2, 6, 13, 12, N6);
+    canvas.line(2, 12, 11, 16, N6);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Defend's shield with the Dexterity chevron over it.
+///
+/// The chevron is a direct quote of the Dexterity status icon, and every card
+/// that grants Dexterity carries it: Brace, Hunker Down, Entrench, War Paint,
+/// Aegis, Stone Skin. That mark is doing the same job the poison family's drip
+/// does — telling the player what a card grants before they read the text.
+fn brace() -> Canvas {
+    let mut canvas = new_icon();
+    shield(&mut canvas, 16, 4, 24, 25, SHIELD_FACE, SHIELD_RIM);
+    dexterity_mark(&mut canvas, 16, 11, 1);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A shield planted in the ground and braced from behind. Hunker Down is the
+/// 2-energy Common, so it is the same shield as Brace with weight added —
+/// wider stance, ground line, two chevrons instead of one.
+fn hunker_down() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.rect(1, 26, 30, 4, N4);
+    canvas.hline(1, 26, 30, N5);
+    shield(&mut canvas, 16, 2, 26, 25, SHIELD_FACE, SHIELD_RIM);
+    // The braces: two struts angling back into the ground.
+    canvas.thick_line(6, 27, 12, 18, 2, WOOD);
+    canvas.thick_line(26, 27, 20, 18, 2, WOOD);
+    dexterity_mark(&mut canvas, 16, 8, 2);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The shield dug *into* the earth rather than standing on it — Entrench is
+/// the Uncommon upgrade of the same idea, and burying the lower third is what
+/// separates it from Hunker Down at 1x without changing the silhouette.
+fn entrench() -> Canvas {
+    let mut canvas = new_icon();
+    shield(&mut canvas, 16, 1, 24, 26, SHIELD_FACE, SHIELD_RIM);
+    dexterity_mark(&mut canvas, 16, 6, 2);
+
+    // Earth piled over the base, drawn as overlapping mounds so the top edge
+    // is irregular. A straight band reads as a table the shield sits on.
+    canvas.rect(0, 24, GRID, 8, N3);
+    for (x, r) in [(4, 4), (12, 3), (20, 4), (28, 3)] {
+        canvas.disc(x, 24, r, N3);
+    }
+    canvas.hline(0, 23, 6, N4);
+    canvas.hline(9, 24, 7, N4);
+    canvas.hline(18, 23, 8, N4);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// The best shield in the game: gold-rimmed, bossed, and the only one drawn
+/// with an ornament. Aegis exhausts, so it is a single perfect defence rather
+/// than a repeatable one, and it should look like an heirloom next to
+/// Defend's plain heater.
+fn aegis() -> Canvas {
+    let mut canvas = new_icon();
+    shield(&mut canvas, 16, 2, 28, 29, B1, G3);
+    shield(&mut canvas, 16, 5, 22, 23, SHIELD_FACE, G4);
+    canvas.disc(16, 12, 5, G3);
+    canvas.disc(16, 12, 3, G5);
+    // One chevron, not two: the shield tapers to a point, and a second row
+    // lower down had its ends hanging outside the silhouette.
+    dexterity_mark(&mut canvas, 16, 19, 1);
+    sparkle(&mut canvas, 27, 6, 3, G5);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A Power, so it is drawn on a body rather than as a held object — the same
+/// argument Metallicize's plating makes. Stone Skin grants Dexterity
+/// permanently, so the plates *are* the skin: a torso with the chevron cut
+/// into the chest.
+fn stone_skin() -> Canvas {
+    let mut canvas = new_icon();
+
+    // A head and shoulders, so the plating is clearly *on someone*. The first
+    // version drew a bare tapering torso and read as a grey helmet - without
+    // a neck and a gap between head and shoulder there is nothing to tell a
+    // body from an object.
+    canvas.disc(16, 7, 5, N6);
+    canvas.rect(14, 11, 5, 3, N5);
+    canvas.poly(&[(3, 17), (29, 17), (27, 31), (5, 31)], N4);
+    canvas.disc(6, 18, 4, N4);
+    canvas.disc(26, 18, 4, N4);
+
+    // Stone courses across the chest, staggered like Fortify's brickwork.
+    for (row, y) in [(0, 19), (1, 24)] {
+        let stagger = if row == 0 { 0 } else { 5 };
+        for x in (5 + stagger..28).step_by(9) {
+            canvas.rect(x, y, 7, 4, N6);
+            canvas.hline(x, y, 7, N7);
+        }
+    }
+
+    // On the chest, over the courses rather than above the head - the B-ramp
+    // reads straight off the grey, and a chevron floating over the skull
+    // would have collided with it.
+    dexterity_mark(&mut canvas, 16, 20, 1);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A handprint of paint dragged down a face. War Paint grants Strength *and*
+/// Dexterity, which no other Common does, so it needed an icon that is
+/// neither a fist nor a shield — the ritual before the fight rather than the
+/// fight.
+fn war_paint() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Face: a tapered oval, light enough that paint reads *on* it. The first
+    // version banded a dark grey head at eye level and read as a visored
+    // helm - a full-width horizontal bar across a grey oval is a helmet slot,
+    // so the eyes have to sit clear of the paint, not inside it.
+    canvas.disc(16, 13, 10, N5);
+    canvas.rect(6, 13, 21, 7, N5);
+    canvas.poly(&[(6, 19), (27, 19), (22, 28), (11, 28)], N5);
+    canvas.disc(16, 13, 8, N7);
+    canvas.rect(8, 13, 17, 6, N7);
+    canvas.poly(&[(8, 18), (25, 18), (21, 26), (12, 26)], N7);
+
+    // Eyes above the paint, dark and wide, so the face is looking at you
+    // before any colour is read.
+    canvas.rect(11, 11, 3, 3, N0);
+    canvas.rect(19, 11, 3, 3, N0);
+
+    // Two marks, not two bands: red across the brow (Strength), blue streaked
+    // down each cheek (Dexterity). The card grants both, and this is the only
+    // Common that does.
+    canvas.rect(9, 6, 15, 3, R3);
+    canvas.hline(9, 6, 15, R4);
+    for x in [12, 20] {
+        canvas.rect(x, 17, 2, 8, B3);
+        canvas.rect(x + 3, 17, 1, 6, B2);
+    }
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// A roll of bandage, part-unwound. Bandage Up exhausts for a small heal, and
+/// the loose tail is what says "one use" — a sealed roll would read as a
+/// stock of them.
+fn bandage_up() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.disc(13, 14, 10, N6);
+    canvas.disc(13, 14, 7, N7);
+    canvas.disc(13, 14, 3, N4);
+    // The wound edge, then the tail unrolling to the corner.
+    canvas.thick_line(13, 4, 22, 6, 3, N8);
+    canvas.thick_line(22, 6, 27, 14, 3, N7);
+    canvas.thick_line(27, 14, 24, 24, 3, N8);
+    canvas.thick_line(24, 24, 29, 30, 3, N7);
+    canvas.disc(9, 11, 2, R3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A shout: an open mouth in a dark silhouette with the sound thrown wide.
+/// Intimidate applies Weak to everything, and the arcs are what make it an
+/// area effect — the same "this reaches all of them" job Whirlwind's ring
+/// does, without a weapon in it.
+fn intimidate() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Three broken arrows, fanned outward and downward.
+    //
+    // Two shouting-head versions were drawn before this and both failed the
+    // same way: the mouth is a void, voids are the background colour, and a
+    // dark shape with a wedge missing reads as a bitten disc, not a shout.
+    // So the icon quotes the Weak *status* glyph instead - the same snapped
+    // downward arrow - three times, which says "Weak, to all of them" with no
+    // silhouette to misread. It is the `blade_flurry` trick applied to a
+    // debuff: fan the mark, one per enemy.
+    for (tip_x, tip_y, colour) in [(4, 28, N5), (16, 30, N6), (28, 28, N5)] {
+        arrow(&mut canvas, (16, 5), (tip_x, tip_y), 3, 6, colour);
+    }
+
+    // The breaks: notched wedges bitten out of each shaft and refilled dark,
+    // exactly as `weak` does it.
+    canvas.poly(&[(6, 17), (12, 15), (12, 19), (6, 21)], N2);
+    canvas.poly(&[(13, 18), (19, 16), (19, 20), (13, 22)], N2);
+    canvas.poly(&[(20, 17), (26, 15), (26, 19), (20, 21)], N2);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// A hand of cards burning. Scorched Earth exhausts everything you hold to
+/// draw three fresh, and this is the other half of the pair with All In — the
+/// same cost drawn the same way, so the two read as siblings, but with no
+/// weapon in it because the payoff is cards rather than damage.
+fn scorched_earth() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Burnt-out stubs at the bottom, fresh cards arriving at the top.
+    //
+    // Drawn as *before and after* rather than as a fire, which is what
+    // separates it from All In - both cards exhaust the hand, so the icons
+    // cannot both be "cards alight" or the pair is indistinguishable. Here
+    // the burning has already happened and the draw is the subject; upright
+    // cards with flames on top were tried twice and read as a candelabra
+    // both times.
+    for x in [3, 11, 19, 27] {
+        canvas.rect(x - 2, 26, 5, 6, N2);
+        canvas.rect(x - 1, 27, 3, 5, N3);
+        // Ragged burnt top edge: each stub ends at a different height.
+        canvas.hline(x - 2, 26, 5, N1);
+    }
+    for (x, y, colour) in [(5, 22, E3), (13, 19, E4), (21, 23, E2), (28, 20, E3)] {
+        canvas.disc(x, y, 1, colour);
+    }
+
+    // The three drawn cards, fanned and clean, above the ash.
+    for (index, (x, lean)) in [(4, -2), (12, 0), (20, 2)].iter().enumerate() {
+        canvas.poly(&[(*x, 16), (*x + 9, 16), (*x + 9 + lean, 1), (*x + lean, 1)], N0);
+        canvas.poly(
+            &[(*x + 1, 15), (*x + 8, 15), (*x + 8 + lean, 3), (*x + 1 + lean, 3)],
+            if index == 1 { N8 } else { N6 },
+        );
+        canvas.disc(*x + 4 + lean, 8, 1, N3);
+    }
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Two dice mid-throw. Gambit discards two cards at random for two energy —
+/// the only card in the set whose cost is decided by chance, and dice are the
+/// one glyph that says that without a paragraph.
+fn gambit() -> Canvas {
+    let mut canvas = new_icon();
+
+    canvas.rect(3, 12, 13, 13, N7);
+    canvas.rect(4, 13, 11, 11, N8);
+    for (x, y) in [(7, 16), (11, 16), (7, 20), (11, 20)] {
+        canvas.disc(x, y, 1, N1);
+    }
+
+    canvas.rect(17, 5, 12, 12, N5);
+    canvas.rect(18, 6, 10, 10, N6);
+    for (x, y) in [(21, 9), (25, 12)] {
+        canvas.disc(x, y, 1, N1);
+    }
+
+    // The energy the throw pays out, so the icon carries the payoff as well
+    // as the risk. Same bolt as Adrenaline.
+    canvas.poly(&[(22, 19), (16, 26), (20, 26), (17, 31), (26, 23), (21, 23), (25, 19)], G5);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Light falling on the Regen heart. Mending Light is the Power that grants
+/// Regen, so it quotes the status icon directly — the sprouting heart — and
+/// adds the rays that make it a source rather than a state.
+fn mending_light() -> Canvas {
+    let mut canvas = new_icon();
+
+    for (dx, dy) in [(-1, -1), (1, -1), (-1, 1), (1, 1), (0, -1), (0, 1)] {
+        canvas.line(16 + dx * 5, 18 + dy * 5, 16 + dx * 15, 18 + dy * 15, G3);
+    }
+    canvas.line(1, 18, 8, 18, G3);
+    canvas.line(24, 18, 31, 18, G3);
+
+    canvas.disc(11, 17, 6, R2);
+    canvas.disc(21, 17, 6, R2);
+    canvas.poly(&[(5, 19), (27, 19), (16, 31)], R2);
+    canvas.disc(11, 16, 4, R4);
+    canvas.disc(21, 16, 4, R4);
+    canvas.poly(&[(7, 18), (25, 18), (16, 29)], R4);
+
+    canvas.vline(16, 4, 8, V2);
+    canvas.disc(12, 7, 2, V3);
+    canvas.disc(20, 5, 2, V3);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// The same heart, on fire. Phoenix Heart is the Rare that grants Regen *and*
+/// Metallicize, and it deliberately shares Mending Light's subject: one is
+/// the Uncommon version of an idea and the other is the Rare, so they should
+/// be recognisably the same organ. The flame is what the extra rarity buys.
+fn phoenix_heart() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Wings of flame behind, drawn first so the heart sits in front of them.
+    flame(&mut canvas, 5, 24, 16, E1, E3);
+    flame(&mut canvas, 27, 24, 16, E1, E3);
+    flame(&mut canvas, 16, 12, 12, E2, E4);
+
+    canvas.disc(11, 17, 6, R1);
+    canvas.disc(21, 17, 6, R1);
+    canvas.poly(&[(5, 19), (27, 19), (16, 31)], R1);
+    canvas.disc(11, 16, 4, R3);
+    canvas.disc(21, 16, 4, R3);
+    canvas.poly(&[(7, 18), (25, 18), (16, 29)], R3);
+    canvas.disc(11, 15, 2, R5);
+
+    // The Metallicize half: two plate bands across the heart, the same B-ramp
+    // rivetted plating the status icon uses.
+    canvas.rect(7, 20, 18, 3, B2);
+    canvas.hline(7, 20, 18, B4);
+    canvas.rect(10, 25, 12, 3, B2);
+    canvas.hline(10, 25, 12, B4);
+
+    finish_heavy(&mut canvas);
+    canvas
+}
+
 // -- shared parts ----------------------------------------------------------
+
+/// The Dexterity chevron stack, quoted from the status icon of the same name.
+/// Every card that grants Dexterity carries it, at the count it grants (capped
+/// at what fits), which is the same "the art says what it does" contract the
+/// poison drip already holds up.
+fn dexterity_mark(canvas: &mut Canvas, cx: i32, top: i32, count: i32) {
+    for index in 0..count.min(3) {
+        let y = top + index * 5;
+        canvas.thick_line(cx - 6, y + 4, cx, y, 2, B4);
+        canvas.thick_line(cx, y, cx + 6, y + 4, 2, B4);
+    }
+}
 
 /// An Archimedean spiral, three turns, stepped fine enough that the line has
 /// no gaps at this radius.

@@ -52,3 +52,33 @@ text = ""
 layout_mode = 2
 visible = false
 text = "Continue"
+
+[node name="PickerCenterContainer" type="CenterContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PickerVBox" type="VBoxContainer" parent="PickerCenterContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PickerTitleLabel" type="Label" parent="PickerCenterContainer/PickerVBox"]
+layout_mode = 2
+horizontal_alignment = 1
+text = "Choose a card."
+
+[node name="ScrollContainer" type="ScrollContainer" parent="PickerCenterContainer/PickerVBox"]
+custom_minimum_size = Vector2(960, 424)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="PickerList" type="GridContainer" parent="PickerCenterContainer/PickerVBox/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 5
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 12
