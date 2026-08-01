@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 using Hollowdeck.Data;
 using Hollowdeck.Run;
@@ -31,6 +32,13 @@ public partial class RewardScreen : Control
         var skipButton = GetNode<Button>("SkipButton");
         skipButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         skipButton.Pressed += OnSkipPressed;
+
+        // The first card, not Skip: taking a card is the point of the screen,
+        // and Skip is one Tab away. The CardViews are focusable because
+        // BuildCardChoices sets Interactive = false (see CardView.Interactive).
+        ScreenKeyboardNav.Attach(this,
+            () => GetNode<Control>("CardChoicesArea").GetChildren().OfType<CardView>().FirstOrDefault(),
+            OnSkipPressed);
     }
 
     // Real CardView instances (the same frame combat hands/deck-view use)

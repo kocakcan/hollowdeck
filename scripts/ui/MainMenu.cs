@@ -23,6 +23,11 @@ public partial class MainMenu : Control
             ApplyButtonChrome(button);
             button.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         }
+
+        // Resume if there is a run to resume, otherwise start one - the same
+        // button the mouse would go for first. No cancel action: this is the
+        // root screen, there is nothing behind it.
+        ScreenKeyboardNav.Attach(this, () => continueButton.Visible ? continueButton : startButton);
     }
 
     // Same sourced Fantasy UI Box nine-patch the End Turn button already

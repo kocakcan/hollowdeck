@@ -37,6 +37,28 @@ honours a `$GODOT` override, and the same binary path applies to every command b
 Save files live under Godot's user data directory (`~/Library/Application Support/Godot/app_userdata/Hollowdeck/`
 on macOS): `meta_progression.json` for cross-run unlocks, `run_save.json` for a run in progress.
 
+## Controls
+
+Everything is playable with the mouse or entirely with the keyboard; neither is a second-class
+path. Bindings are named `hd_*` actions in `project.godot`'s `[input]` section.
+
+**In combat**
+
+| Key | Does |
+| --- | --- |
+| `1`–`9`, `0` | Select the card in that hand slot (the badge on each card is its key) |
+| `←` `→` | Cycle the selection — or, once a card is aimed, cycle the target |
+| `Space` | Play the selected card. A single-target card aims first, so it's Space twice |
+| `Z` `X` `C` | Drink the potion in that belt slot, then aim it the same way |
+| `Enter` | End turn — and, at the end of a fight, Continue |
+| `Esc` | Cancel aiming (right-click does the same) |
+| `D` `Q` `W` `E` | Inspect the deck / draw / discard / exhaust pile; `Esc` closes |
+
+**Everywhere else** — `Tab` and the arrow keys move between controls, `Space`/`Enter` activates,
+`Esc` goes back. Only legal choices are reachable: unreachable map nodes and unaffordable shop
+offers are disabled and get skipped. Whatever the keyboard is on carries a bright gold ring (a
+choice card grows slightly instead).
+
 ## Repo layout
 
 ```
@@ -150,7 +172,7 @@ the seven hooks (extending `SimpleHookEffectRelic` to the other five hooks is on
 
 There's no test framework. Each `scenes/debug/*SmokeTest.tscn` runs assertions in `_Ready`,
 prints `PASS`/`FAIL` per check and a `<Name>: N passed, M failed` summary, then exits nonzero if
-anything failed. 16 suites, 587 checks:
+anything failed. 17 suites, 661 checks:
 
 ```bash
 tools/run-smoke-tests.sh                 # all of them; builds first, nonzero exit on any failure
@@ -172,11 +194,11 @@ gitignored, so a fresh checkout has no imported resources and every `ResourceLoa
 returns false — and afterwards re-runs `artgen generate` to check the committed art still matches
 the code that produces it.
 
-Run them after touching anything under `scripts/` or any `.tscn`. Two suites print expected
+Run them after touching anything under `scripts/` or any `.tscn`. Some suites print expected
 noise that is not a regression: `MetaProgressionSmokeTest` emits a JSON parse warning from its
-deliberate corrupt-save case, and `ScreenSmokeTest` / `Phase4ContentSmokeTest` each emit one
-`Parent node is busy adding/removing children` error from a test clicking a button that changes
-scene.
+deliberate corrupt-save case, and `ScreenSmokeTest` / `Phase4ContentSmokeTest` / `KeyboardSmokeTest`
+each emit one `Parent node is busy adding/removing children` error from a test clicking a button
+that changes scene.
 
 To look at a screen, render it — the harness instantiates the real `.tscn` with realistic data
 seeded and a fixed RNG seed, so shots are reproducible:

@@ -28,9 +28,21 @@ public partial class SettingsScreen : Control
         reduceMotionToggle.ButtonPressed = SettingsManager.Instance.ReduceMotion;
         reduceMotionToggle.Toggled += pressed => SettingsManager.Instance.SetReduceMotion(pressed);
 
+        foreach (var slider in new[] { volumeSlider, musicVolumeSlider, sfxVolumeSlider })
+        {
+            ChromeStyles.ApplyFocusableSliderStyle(slider);
+        }
+
         var backButton = GetNode<Button>("CenterContainer/VBoxContainer/BackButton");
         backButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         backButton.Pressed += OnBackPressed;
+
+        // Focus starts on the first slider, and Escape leaves - this screen
+        // had no keyboard exit at all. Note HSlider eats Left/Right to change
+        // its value, so moving *between* rows here is Up/Down (or Tab), which
+        // is Godot's default behaviour and the reason nothing here overrides
+        // the arrow keys.
+        ScreenKeyboardNav.Attach(this, () => volumeSlider, OnBackPressed);
     }
 
     private void OnBackPressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.MainMenu);

@@ -84,26 +84,30 @@ public partial class DeckViewKeybindListener : Node
 
     public override void _UnhandledKeyInput(InputEvent @event)
     {
-        if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
-
-        switch (key.Keycode)
+        // hd_pile_* from project.godot's [input] rather than literal keycodes.
+        // IsActionPressed already excludes echo, which is what the explicit
+        // Echo:false filter here used to do.
+        if (@event.IsActionPressed("hd_pile_deck"))
         {
-            case Key.D:
-                DeckViewButtons.OpenDeck(_screen);
-                GetViewport().SetInputAsHandled();
-                break;
-            case Key.Q when _includeCombatPiles:
-                DeckViewButtons.OpenPile(_screen, "Draw Pile", CombatManager.Instance!.Player.Piles.DrawPile);
-                GetViewport().SetInputAsHandled();
-                break;
-            case Key.W when _includeCombatPiles:
-                DeckViewButtons.OpenPile(_screen, "Discard Pile", CombatManager.Instance!.Player.Piles.Discard);
-                GetViewport().SetInputAsHandled();
-                break;
-            case Key.E when _includeCombatPiles:
-                DeckViewButtons.OpenPile(_screen, "Exhaust Pile", CombatManager.Instance!.Player.Piles.Exhaust);
-                GetViewport().SetInputAsHandled();
-                break;
+            DeckViewButtons.OpenDeck(_screen);
         }
+        else if (_includeCombatPiles && @event.IsActionPressed("hd_pile_draw"))
+        {
+            DeckViewButtons.OpenPile(_screen, "Draw Pile", CombatManager.Instance!.Player.Piles.DrawPile);
+        }
+        else if (_includeCombatPiles && @event.IsActionPressed("hd_pile_discard"))
+        {
+            DeckViewButtons.OpenPile(_screen, "Discard Pile", CombatManager.Instance!.Player.Piles.Discard);
+        }
+        else if (_includeCombatPiles && @event.IsActionPressed("hd_pile_exhaust"))
+        {
+            DeckViewButtons.OpenPile(_screen, "Exhaust Pile", CombatManager.Instance!.Player.Piles.Exhaust);
+        }
+        else
+        {
+            return;
+        }
+
+        GetViewport().SetInputAsHandled();
     }
 }

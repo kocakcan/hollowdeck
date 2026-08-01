@@ -90,6 +90,13 @@ public partial class PileViewPopup : Control
         closeButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         closeButton.Pressed += QueueFree;
         header.AddChild(closeButton);
+        // The popup is drawn over the screen but isn't modal, so without
+        // taking focus Tab would walk straight past it into the buttons
+        // underneath - which are still live, and on the map screen would move
+        // the player. Taking it here and handing it back in _ExitTree keeps
+        // the popup a genuine dead end for the keyboard.
+        _focusBeforeOpen = GetViewport().GuiGetFocusOwner();
+        closeButton.CallDeferred(Control.MethodName.GrabFocus);
 
         var scroll = new ScrollContainer
         {
@@ -146,10 +153,27 @@ public partial class PileViewPopup : Control
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventKey { Keycode: Key.Escape, Pressed: true })
+        // hd_cancel (Escape or right-click). This popup is a child of the
+        // screen root, and Godot walks children before the parent's own
+        // handler, so consuming the event here is also what stops
+        // CombatScreen's own hd_cancel branch from cancelling targeting
+        // behind an open popup.
+        if (@event.IsActionPressed("hd_cancel"))
         {
             GetViewport().SetInputAsHandled();
             QueueFree();
+        }
+    }
+
+    // Whatever had focus on the screen underneath, so dismissing the popup
+    // puts the player back where they were rather than nowhere.
+    private Control? _focusBeforeOpen;
+
+    public override void _ExitTree()
+    {
+        if (_focusBeforeOpen is { } previous && IsInstanceValid(previous) && previous.IsInsideTree())
+        {
+            previous.CallDeferred(Control.MethodName.GrabFocus);
         }
     }
 }

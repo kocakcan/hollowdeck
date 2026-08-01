@@ -488,46 +488,98 @@ public partial class CombatScreen : Control
         tween.TweenProperty(target, "modulate", original, 0.14);
     }
 
+    // One StringName per slot, built once. IsActionPressed takes a StringName,
+    // so composing "hd_card_" + i inside _UnhandledInput would allocate on
+    // every key press - and this runs for mouse motion too.
+    private static readonly StringName[] CardSlotActions =
+        Enumerable.Range(1, 10).Select(i => new StringName($"hd_card_{i}")).ToArray();
+
+    private static readonly StringName[] PotionSlotActions =
+        Enumerable.Range(1, RunState.MaxPotionSlots).Select(i => new StringName($"hd_potion_{i}")).ToArray();
+
+    // Named actions from project.godot's [input] rather than raw keycodes, so
+    // every binding lives in one place. InputEvent.IsActionPressed defaults
+    // allow_echo to false, which is what keeps key repeat from auto-firing
+    // card cycling - the reason DeckViewKeybindListener already filtered Echo.
+    // Every branch that consumes an event marks it handled, which the old
+    // keycode switch never did.
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true })
+        // hd_cancel carries right-click as well as Escape, so the two paths
+        // that used to be separate branches are one action now.
+        if (@event.IsActionPressed("hd_cancel"))
         {
             _combat.CancelTargeting();
             ClearArmedTarget();
+            GetViewport().SetInputAsHandled();
+            return;
         }
-        else if (@event is InputEventKey { Pressed: true } key)
+
+        // At CombatEnd the hand is inert and the only thing left to do is
+        // leave, so confirm *and* end-turn both press Continue - otherwise a
+        // fight played start to finish on the keyboard ends by reaching for
+        // the mouse for exactly one button. Handled here rather than by
+        // focusing the button, so _Ready's FocusModeEnum.None reasoning (and
+        // the arrow-key cycling it protects) is untouched. Returns without
+        // consuming anything else, which leaves the pile keys (a separate
+        // node, _UnhandledKeyInput) working for a post-fight deck look.
+        if (_combat.State == CombatState.CombatEnd)
         {
-            switch (key.Keycode)
+            if (@event.IsActionPressed("hd_confirm") || @event.IsActionPressed("hd_end_turn"))
             {
-                case Key.Escape:
-                    _combat.CancelTargeting();
-                    ClearArmedTarget();
-                    break;
-                case Key.Left:
-                    OnKeyboardCycle(-1);
-                    break;
-                case Key.Right:
-                    OnKeyboardCycle(1);
-                    break;
-                case Key.Space:
-                    OnKeyboardConfirm();
-                    break;
-                case Key.Enter:
-                case Key.KpEnter:
-                    OnEndTurnRequested();
-                    break;
-                case Key.Key1: OnKeyboardSelectByNumber(0); break;
-                case Key.Key2: OnKeyboardSelectByNumber(1); break;
-                case Key.Key3: OnKeyboardSelectByNumber(2); break;
-                case Key.Key4: OnKeyboardSelectByNumber(3); break;
-                case Key.Key5: OnKeyboardSelectByNumber(4); break;
-                case Key.Key6: OnKeyboardSelectByNumber(5); break;
-                case Key.Key7: OnKeyboardSelectByNumber(6); break;
-                case Key.Key8: OnKeyboardSelectByNumber(7); break;
-                case Key.Key9: OnKeyboardSelectByNumber(8); break;
-                case Key.Key0: OnKeyboardSelectByNumber(9); break;
+                // Marked handled BEFORE acting, unlike every other branch
+                // here: OnContinuePressed leaves through RunManager
+                // .ChangeScreen, and this node cannot be assumed to still be
+                // addressable on the other side of a scene change - GetViewport
+                // came back null and threw.
+                GetViewport().SetInputAsHandled();
+                AudioManager.Instance?.PlaySfx("ui_click");
+                OnContinuePressed();
             }
+            return;
         }
+
+        if (@event.IsActionPressed("hd_nav_left")) OnKeyboardCycle(-1);
+        else if (@event.IsActionPressed("hd_nav_right")) OnKeyboardCycle(1);
+        else if (@event.IsActionPressed("hd_confirm")) OnKeyboardConfirm();
+        else if (@event.IsActionPressed("hd_end_turn")) OnEndTurnRequested();
+        else if (!TryHandleSlotAction(@event)) return;
+
+        GetViewport().SetInputAsHandled();
+    }
+
+    // The card and potion belts are both "press the key matching the slot
+    // number", so they share one loop rather than a twenty-arm switch.
+    private bool TryHandleSlotAction(InputEvent @event)
+    {
+        for (int i = 0; i < CardSlotActions.Length; i++)
+        {
+            if (!@event.IsActionPressed(CardSlotActions[i])) continue;
+            OnKeyboardSelectByNumber(i);
+            return true;
+        }
+
+        for (int i = 0; i < PotionSlotActions.Length; i++)
+        {
+            if (!@event.IsActionPressed(PotionSlotActions[i])) continue;
+            OnPotionHotkey(i);
+            return true;
+        }
+
+        return false;
+    }
+
+    // Mirrors PotionView.OnPressed exactly, so the belt's mouse path and the
+    // Z/X/C keys converge on the same TryUsePotion call. A SingleEnemy potion
+    // returns false there and transitions to AwaitingTarget instead, which
+    // OnKeyboardCycle/OnKeyboardConfirm now aim the same way a card is aimed.
+    private void OnPotionHotkey(int slotIndex)
+    {
+        if (_combat.State != CombatState.PlayerTurn) return;
+        if (slotIndex >= RunState.Potions.Count) return;
+
+        AudioManager.Instance?.PlaySfx("ui_click");
+        _combat.TryUsePotion(RunState.Potions[slotIndex]);
     }
 
     // Shared by CycleCardSelection and OnKeyboardSelectByNumber - swaps the
@@ -589,6 +641,17 @@ public partial class CombatScreen : Control
 
     private void OnKeyboardCycle(int direction)
     {
+        // AwaitingTarget is the potion aiming sub-state (CombatManager
+        // .TryUsePotion): the potion is already committed, so there is no
+        // card to cycle - only the enemy it is about to hit. Without this
+        // arm, a keyboard player who drank a single-target potion could only
+        // ever cancel out of it.
+        if (_combat.State == CombatState.AwaitingTarget)
+        {
+            CycleEnemyTarget(direction);
+            return;
+        }
+
         if (_combat.State != CombatState.PlayerTurn) return;
         if (_armedCard is not null) CycleEnemyTarget(direction);
         else CycleCardSelection(direction);
@@ -605,14 +668,21 @@ public partial class CombatScreen : Control
 
     private void OnKeyboardConfirm()
     {
+        // The keyboard half of EnemyView's click-to-target, which is the only
+        // way a potion's AwaitingTarget ever resolved before. TryTargetEnemy
+        // drops back to PlayerTurn on its own; RefreshStateUi clears the glow
+        // from there.
+        if (_combat.State == CombatState.AwaitingTarget)
+        {
+            if (_keyboardTargetEnemy is { } potionTarget) _combat.TryTargetEnemy(potionTarget);
+            return;
+        }
+
         if (_combat.State != CombatState.PlayerTurn) return;
 
         if (_armedCard is { } armed)
         {
-            if (_keyboardTargetEnemy is { } target && _combat.TryPlayCard(armed, target))
-            {
-                AudioManager.Instance?.PlaySfx("card_play");
-            }
+            if (_keyboardTargetEnemy is { } target) PlaySelectedCard(armed, target);
             ClearArmedTarget();
             SelectCard(null);
             return;
@@ -628,11 +698,29 @@ public partial class CombatScreen : Control
             return;
         }
 
-        if (_combat.TryPlayCard(card))
-        {
-            AudioManager.Instance?.PlaySfx("card_play");
-        }
+        PlaySelectedCard(card, null);
         SelectCard(null);
+    }
+
+    // Routes the keyboard through the card's own view so it takes
+    // CardView.TryPlayFromHand - the same reparent-then-resolve-tween path a
+    // mouse drop takes. Calling CombatManager.TryPlayCard directly (what this
+    // used to do) left the node parented under the hand area, so RefreshHand
+    // saw it as gone-from-hand and flew it to the discard pile: a card played
+    // with Space animated as if it had been discarded.
+    //
+    // The direct call survives as a fallback for a card with no view on
+    // screen, which should not happen but must not mean an unplayable card.
+    private bool PlaySelectedCard(CardInstance card, EnemyCombatant? target)
+    {
+        if (_cardViews.TryGetValue(card, out var view) && IsInstanceValid(view))
+        {
+            return view.TryPlayFromHand(target);
+        }
+
+        if (!_combat.TryPlayCard(card, target)) return false;
+        AudioManager.Instance?.PlaySfx("card_play");
+        return true;
     }
 
     // Shared by the End Turn button's Pressed signal and the Enter/Kp Enter
@@ -1067,10 +1155,15 @@ public partial class CombatScreen : Control
 
         for (int i = 0; i < RunState.MaxPotionSlots; i++)
         {
+            // Slot index, not hand index: the belt is fixed-length, so slot 2
+            // is always the same key whether or not slots 0 and 1 are full.
+            var slotKey = ScreenKeyboardNav.KeyHint(PotionSlotActions[i]);
+
             if (i < RunState.Potions.Count)
             {
                 var potionView = _potionViewScene.Instantiate<PotionView>();
                 _potionBelt.AddChild(potionView);
+                potionView.SetHotkeySlot(i);
                 potionView.SetPotionInstance(RunState.Potions[i]);
                 continue;
             }
@@ -1078,7 +1171,7 @@ public partial class CombatScreen : Control
             var empty = new PanelContainer
             {
                 CustomMinimumSize = PotionView.SlotSize,
-                TooltipText = "Empty potion slot",
+                TooltipText = slotKey.Length > 0 ? $"Empty potion slot ({slotKey})" : "Empty potion slot",
                 MouseFilter = MouseFilterEnum.Stop,
             };
             empty.AddThemeStyleboxOverride("panel", ChromeStyles.SlotStyle(filled: false));
@@ -1098,6 +1191,24 @@ public partial class CombatScreen : Control
         {
             ClearArmedTarget();
             SelectCard(null);
+        }
+
+        if (_combat.State == CombatState.AwaitingTarget)
+        {
+            // Seed the potion's target so there is a glow to confirm the
+            // instant the belt is used, matching how OnKeyboardConfirm arms a
+            // single-enemy card on Enemies[0]. Mouse users just click past it.
+            if (_keyboardTargetEnemy is null && _combat.Enemies.Count > 0)
+            {
+                SetKeyboardTarget(_combat.Enemies[0]);
+            }
+        }
+        else if (_armedCard is null)
+        {
+            // Nothing armed and not aiming a potion means no target-lock glow
+            // should be on screen - covers the potion resolving, which returns
+            // to PlayerTurn without going through ClearArmedTarget.
+            SetKeyboardTarget(null);
         }
 
         bool nothingPlayable = isPlayerTurn &&

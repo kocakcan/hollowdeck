@@ -84,7 +84,27 @@ public partial class CardView : Panel
     // plain click instead - no position tracking, no target highlighting,
     // no TryPlayCard. Interactive=true's _GuiInput branch is untouched from
     // before this flag existed, so combat behavior is byte-for-byte the same.
-    public bool Interactive { get; set; } = true;
+    //
+    // It also decides whether the card joins Godot's focus navigation. A
+    // non-interactive card is a click-to-choose control on a screen that is
+    // navigated by focus (Reward, Shop, the pile popup), so it has to be
+    // focusable or the reward pick is mouse-only. A combat hand card must not
+    // be: CombatScreen drives the hand with its own arrow keys, and focus
+    // navigation would fight it - the same reason EnemyView and PotionView
+    // sit at FocusModeEnum.None. The backing field's initializer deliberately
+    // does not run this setter, so an untouched CardView keeps Panel's
+    // FocusModeEnum.None default.
+    private bool _interactive = true;
+    public bool Interactive
+    {
+        get => _interactive;
+        set
+        {
+            _interactive = value;
+            FocusMode = value ? FocusModeEnum.None : FocusModeEnum.All;
+        }
+    }
+
     public event Action<CardInstance>? Clicked;
 
     private Label _nameLabel = null!;
@@ -100,6 +120,9 @@ public partial class CardView : Panel
     private PanelContainer _hotkeyBadge = null!;
     private Label _hotkeyLabel = null!;
     private bool _dragging;
+    // Set once the card has resolved and is playing its exit flourish - see
+    // TryPlayFromHand.
+    private bool _leavingHand;
     private Vector2 _homePosition;
     private float _homeRotation;
     private int _restZIndex;
@@ -156,6 +179,41 @@ public partial class CardView : Panel
 
         MouseEntered += OnMouseEntered;
         MouseExited += OnMouseExited;
+        FocusEntered += OnFocusEntered;
+        FocusExited += OnFocusExited;
+    }
+
+    // How much a focused choice card grows. Border colour alone is not enough
+    // here: a Rare card's *resting* border is already RarityRareGlow, which is
+    // the same top-of-ramp gold FocusRing is, so on a reward screen offering a
+    // Rare the focused card and the Rare card looked identical. Size is the
+    // one channel nothing else on these cards uses, and it reuses the "the
+    // card you are on stands up" language combat's hover already speaks.
+    private static readonly Vector2 FocusScale = new(1.08f, 1.08f);
+
+    // Non-interactive cards get no hover visual at all (OnMouseEntered bails
+    // on !Interactive), so keyboard focus needs its own or a focused reward
+    // card is indistinguishable from the two beside it.
+    private void OnFocusEntered() => ApplyFocusFrame(true);
+
+    private void OnFocusExited() => ApplyFocusFrame(false);
+
+    private void ApplyFocusFrame(bool focused)
+    {
+        if (Interactive || CardInstance is null) return;
+
+        var def = CardInstance.Definition;
+        var style = ChromeStyles.CardFrameStyle(def.Type, def.Rarity, focused, CardUpgrade.IsUpgraded(def));
+        if (focused) style.BorderColor = UiTheme.Palette.FocusRing;
+        AddThemeStyleboxOverride("panel", style);
+
+        // Scale about the card's middle, not its top-left corner. RewardScreen
+        // sets this itself for its fan, but the shop and the pile popup lay
+        // their cards out in containers and never touch it.
+        PivotOffset = Size / 2f;
+        ZIndex = focused ? 10 : 0;
+        var tween = GetTree().CreateTween().SetTrans(UiTheme.Motion.EaseStandard);
+        tween.TweenProperty(this, "scale", focused ? FocusScale : Vector2.One, UiTheme.Motion.Fast);
     }
 
     public void SetCardInstance(CardInstance card)
@@ -184,6 +242,9 @@ public partial class CardView : Panel
         Modulate = affordable ? Colors.White : UnaffordableTint;
 
         AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(def.Type, def.Rarity, hovered: false, CardUpgrade.IsUpgraded(def)));
+        // Re-painting the frame above would otherwise drop the focus ring off
+        // a card that is currently focused (PileViewPopup re-sorts in place).
+        if (HasFocus()) ApplyFocusFrame(true);
 
         // A reused view (see CombatScreen's _cardViews dict) must not inherit
         // whatever enemy the card it *used* to show was being dragged onto.
@@ -440,10 +501,23 @@ public partial class CardView : Panel
     // card selection (CombatScreen's arrow-key nav), so a keyboard-selected
     // card reads identically to a mouse-hovered one with no separate visual
     // language to maintain.
+    //
+    // Plus one thing hover does not do: light the hotkey badge. This method is
+    // only ever called by CombatScreen's keyboard selection - a real mouse
+    // hover arrives on the mouse_entered signal instead - so the lit keycap is
+    // what tells the two apart. They can be true of *different* cards at the
+    // same time (rest the mouse anywhere while arrow-keying), and before this
+    // both rendered identically, so the selection appeared to jump to whatever
+    // the cursor happened to be over.
     public void SetHighlighted(bool on)
     {
         if (on) OnMouseEntered();
         else OnMouseExited();
+
+        _hotkeyBadge.AddThemeStyleboxOverride("panel",
+            on ? ChromeStyles.HotkeyBadgeSelectedStyle() : ChromeStyles.HotkeyBadgeStyle());
+        if (on) _hotkeyLabel.AddThemeColorOverride("font_color", PixelSpec.Ramp.N0);
+        else _hotkeyLabel.RemoveThemeColorOverride("font_color");
     }
 
     // Only combat hand cards get a hotkey badge (CombatScreen.RefreshHand
@@ -457,7 +531,7 @@ public partial class CardView : Panel
 
     private void OnMouseEntered()
     {
-        if (_dragging || !Interactive) return;
+        if (_dragging || !Interactive || _leavingHand) return;
         ZIndex = 100;
         var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
         tween.SetParallel(true);
@@ -469,7 +543,7 @@ public partial class CardView : Panel
 
     private void OnMouseExited()
     {
-        if (_dragging || !Interactive) return;
+        if (_dragging || !Interactive || _leavingHand) return;
         ZIndex = _restZIndex;
         var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
         tween.SetParallel(true);
@@ -537,7 +611,13 @@ public partial class CardView : Panel
     {
         if (!Interactive)
         {
-            if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false })
+            // ui_accept rather than hd_confirm: this is a stock focused
+            // control on a screen navigated by focus, so it should answer the
+            // same key as every Button beside it. Godot routes key events to
+            // the focused Control's _GuiInput, which is what makes this the
+            // right place for it rather than an _UnhandledInput on the screen.
+            bool released = @event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false };
+            if (released || @event.IsActionPressed("ui_accept"))
             {
                 GetViewport().SetInputAsHandled();
                 if (CardInstance is not null)
@@ -621,6 +701,22 @@ public partial class CardView : Panel
             target = FindEnemyViewUnderMouse()?.Combatant;
         }
 
+        TryPlayFromHand(target);
+    }
+
+    // The play half of OnReleased, shared with CombatScreen's keyboard path so
+    // Space and a mouse drop are the same operation. They were not: the
+    // keyboard called CombatManager.TryPlayCard directly, which left this node
+    // parented under the hand area, so RefreshHand tore it down and flew it to
+    // the discard counter with PlayExitTween - the *discarded* animation - and
+    // a card played with the keyboard never got the resolve flourish a
+    // dragged one did.
+    //
+    // Returns whether the card actually resolved.
+    public bool TryPlayFromHand(EnemyCombatant? target)
+    {
+        if (CardInstance is null || CombatManager.Instance is null) return false;
+
         // Reparent out of the hand area BEFORE calling TryPlayCard: if it
         // resolves, TryPlayCard fires HandChanged synchronously, and
         // CombatScreen's rebuild only tears down whatever is still parented
@@ -635,19 +731,24 @@ public partial class CardView : Panel
         screenRoot.AddChild(this);
         GlobalPosition = globalPosition;
 
-        bool resolved = CombatManager.Instance!.TryPlayCard(CardInstance, target);
-        if (resolved)
+        if (CombatManager.Instance.TryPlayCard(CardInstance, target))
         {
+            // Freezes the hover/selection visuals for the rest of this node's
+            // life. The card is mid-flight now, and both a real mouse-exit
+            // (it just teleported out from under the cursor) and
+            // CombatScreen's SelectCard(null) would otherwise start a
+            // competing scale tween against PlayResolveTween's.
+            _leavingHand = true;
             AudioManager.Instance?.PlaySfx("card_play");
             PlayResolveTween();
+            return true;
         }
-        else
-        {
-            screenRoot.RemoveChild(this);
-            handArea.AddChild(this);
-            Position = localPosition;
-            SnapHome();
-        }
+
+        screenRoot.RemoveChild(this);
+        handArea.AddChild(this);
+        Position = localPosition;
+        SnapHome();
+        return false;
     }
 
     private void PlayResolveTween()
