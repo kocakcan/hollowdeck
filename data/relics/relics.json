@@ -5,7 +5,7 @@
     "description": "At the start of combat, gain 8 Block.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnCombatStart",
-    "effect": { "action": "gain_block", "amount": 8, "scope": "Self" }
+    "effect": { "action": "gain_block", "amount": 8 }
   },
   {
     "id": "coiled_serpent",
@@ -13,7 +13,7 @@
     "description": "At the start of combat, gain 2 Strength.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnCombatStart",
-    "effect": { "action": "apply_status", "status": "Strength", "amount": 2, "scope": "Self" }
+    "effect": { "action": "apply_status", "status": "Strength", "amount": 2 }
   },
   {
     "id": "gamblers_deck",
@@ -21,7 +21,7 @@
     "description": "At the start of combat, draw 1 additional card.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnCombatStart",
-    "effect": { "action": "draw_cards", "amount": 1, "scope": "Self" }
+    "effect": { "action": "draw_cards", "amount": 1 }
   },
   {
     "id": "warded_bracer",
@@ -29,7 +29,7 @@
     "description": "At the start of each turn, gain 3 Block.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnTurnStart",
-    "effect": { "action": "gain_block", "amount": 3, "scope": "Self" }
+    "effect": { "action": "gain_block", "amount": 3 }
   },
   {
     "id": "focusing_lens",
@@ -37,84 +37,108 @@
     "description": "At the start of each turn, gain 1 Strength.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnTurnStart",
-    "effect": { "action": "apply_status", "status": "Strength", "amount": 1, "scope": "Self" }
+    "effect": { "action": "apply_status", "status": "Strength", "amount": 1 }
   },
   {
     "id": "frugal_satchel",
     "name": "Frugal Satchel",
     "description": "At the end of your turn, if you have 2 or more unspent Energy, gain 2 Block.",
-    "behaviorId": "frugal_satchel",
-    "params": { "amount": 2 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnTurnEnd",
+    "condition": { "minEnergy": 2 },
+    "effect": { "action": "gain_block", "amount": 2 }
   },
   {
     "id": "thorned_carapace",
     "name": "Thorned Carapace",
     "description": "Whenever you take damage, deal 2 damage back to the attacker.",
-    "behaviorId": "thorned_carapace",
-    "params": { "amount": 2 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnDamageTaken",
+    "target": "Attacker",
+    "effect": { "action": "deal_damage", "amount": 2 }
   },
   {
     "id": "bulwark_charm",
     "name": "Bulwark Charm",
     "description": "The first time you take damage each turn, gain 4 Block.",
-    "behaviorId": "bulwark_charm",
-    "params": { "amount": 4 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnDamageTaken",
+    "limit": { "oncePerTurn": true },
+    "effect": { "action": "gain_block", "amount": 4 }
   },
   {
     "id": "momentum_token",
     "name": "Momentum Token",
     "description": "Every 3rd card you play in a turn deals 4 damage to an enemy.",
-    "behaviorId": "momentum_token",
-    "params": { "amount": 4 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCardPlayed",
+    "target": "FirstEnemy",
+    "limit": { "everyNth": 3 },
+    "effect": { "action": "deal_damage", "amount": 4 }
   },
   {
     "id": "skirmishers_sash",
     "name": "Skirmisher's Sash",
     "description": "Whenever you play a Skill card, gain 1 Block.",
-    "behaviorId": "skirmishers_sash",
-    "params": { "amount": 1 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCardPlayed",
+    "condition": { "cardType": "Skill" },
+    "effect": { "action": "gain_block", "amount": 1 }
   },
   {
     "id": "ledger_of_ruin",
     "name": "Ledger of Ruin",
     "description": "The first Attack card you play each combat grants 1 Strength for the rest of the fight.",
-    "behaviorId": "ledger_of_ruin",
-    "params": { "amount": 1 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCardPlayed",
+    "condition": { "cardType": "Attack" },
+    "limit": { "oncePerCombat": true },
+    "effect": { "action": "apply_status", "status": "Strength", "amount": 1 }
   },
   {
     "id": "scavengers_charm",
     "name": "Scavenger's Charm",
     "description": "Winning a fight with more than half your max HP grants 5 bonus gold.",
-    "behaviorId": "scavengers_charm",
-    "params": { "amount": 5 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCombatEnd",
+    "condition": { "outcome": "Win", "minHpPercent": 50 },
+    "effect": { "action": "gain_gold", "amount": 5 }
   },
   {
     "id": "second_wind",
     "name": "Second Wind",
     "description": "Winning a fight heals 6 HP.",
-    "behaviorId": "second_wind",
-    "params": { "amount": 6 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCombatEnd",
+    "condition": { "outcome": "Win" },
+    "effect": { "action": "heal", "amount": 6 }
   },
   {
     "id": "vampire_fang",
     "name": "Vampire Fang",
     "description": "Whenever you deal damage, heal 1 HP.",
-    "behaviorId": "vampire_fang",
-    "params": { "amount": 1 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnDamageDealt",
+    "effect": { "action": "heal", "amount": 1 }
   },
   {
     "id": "toxic_fang",
     "name": "Toxic Fang",
     "description": "Whenever you play an Attack card, apply 1 Poison to a random enemy.",
-    "behaviorId": "toxic_fang",
-    "params": { "amount": 1 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCardPlayed",
+    "target": "RandomEnemy",
+    "condition": { "cardType": "Attack" },
+    "effect": { "action": "apply_status", "status": "Poison", "amount": 1 }
   },
   {
     "id": "vengeful_spirit",
     "name": "Vengeful Spirit",
     "description": "Whenever a hit you deal kills an enemy, heal 3 HP.",
-    "behaviorId": "vengeful_spirit",
-    "params": { "amount": 3 }
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnDamageDealt",
+    "condition": { "targetKilled": true },
+    "effect": { "action": "heal", "amount": 3 }
   },
   {
     "id": "sunken_idol",
@@ -122,7 +146,7 @@
     "description": "At the start of combat, heal 5 HP.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnCombatStart",
-    "effect": { "action": "heal", "amount": 5, "scope": "Self" }
+    "effect": { "action": "heal", "amount": 5 }
   },
   {
     "id": "iron_resolve",
@@ -130,7 +154,7 @@
     "description": "At the start of combat, gain 12 Block.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnCombatStart",
-    "effect": { "action": "gain_block", "amount": 12, "scope": "Self" }
+    "effect": { "action": "gain_block", "amount": 12 }
   },
   {
     "id": "cracked_hourglass",
@@ -138,7 +162,7 @@
     "description": "At the start of combat, gain 1 additional Energy.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnCombatStart",
-    "effect": { "action": "gain_energy", "amount": 1, "scope": "Self" }
+    "effect": { "action": "gain_energy", "amount": 1 }
   },
   {
     "id": "battle_drum",
@@ -146,7 +170,7 @@
     "description": "At the start of each turn, draw 1 additional card.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnTurnStart",
-    "effect": { "action": "draw_cards", "amount": 1, "scope": "Self" }
+    "effect": { "action": "draw_cards", "amount": 1 }
   },
   {
     "id": "clockwork_gear",
@@ -154,7 +178,7 @@
     "description": "At the start of each turn, gain 1 additional Energy.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnTurnStart",
-    "effect": { "action": "gain_energy", "amount": 1, "scope": "Self" }
+    "effect": { "action": "gain_energy", "amount": 1 }
   },
   {
     "id": "restless_grimoire",
@@ -162,6 +186,51 @@
     "description": "At the start of each turn, heal 2 HP.",
     "behaviorId": "simple_hook_effect",
     "hook": "OnTurnStart",
-    "effect": { "action": "heal", "amount": 2, "scope": "Self" }
+    "effect": { "action": "heal", "amount": 2 }
+  },
+  {
+    "id": "ossuary_bell",
+    "name": "Ossuary Bell",
+    "description": "At the end of your turn, apply 1 Poison to ALL enemies.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnTurnEnd",
+    "target": "AllEnemies",
+    "effect": { "action": "apply_status", "status": "Poison", "amount": 1 }
+  },
+  {
+    "id": "conduit_sigil",
+    "name": "Conduit Sigil",
+    "description": "Whenever you play a Power card, gain 1 Energy.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnCardPlayed",
+    "condition": { "cardType": "Power" },
+    "effect": { "action": "gain_energy", "amount": 1 }
+  },
+  {
+    "id": "rusted_portcullis",
+    "name": "Rusted Portcullis",
+    "description": "The first time you take damage each combat, gain 10 Block.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnDamageTaken",
+    "limit": { "oncePerCombat": true },
+    "effect": { "action": "gain_block", "amount": 10 }
+  },
+  {
+    "id": "palsy_shackle",
+    "name": "Palsy Shackle",
+    "description": "Whenever you take damage, apply 1 Weak to the attacker.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnDamageTaken",
+    "target": "Attacker",
+    "effect": { "action": "apply_status", "status": "Weak", "amount": 1 }
+  },
+  {
+    "id": "reapers_tally",
+    "name": "Reaper's Tally",
+    "description": "Whenever a hit you deal kills an enemy, gain 1 Strength for the rest of the fight.",
+    "behaviorId": "simple_hook_effect",
+    "hook": "OnDamageDealt",
+    "condition": { "targetKilled": true },
+    "effect": { "action": "apply_status", "status": "Strength", "amount": 1 }
   }
 ]

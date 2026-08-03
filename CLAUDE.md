@@ -138,12 +138,12 @@ and cosmetic jitter can never desync a deterministic run.
 
 An earlier shard *shop* was removed — don't reintroduce shard-purchase language.
 
-Content stands at **58 cards** (24 Common / 23 Uncommon / 11 Rare), **15 events**, 22 relics, 12
-potions, 24 enemies, 3 acts. Nine statuses, nine effect actions, fifteen event outcome keys.
+Content stands at **58 cards** (24 Common / 23 Uncommon / 11 Rare), **15 events**, 27 relics, 12
+potions, 24 enemies, 3 acts. Nine statuses, ten effect actions, fifteen event outcome keys.
 
 `ROADMAP.md` tracks what's genuinely still open (packaged export, the rest of the way to 80–120
-cards, more enemies per act, the remaining five relic hooks, a balance pass over the three-act
-curve). Don't treat this section as a to-do list.
+cards, more enemies per act, a balance pass over the three-act curve). Don't treat this section as
+a to-do list.
 
 ## Key files
 
@@ -160,8 +160,10 @@ curve). Don't treat this section as a to-do list.
 - `scripts/combat/CombatManager.cs` — turn loop, intent telegraphing, targeting sub-state
 - `scripts/effects/EffectRegistry.cs` + `IEffect.cs` — the composable effect system every
   card/relic/potion/enemy-move definition keys into
-- `scripts/relics/RelicBehavior.cs` — the 7 relic hooks; `SimpleHookEffectRelic.cs` is the
-  data-only path (currently `OnCombatStart`/`OnTurnStart` only)
+- `scripts/relics/RelicBehavior.cs` — the 7 relic hooks; `SimpleHookEffectRelic.cs` drives all 27
+  relics off all 7, using the `target`/`condition`/`limit` vocabulary in
+  `scripts/data/RelicTrigger.cs`. Subclassing `RelicBehavior` is the escape hatch and nothing
+  currently uses it — `RelicRegistry` has one factory
 - `scripts/events/EventOutcomeRegistry.cs` — the 15 event outcome keys. Thirteen resolve
   instantly; two (`remove_chosen_card`, `upgrade_chosen_card`) implement `ICardPickerOutcome` and
   come back from `Begin()` as *pending*, for `EventScreen` to open a card grid against. A picker

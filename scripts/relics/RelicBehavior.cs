@@ -6,11 +6,18 @@ using Hollowdeck.Run;
 
 namespace Hollowdeck.Relics;
 
-// Every relic implements this. Hooks default to no-ops so a relic only
-// overrides what it actually cares about. Unlike IEffect (stateless, shared
-// singleton instances), each RelicInstance gets its OWN RelicBehavior object
-// via RelicRegistry's factory, since several relics below hold per-instance
-// counters/flags.
+// The seven hooks a relic can fire on. Hooks default to no-ops so a subclass
+// only overrides what it cares about.
+//
+// Unlike IEffect (stateless, shared singleton instances), each RelicInstance
+// gets its OWN RelicBehavior object via RelicRegistry's factory, because a
+// relic's firing limits are per-instance state ("once per combat" has to
+// remember).
+//
+// Subclassing this is the escape hatch, not the normal path - every relic in
+// the game is a data row driven by SimpleHookEffectRelic, and nothing needs a
+// bespoke class today. It stays for the same reason IScriptedEffect does: to
+// prove the seam exists for the mechanic that genuinely doesn't decompose.
 public abstract class RelicBehavior
 {
     protected RelicDefinition Definition { get; }
@@ -19,8 +26,6 @@ public abstract class RelicBehavior
     {
         Definition = definition;
     }
-
-    protected int Param(string key, int fallback = 0) => Definition.Params.GetValueOrDefault(key, fallback);
 
     protected void Apply(RelicContext ctx, EffectSpec spec, List<Combatant> targets)
     {

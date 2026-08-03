@@ -28,9 +28,9 @@ public partial class MetaProgressionManager : Node
     public static MetaProgressionManager Instance { get; private set; } = null!;
 
     // The entire balance surface of the progression system. Everything NOT
-    // listed here is available from the first run - "light gating": 20 of
-    // the 30 cards (including the strike/defend/bash starters) plus 18 of
-    // the 22 relics need no unlocking at all.
+    // listed here is available from the first run - "light gating": 48 of
+    // the 58 cards (including the strike/defend/bash starters) plus 23 of
+    // the 27 relics need no unlocking at all.
     public static readonly UnlockEntry[] UnlockTrack =
     {
         new(150, UnlockKind.Card, "whirlwind"),

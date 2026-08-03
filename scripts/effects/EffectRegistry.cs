@@ -18,6 +18,7 @@ public static class EffectRegistry
         ["lose_hp"] = new LoseHpEffect(),
         ["discard_cards"] = new DiscardCardsEffect(),
         ["exhaust_hand"] = new ExhaustHandEffect(),
+        ["gain_gold"] = new GainGoldEffect(),
     };
 
     // Single dispatch point for gameplay SFX - every card/potion/enemy-move

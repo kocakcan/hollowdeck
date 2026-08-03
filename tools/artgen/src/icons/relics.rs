@@ -1,4 +1,4 @@
-//! The twenty-two relics.
+//! The twenty-seven relics.
 //!
 //! Unlike the potions these are *objects*, not variations on one container.
 //! The relic row already frames each one in a `ChromeStyles.SlotStyle` bezel,
@@ -23,6 +23,7 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "relics", name: "bulwark_charm", draw: bulwark_charm },
         Icon { category: "relics", name: "clockwork_gear", draw: clockwork_gear },
         Icon { category: "relics", name: "coiled_serpent", draw: coiled_serpent },
+        Icon { category: "relics", name: "conduit_sigil", draw: conduit_sigil },
         Icon { category: "relics", name: "cracked_hourglass", draw: cracked_hourglass },
         Icon { category: "relics", name: "focusing_lens", draw: focusing_lens },
         Icon { category: "relics", name: "frugal_satchel", draw: frugal_satchel },
@@ -30,7 +31,11 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "relics", name: "iron_resolve", draw: iron_resolve },
         Icon { category: "relics", name: "ledger_of_ruin", draw: ledger_of_ruin },
         Icon { category: "relics", name: "momentum_token", draw: momentum_token },
+        Icon { category: "relics", name: "ossuary_bell", draw: ossuary_bell },
+        Icon { category: "relics", name: "palsy_shackle", draw: palsy_shackle },
+        Icon { category: "relics", name: "reapers_tally", draw: reapers_tally },
         Icon { category: "relics", name: "restless_grimoire", draw: restless_grimoire },
+        Icon { category: "relics", name: "rusted_portcullis", draw: rusted_portcullis },
         Icon { category: "relics", name: "scavengers_charm", draw: scavengers_charm },
         Icon { category: "relics", name: "second_wind", draw: second_wind },
         Icon { category: "relics", name: "skirmishers_sash", draw: skirmishers_sash },
@@ -113,6 +118,22 @@ fn coiled_serpent() -> Canvas {
     canvas.set(21, 6, N0);
     canvas.set(25, 6, N0);
     canvas.line(27, 10, 30, 12, R4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Energy back whenever you play a Power — a bound sigil, and the only flat
+/// glyph in a set otherwise made of objects. The bolt is gold because that is
+/// what Energy is everywhere else here (`clockwork_gear`, `cracked_hourglass`);
+/// the ward around it is cold, so the two channels never merge into one blob.
+fn conduit_sigil() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.poly(&[(16, 2), (30, 16), (16, 30), (2, 16)], B1);
+    canvas.poly(&[(16, 5), (27, 16), (16, 27), (5, 16)], B2);
+    canvas.poly(&[(16, 8), (24, 16), (16, 24), (8, 16)], N1);
+    canvas.poly(&[(19, 8), (13, 17), (16, 17), (12, 25), (21, 14), (17, 14)], G4);
+    canvas.line(16, 2, 2, 16, B4);
+    canvas.line(16, 2, 30, 16, B4);
     finish(&mut canvas);
     canvas
 }
@@ -227,6 +248,66 @@ fn momentum_token() -> Canvas {
     canvas
 }
 
+/// Poison to every enemy at the end of your turn — one thing rung over the
+/// whole room, which is what "ALL enemies" has to read as. The mouth flares
+/// straight: `vengeful_spirit` is this silhouette with a ragged hem, and its
+/// own comment says the hem is the only thing keeping it a ghost.
+fn ossuary_bell() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.ring(16, 5, 3, 2, G2);
+    canvas.poly(&[(12, 7), (20, 7), (25, 21), (7, 21)], N6);
+    canvas.poly(&[(14, 9), (18, 9), (20, 21), (12, 21)], N7);
+    canvas.rect(6, 21, 21, 3, N5);
+    canvas.hline(6, 23, 21, N4);
+    // Clapper tinted with what the bell actually delivers. It overlaps the
+    // lip rather than hanging clear of it - a disc floating below the mouth
+    // gets its own N0 outline from finish() and stops being part of the bell.
+    canvas.vline(16, 20, 5, N4);
+    canvas.disc(16, 26, 3, V2);
+    canvas.disc(16, 26, 1, V4);
+    sparkle(&mut canvas, 4, 13, 3, V3);
+    sparkle(&mut canvas, 27, 13, 3, V3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Weak to whatever hits you. An OPEN cuff with the chain snapped off it —
+/// closing the ring would make it a bracelet, and the set already has enough
+/// jewellery. Iron in the N ramp, the hex in purple, so which half is the
+/// mechanism and which is the curse stays legible at 1x.
+fn palsy_shackle() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.ring(13, 19, 11, 4, N5);
+    canvas.ring(13, 19, 9, 1, N6);
+    canvas.erase_poly(&[(18, 9), (30, 9), (30, 20), (18, 20)]);
+    canvas.ring(22, 10, 4, 2, N5);
+    canvas.ring(27, 5, 3, 2, N4);
+    sparkle(&mut canvas, 13, 19, 5, P4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Strength for every kill — notches cut into a bone, so the count *is* the
+/// icon. The fourth stroke crosses the other three, which is the whole
+/// difference between marks that read as counting and marks that read as
+/// hatching.
+fn reapers_tally() -> Canvas {
+    let mut canvas = new_icon();
+    for (x, y) in [(11, 7), (21, 7), (11, 25), (21, 25)] {
+        canvas.disc(x, y, 5, N7);
+    }
+    canvas.rect(12, 7, 8, 18, N7);
+    canvas.rect(12, 7, 2, 18, N8);
+    // N4, not N2: a notch in near-black is indistinguishable from finish()'s
+    // outline once the icon is drawn at 1x, so the cuts read as holes.
+    for y in [11, 15, 19] {
+        canvas.rect(12, y, 8, 2, N4);
+    }
+    canvas.thick_line(9, 23, 23, 8, 2, G4);
+    finish(&mut canvas);
+    canvas
+}
+
 /// Heals every turn on its own — restless, so it is the open book.
 fn restless_grimoire() -> Canvas {
     let mut canvas = new_icon();
@@ -236,6 +317,27 @@ fn restless_grimoire() -> Canvas {
     canvas.poly(&[(27, 12), (18, 14), (18, 25), (27, 23)], N7);
     canvas.rect(15, 13, 2, 14, P1);
     sparkle(&mut canvas, 16, 6, 4, P4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Block the first time you are hit each combat. Deliberately NOT a shield:
+/// `vulnerable` is already a cracked shield and `bulwark_charm` an intact one
+/// on a cord, so a third would say nothing. A portcullis drops once and stays
+/// down, which is the once-per-combat limit drawn rather than described.
+fn rusted_portcullis() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.rect(3, 3, 26, 4, N5);
+    canvas.hline(3, 3, 26, N6);
+    for x in [5, 11, 17, 23] {
+        canvas.rect(x, 7, 4, 17, E1);
+    }
+    canvas.rect(3, 11, 26, 2, E2);
+    canvas.rect(3, 18, 26, 2, E2);
+    // The spiked feet are what separate a portcullis from a window grille.
+    for x in [5, 11, 17, 23] {
+        canvas.poly(&[(x, 24), (x + 4, 24), (x + 2, 29)], E2);
+    }
     finish(&mut canvas);
     canvas
 }
