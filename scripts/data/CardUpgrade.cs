@@ -62,10 +62,17 @@ public static class CardUpgrade
         // upgrades; a self-targeted status here would be a self-debuff
         // (none exist in the current data, but this stays correct if one
         // ever gets added) and must never be scaled up.
+        //
+        // Every status has to be named here explicitly, and the failure mode
+        // of forgetting one is silent: the card upgrades to a "+" that reads
+        // identically and plays identically. Metallicize/Ritual/Regen are the
+        // per-turn grants, so scaling them is the strongest upgrade in the
+        // game - which is correct, they are all Powers.
         return effect.Scope switch
         {
-            EffectScope.Target => effect.Status is "Vulnerable" or "Weak" or "Poison",
-            EffectScope.Self => effect.Status == "Strength",
+            EffectScope.Target => effect.Status is "Vulnerable" or "Weak" or "Poison" or "Frail",
+            EffectScope.Self => effect.Status is "Strength" or "Dexterity"
+                or "Metallicize" or "Ritual" or "Regen",
             _ => false,
         };
     }

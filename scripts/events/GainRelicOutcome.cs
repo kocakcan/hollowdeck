@@ -8,7 +8,7 @@ public class GainRelicOutcome : IEventOutcome
 {
     // Same unowned + unlocked filter TreasureScreen/ShopScreen already
     // apply; empty-pool override mirrors TreasureScreen's own fallback.
-    public string? Execute(EventChoice choice)
+    public string? Execute(EventOutcomeSpec spec)
     {
         var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
         var available = RelicDatabase.All

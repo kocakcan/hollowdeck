@@ -6,9 +6,9 @@ namespace Hollowdeck.Events;
 
 public class HealOutcome : IEventOutcome
 {
-    public string? Execute(EventChoice choice)
+    public string? Execute(EventOutcomeSpec spec)
     {
-        RunState.PlayerCurrentHp = Mathf.Min(RunState.PlayerMaxHp, RunState.PlayerCurrentHp + choice.Amount);
+        RunState.PlayerCurrentHp = Mathf.Min(RunState.PlayerMaxHp, RunState.PlayerCurrentHp + spec.Amount);
         return null;
     }
 }

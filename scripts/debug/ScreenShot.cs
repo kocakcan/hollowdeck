@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
+using Hollowdeck.Events;
 using Hollowdeck.Map;
 using Hollowdeck.Run;
 using Hollowdeck.UI;
@@ -103,6 +104,7 @@ public partial class ScreenShot : Node
         ["restupgrade"] = new("res://scenes/RestScreen.tscn", SeedRestUpgrade, OpenRestUpgrade),
         ["treasure"] = new("res://scenes/TreasureScreen.tscn", SeedTreasure),
         ["event"] = new("res://scenes/EventScreen.tscn", SeedEvent),
+        ["eventpicker"] = new("res://scenes/EventScreen.tscn", SeedEventPicker, OpenEventPicker),
         ["unlocks"] = new("res://scenes/MetaProgressionScreen.tscn", SeedUnlocks),
         ["runend"] = new("res://scenes/RunEndScreen.tscn", SeedRunEnd),
         ["mainmenu"] = new("res://scenes/MainMenu.tscn", SeedNothing),
@@ -365,6 +367,59 @@ public partial class ScreenShot : Node
     private static void SeedTreasure() => RunState.Relics = new List<RelicInstance>();
 
     private static void SeedEvent() { }
+
+    // The card-picker half of EventScreen, the same idea `restupgrade` covers
+    // for the rest site. Seven cards so the grid wraps to a second row rather
+    // than showing one tidy line - wrapping is where a picker's layout breaks
+    // first, which is exactly the lesson `restupgrade` was added for.
+    //
+    // EventScreen rolls its own event off RngStreams.Shop with no way to
+    // inject one, and the harness's own FixtureSeed happens to land on an
+    // event with no picker - so this searches for a seed that does land on
+    // one, then re-seeds to it. A search rather than a magic number because
+    // authoring one more event shifts every index, and a hardcoded seed would
+    // start quietly shooting the wrong screen instead of failing.
+    private static void SeedEventPicker()
+    {
+        RunState.Deck = CardDatabase.All.Take(7).ToList();
+        RunState.Gold = 129;
+
+        var events = EventDatabase.All.ToList();
+        for (int seed = 0; seed < 500; seed++)
+        {
+            RngStreams.Init(seed);
+            var rolled = events[RngStreams.Shop.Next(events.Count)];
+            if (rolled.Choices.Any(c => c.Specs.Any(s => EventOutcomeRegistry.PickerFor(s) is not null)))
+            {
+                RngStreams.Init(seed); // Rewind the draw the check just consumed.
+                return;
+            }
+        }
+
+        GD.PrintErr("ScreenShot: no seed in 500 rolled an event with a card picker.");
+    }
+
+    // EventScreen rolls its own event in _Ready and takes no injected one, so
+    // this presses whichever choice on the rolled event carries a picker. If
+    // the seeded RNG rolls an event with none, nothing is pressed and the shot
+    // is just the plain event screen - which is why the fixture prints rather
+    // than failing silently.
+    private static void OpenEventPicker(Node screen)
+    {
+        var title = screen.GetNode<Label>("CenterContainer/VBoxContainer/TitleLabel").Text;
+        var definition = EventDatabase.All.FirstOrDefault(e => e.Title == title);
+        int index = definition?.Choices.FindIndex(
+            c => c.Specs.Any(s => EventOutcomeRegistry.PickerFor(s) is not null)) ?? -1;
+
+        if (index < 0)
+        {
+            GD.Print($"ScreenShot: '{title}' has no picker choice; shooting the plain event instead.");
+            return;
+        }
+
+        screen.GetNode<VBoxContainer>("CenterContainer/VBoxContainer/ChoicesList")
+            .GetChild<Button>(index).EmitSignal(Button.SignalName.Pressed);
+    }
 
     private static void SeedUnlocks() { }
 

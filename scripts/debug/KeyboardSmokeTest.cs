@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
+using Hollowdeck.Events;
 using Hollowdeck.Run;
 using Hollowdeck.UI;
 
@@ -60,6 +61,7 @@ public partial class KeyboardSmokeTest : Node
         TestInputMapLayer();
         TestFocusModeSplit();
         await TestEveryNonCombatScreenTakesFocus(tree);
+        await TestEventPickerTakesFocus(tree);
         await TestCombatKeyboard(tree);
 
         GD.Print($"KeyboardSmokeTest: {_pass} passed, {_fail} failed");
@@ -247,6 +249,77 @@ public partial class KeyboardSmokeTest : Node
             instance.QueueFree();
             await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         }
+    }
+
+    // An event's card picker is the one place a non-combat screen swaps its
+    // whole set of controls out mid-visit: the choice button that was pressed
+    // is freed, and the grid that replaces it is built in code. That is
+    // exactly the moment a screen is left with no focus owner, so it gets its
+    // own check rather than riding on the on-load sweep above.
+    private async Task TestEventPickerTakesFocus(SceneTree tree)
+    {
+        using var saveGuard = RunSaveGuard.Protect();
+        using var cutGuard = HardCutGuard.Protect();
+
+        var packed = GD.Load<PackedScene>("res://scenes/EventScreen.tscn");
+
+        // EventScreen rolls its own event in _Ready, so instantiate until one
+        // carrying a picker comes up - the same approach EventSmokeTest takes,
+        // and it terminates for the same reason (RngStreams.Shop advances).
+        for (int attempt = 0; attempt < 80; attempt++)
+        {
+            RunState.Gold = 0;
+            RunState.PlayerMaxHp = 50;
+            RunState.PlayerCurrentHp = 50;
+            RunState.Relics = new List<RelicInstance>();
+            RunState.Potions = new List<PotionInstance>();
+            RunState.Deck = new List<CardDefinition>
+            {
+                CardDatabase.Get("strike"), CardDatabase.Get("defend"), CardDatabase.Get("bash"),
+            };
+
+            var instance = packed.Instantiate();
+            AddChild(instance);
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+            var title = instance.GetNode<Label>("CenterContainer/VBoxContainer/TitleLabel").Text;
+            var definition = EventDatabase.All.FirstOrDefault(e => e.Title == title);
+            int pickerChoice = definition?.Choices.FindIndex(
+                c => c.Specs.Any(s => EventOutcomeRegistry.PickerFor(s) is not null)) ?? -1;
+
+            if (pickerChoice < 0)
+            {
+                instance.QueueFree();
+                await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+                continue;
+            }
+
+            var choicesList = instance.GetNode<VBoxContainer>("CenterContainer/VBoxContainer/ChoicesList");
+            var pickerList = instance.GetNode<GridContainer>(
+                "PickerCenterContainer/PickerVBox/ScrollContainer/PickerList");
+
+            choicesList.GetChild<Button>(pickerChoice).EmitSignal(Button.SignalName.Pressed);
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+            var focused = GetViewport().GuiGetFocusOwner();
+            var pickerButtons = pickerList.GetChildren()
+                .SelectMany(c => c.GetChildren()).OfType<Button>().ToList();
+
+            Check("event_picker_has_a_focus_owner", focused is not null,
+                "nothing focused - the grid opened and the keyboard had nowhere to go");
+            Check("event_picker_focuses_one_of_its_card_buttons",
+                focused is Button button && pickerButtons.Contains(button),
+                $"focus landed on '{focused?.Name}' ({focused?.GetType().Name})");
+
+            instance.QueueFree();
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            return;
+        }
+
+        Check("event_screen_rolls_a_picker_event_within_80_attempts", false,
+            "no picker event rolled - are any still authored?");
     }
 
     // --- 4. combat's own handler ------------------------------------------

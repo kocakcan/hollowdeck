@@ -330,14 +330,34 @@ Demoted, not dropped. Still genuinely open:
   (2 energy, Rare, 2 Strength a turn, compounding). `EffectDescriptionFormatter` also stopped
   special-casing Strength by name for its "Gain" wording — it now reads scope, so any self-status
   says "Gain N X" instead of the "Apply 3 Metallicize" a self-targeted card would have printed.
-- **Cards 33 → 80–120**, and more enemies per act (24 today is ~4 normal encounters' variety each).
+- ✅ **A first content pass: cards 33 → 58, events 5 → 15.** Vocabulary landed first, because 33
+  cards out of 7 effect actions was already near-saturated and another batch built from only those
+  would have been numerically distinct and mechanically identical to what shipped.
+  - **Three statuses**, each with cards that use them rather than speculatively (the pattern the
+    bullet below asks for). `Dexterity`/`Frail` are `Strength`/`Weak` applied to Block, via a new
+    `BlockMath` mirroring `DamageMath`; `Regen` joins `Metallicize`/`Ritual` as the third
+    turn-start grant, which is what makes it authorable as a Power. Roster is now nine.
+  - **Two effects**, `discard_cards` and `exhaust_hand` — the cost and the payoff that let a card
+    overshoot its energy value. Nine actions now.
+  - **Seven event outcome keys** (15 total), and `EventChoice` gained a compound `outcomes` list
+    plus a `gamble` with `alternatives`. Compound choices are what let one option be "gain a
+    relic, lose 10 max HP" — a cost attached to a reward, which is most of what makes an event a
+    decision rather than a free pick.
+  - **Events can ask which card.** `ICardPickerOutcome` + a shared `scripts/ui/CardPicker.cs`
+    extracted from the rest site's Smith picker, so `remove_chosen_card` is the only deck-thinning
+    in the game and the rest site's grid and the event's are one component.
+  - Caught by screenshotting rather than by a test, then pinned as one: the picker and the event's
+    own column are both full-rect transparent `CenterContainer`s, so showing one without hiding
+    the other interleaves the event's text through the gaps in the card grid.
+- **Cards 58 → 80–120**, and more enemies per act (24 today is ~4 normal encounters' variety each).
 - **Balance the three-act curve.** Authored and smoke-tested but never actually played: enemies
   scale ~1.4x per act against a 50 HP start with +8 max HP and 30% heal per act cleared. Act III
   against a deck with only ~20 card rewards is the open question. Unlock-track thresholds were
   scaled to one-act runs and now fill three times faster.
-- **Wider status roster** — six today: `Vulnerable`, `Weak`, `Strength`, `Poison`, plus
-  `Metallicize` and `Ritual` from the Power hook above. Keep widening it alongside cards that use
-  the new statuses, not speculatively — those two landed with two Powers, which is the pattern.
+- **Wider status roster** — nine today: `Vulnerable`, `Weak`, `Strength`, `Poison`, `Metallicize`,
+  `Ritual`, plus `Dexterity`, `Frail` and `Regen` from the content pass above. Keep widening it
+  alongside cards that use the new statuses, not speculatively — every one of those landed with
+  the cards that grant it, which is the pattern.
 - **Close the relic-hook gap.** `SimpleHookEffectRelic` covers 2 of the 7 hooks `RelicBehavior`
   defines. Extending it to the other five makes future simple relics data rows instead of classes.
 - ✅ **Input actions, and full keyboard support.** `project.godot` now has an `[input]` section:

@@ -5,9 +5,9 @@ namespace Hollowdeck.Events;
 
 public class GainGoldOutcome : IEventOutcome
 {
-    public string? Execute(EventChoice choice)
+    public string? Execute(EventOutcomeSpec spec)
     {
-        RunState.Gold += choice.Amount;
+        RunState.Gold += spec.Amount;
         return null;
     }
 }

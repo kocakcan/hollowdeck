@@ -1,7 +1,7 @@
 using System.Linq;
 using Godot;
 using Hollowdeck.Data;
-using Hollowdeck.Effects;
+using Hollowdeck.Events;
 using Hollowdeck.Map;
 using Hollowdeck.Run;
 
@@ -10,11 +10,6 @@ namespace Hollowdeck.UI;
 public partial class RestScreen : Control
 {
     private const float HealFraction = 0.3f;
-
-    // CardView's own width (ROADMAP Phase 2 set cards to 176x240). Every
-    // column in the upgrade picker is exactly this, so five of them plus the
-    // grid's separations fit the scroll viewport with no horizontal scroll.
-    private const int CardColumnWidth = 176;
 
     private Control _choicesView = null!;
     private Control _upgradeView = null!;
@@ -115,72 +110,24 @@ public partial class RestScreen : Control
     // *which* card first, and Cancel needs to come back here without
     // consuming the visit.
     //
-    // The picker renders real CardViews rather than the three stacked text
-    // rows (button, current rules, green "becomes..." line) it used to: the
-    // deck is the thing being chosen from, and this is the one screen outside
-    // combat where the player is asked to compare cards. "One card component
-    // everywhere" is the same argument ShopScreen and RewardScreen already
-    // make for their offers.
+    // The grid itself is CardPicker, shared with EventScreen's own card
+    // pickers - it renders real CardViews rather than stacked text rows
+    // because the deck is the thing being chosen from, which is the same
+    // argument ShopScreen and RewardScreen make for their offers.
+    //
+    // The upgraded card is what each column *shows*, not the current one: the
+    // choice is which card to end up with. The "was:" line under the button
+    // spells out the before, since the button text alone ("Upgrade to
+    // Strike+") never said what changed.
     private void ShowUpgradeChoices()
     {
-        foreach (var child in _upgradeList.GetChildren())
-        {
-            _upgradeList.RemoveChild(child);
-            child.QueueFree();
-        }
-
-        var cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
-        for (int i = 0; i < RunState.Deck.Count; i++)
-        {
-            var card = RunState.Deck[i];
-            if (CardUpgrade.IsUpgraded(card)) continue;
-
-            int index = i;
-            var upgraded = CardUpgrade.Apply(card);
-
-            // Pinned to the card's own width. A column is only as narrow as
-            // its widest child, and the button used to read "Upgrade to
-            // Cleave+" - wide enough in the display face to push five columns
-            // past the scroll viewport, which then clipped the outer two.
-            var column = new VBoxContainer
-            {
-                CustomMinimumSize = new Vector2(CardColumnWidth, 0),
-                SizeFlagsHorizontal = SizeFlags.ShrinkCenter,
-            };
-            column.AddThemeConstantOverride("separation", (int)UiTheme.Spacing.Xs);
-            _upgradeList.AddChild(column);
-
-            // Just "Upgrade": the card above it already carries the upgraded
-            // name in its own title.
-            var button = new Button { Text = "Upgrade" };
-            ChromeStyles.ApplyEmphasisButtonStyle(button);
-            button.Pressed += () =>
-            {
-                AudioManager.Instance?.PlaySfx("reward_pickup");
-                OnCardUpgraded(index);
-            };
-
-            // The upgraded card is what is shown, not the current one: the
-            // choice being made is which card to *end up with*, and the button
-            // text alone ("Upgrade to Strike+") never said what changed. The
-            // delta line below spells out the before, so both halves are
-            // visible without a hover.
-            var view = cardScene.Instantiate<CardView>();
-            column.AddChild(view);
-            view.Interactive = false;
-            view.SetCardInstance(new CardInstance(upgraded));
-
-            column.AddChild(button);
-            column.AddChild(new Label
-            {
-                Text = "was: " + EffectDescriptionFormatter.Describe(
-                    card.Effects, new DescribeContext(TargetType: card.Target)),
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                CustomMinimumSize = new Vector2(CardColumnWidth, 0),
-                Modulate = new Color(0.7f, 0.7f, 0.7f),
-            });
-        }
+        CardPicker.Populate(
+            _upgradeList,
+            UpgradeRandomCardOutcome.Upgradable(),
+            "Upgrade",
+            index => CardUpgrade.Apply(RunState.Deck[index]),
+            index => CardPicker.WasLine(RunState.Deck[index]),
+            OnCardUpgraded);
 
         _choicesView.Visible = false;
         _upgradeView.Visible = true;

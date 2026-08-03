@@ -8,7 +8,12 @@ public class GainBlockEffect : IEffect
     {
         foreach (var target in ctx.Targets)
         {
-            target.Block += spec.Amount;
+            // Dexterity/Frail are read off the combatant *receiving* the
+            // Block, not ctx.Source. For every card in the data those are the
+            // same combatant (gain_block is always self-scoped), but an enemy
+            // move that shields a different enemy would otherwise apply the
+            // caster's Dexterity to someone else's Block.
+            target.Block += BlockMath.ComputeOutgoing(spec.Amount, target);
         }
     }
 }

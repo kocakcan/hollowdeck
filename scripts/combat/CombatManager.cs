@@ -319,6 +319,7 @@ public partial class CombatManager : Node
         Player.Piles.DiscardHand();
         Player.DecayStatus(StatusType.Vulnerable);
         Player.DecayStatus(StatusType.Weak);
+        Player.DecayStatus(StatusType.Frail);
 
         _enemyTurnOrder = new List<EnemyCombatant>(Enemies);
         TransitionTo(CombatState.EnemyTurn);
@@ -388,6 +389,7 @@ public partial class CombatManager : Node
             {
                 enemy.DecayStatus(StatusType.Vulnerable);
                 enemy.DecayStatus(StatusType.Weak);
+                enemy.DecayStatus(StatusType.Frail);
                 AdvanceEnemyIntent(enemy);
                 CombatantsChanged?.Invoke();
             }
@@ -423,8 +425,9 @@ public partial class CombatManager : Node
     }
 
     // What a Power buys: statuses that pay out every turn instead of once.
-    // Neither decays - Metallicize and Ritual persist for the fight, unlike
-    // Vulnerable/Weak (end-of-turn decay) or Poison (decays as it ticks).
+    // None of the three decays - Metallicize, Ritual and Regen persist for the
+    // fight, unlike Vulnerable/Weak/Frail (end-of-turn decay) or Poison
+    // (decays as it ticks).
     //
     // Kept separate from ApplyPoisonTick and called at a different point on
     // purpose. Both combatants clear Block on their own turn, and Metallicize
@@ -442,6 +445,14 @@ public partial class CombatManager : Node
         // is worth a card slot it never returns from.
         int ritual = c.GetStatus(StatusType.Ritual);
         if (ritual > 0) c.AddStatus(StatusType.Strength, ritual);
+
+        // Regen is the only grant here that isn't affected by the Block-clear
+        // ordering the comment above is about - it heals - but it lives with
+        // the other two because it is the same *kind* of thing (a Power that
+        // pays out each turn) and a player reading the roster should find all
+        // three in one place. Capped at MaxHp, like every other heal.
+        int regen = c.GetStatus(StatusType.Regen);
+        if (regen > 0) c.CurrentHp = Math.Min(c.MaxHp, c.CurrentHp + regen);
     }
 
     // Replaces the four bare Enemies.RemoveAll(e => e.IsDead) calls this

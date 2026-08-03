@@ -6,9 +6,9 @@ namespace Hollowdeck.Events;
 
 public class LoseGoldOutcome : IEventOutcome
 {
-    public string? Execute(EventChoice choice)
+    public string? Execute(EventOutcomeSpec spec)
     {
-        RunState.Gold = Mathf.Max(0, RunState.Gold - choice.Amount);
+        RunState.Gold = Mathf.Max(0, RunState.Gold - spec.Amount);
         return null;
     }
 }
