@@ -52,6 +52,10 @@ public partial class CombatManager : Node
     // turns read as a sequence of distinct hits instead of one instant
     // simultaneous burst - this is what makes per-hit cinematic effects
     // (screen shake, hit-pause, sequential impact) legible.
+    // Named because Foresight adds to it: a literal 5 at the draw site reads
+    // as "draw five", and "5 + Foresight" reads as arithmetic on nothing.
+    public const int BaseHandSize = 5;
+
     private const float PreActionDelaySec = 0.2f;
     private const float PostActionDelaySec = 0.15f;
 
@@ -127,8 +131,15 @@ public partial class CombatManager : Node
         // has cleared Block - see ApplyTurnStartGrants.
         ApplyTurnStartGrants(Player);
 
-        Player.CurrentEnergy = Player.MaxEnergy;
-        Player.Piles.DrawHand(5);
+        // The other two turn-start grants, and the reason they are not in
+        // ApplyTurnStartGrants with Metallicize/Ritual/Regen: energy and hand
+        // size are *assigned* here rather than accumulated, so a grant applied
+        // in the pass above would be overwritten a line later - the same
+        // ordering trap Block has, running the other way. Folding them into the
+        // assignments themselves is what makes that unable to happen at all.
+        // Both are also player-only: an enemy has no energy pool and no piles.
+        Player.CurrentEnergy = Player.MaxEnergy + Player.GetStatus(StatusType.Fervor);
+        Player.Piles.DrawHand(BaseHandSize + Player.GetStatus(StatusType.Foresight));
         _cardsThisTurn = 0;
 
         var ctx = MakeRelicContext();

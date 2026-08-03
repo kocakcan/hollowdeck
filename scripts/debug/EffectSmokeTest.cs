@@ -47,6 +47,7 @@ public partial class EffectSmokeTest : Node
         TestDiscardAndExhaustHand();
         TestExhaustHandCardDoesNotEatItself();
         TestNewStatusDescriptions();
+        TestEveryCardUpgradeChangesSomething();
         await TestTurnStartGrantingStatuses();
         await TestRegenHealsEachTurn();
 
@@ -528,6 +529,33 @@ public partial class EffectSmokeTest : Node
     // status name - it used to special-case Strength, which read correctly
     // right up until a second self-status shipped. These three are the ones
     // that would have broken it.
+    // The general form of the failure CardUpgrade.ShouldScale warns about, and
+    // the reason it is worth a sweep rather than a spot check: an upgrade that
+    // scales nothing is not an error anywhere - it produces a valid card, with
+    // a "+" on its name, that reads and plays exactly like the original. The
+    // player pays a rest site for it.
+    //
+    // Every card must therefore have at least one effect the upgrade moves.
+    // A card built only from costs (lose_hp, discard_cards, exhaust_hand) would
+    // legitimately fail this; there are none, and if one is ever authored it
+    // needs a benefit to scale rather than an exemption here.
+    private void TestEveryCardUpgradeChangesSomething()
+    {
+        var unchanged = new List<string>();
+        foreach (var card in CardDatabase.All)
+        {
+            var upgraded = CardUpgrade.Apply(card);
+            bool moved = card.Effects
+                .Zip(upgraded.Effects, (before, after) => after.Amount > before.Amount)
+                .Any(x => x);
+            if (!moved) unchanged.Add(card.Id);
+        }
+
+        Check("every_card_upgrade_changes_something", unchanged.Count == 0,
+            $"upgrading these changes nothing: {string.Join(", ", unchanged)} - " +
+            "the status or action is missing from CardUpgrade's scale lists");
+    }
+
     private void TestNewStatusDescriptions()
     {
         string Describe(params EffectSpec[] effects) =>
@@ -551,6 +579,31 @@ public partial class EffectSmokeTest : Node
             && Describe(new EffectSpec { Action = "exhaust_hand", Scope = EffectScope.Self })
                 == "Exhaust your hand.",
             "a missing formatter arm renders the effect invisible on the card");
+
+        // gain_gold shipped for a relic, and relics describe themselves from
+        // their own JSON - so the arm was missing here until a card used it,
+        // and Tithe rendered with no rules text at all.
+        Check("gain_gold_has_description_text",
+            Describe(new EffectSpec { Action = "gain_gold", Amount = 15, Scope = EffectScope.Self })
+                == "Gain 15 Gold.",
+            "a missing formatter arm renders the effect invisible on the card");
+
+        Check("fervor_and_foresight_read_as_gained",
+            Describe(new EffectSpec { Action = "apply_status", Status = "Fervor", Amount = 1, Scope = EffectScope.Self })
+                == "Gain 1 Fervor."
+            && Describe(new EffectSpec { Action = "apply_status", Status = "Foresight", Amount = 2, Scope = EffectScope.Self })
+                == "Gain 2 Foresight.", "self-scoped statuses must say Gain");
+
+        // The silent failure CardUpgrade.ShouldScale documents: a status left
+        // out of its list upgrades to a "+" that reads and plays identically.
+        // Checked on the two newest because they are the ones most recently
+        // at risk of it, and on the whole roster's worth of Self statuses via
+        // the cards themselves in TestEveryCardUpgradeChangesSomething.
+        var deepFocus = CardUpgrade.Apply(CardDatabase.Get("deep_focus"));
+        var bloodpact = CardUpgrade.Apply(CardDatabase.Get("bloodpact"));
+        Check("new_power_statuses_scale_on_upgrade",
+            deepFocus.Effects[0].Amount == 3 && bloodpact.Effects[0].Amount == 2,
+            $"deep_focus+={deepFocus.Effects[0].Amount} (want 3), bloodpact+={bloodpact.Effects[0].Amount} (want 2)");
     }
 
     // Metallicize is tested on the enemy and Ritual on the player, which is

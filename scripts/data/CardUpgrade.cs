@@ -17,9 +17,18 @@ public static class CardUpgrade
 {
     private const float ScaleFactor = 1.4f;
 
+    // Everything here is a benefit, so scaling it can only improve the card -
+    // which is the rule that keeps lose_hp, discard_cards and exhaust_hand out
+    // (they are costs, and a bigger cost is a worse upgrade).
+    //
+    // gain_gold sat outside this list while it was relic-only, and relics do
+    // not upgrade, so nothing noticed. The moment a *card* used it, Tithe+
+    // became a card that reads and plays exactly like Tithe - the silent
+    // failure ShouldScale's comment describes, arriving through the action
+    // list instead of the status list.
     private static readonly HashSet<string> AlwaysScaledActions = new()
     {
-        "deal_damage", "gain_block", "gain_energy", "heal", "draw_cards",
+        "deal_damage", "gain_block", "gain_energy", "heal", "draw_cards", "gain_gold",
     };
 
     public static bool IsUpgraded(CardDefinition card) => card.Id.EndsWith("+");
@@ -71,8 +80,13 @@ public static class CardUpgrade
         return effect.Scope switch
         {
             EffectScope.Target => effect.Status is "Vulnerable" or "Weak" or "Poison" or "Frail",
+            // Fervor and Foresight scale for the same reason and are the far
+            // end of it: +1 becomes +2 Energy or +2 cards every turn, which is
+            // the single largest upgrade delta in the pool. That is deliberate
+            // - both sit on cost-3 Rares that spend a whole turn to land - but
+            // it is the first thing the balance pass should look at.
             EffectScope.Self => effect.Status is "Strength" or "Dexterity"
-                or "Metallicize" or "Ritual" or "Regen",
+                or "Metallicize" or "Ritual" or "Regen" or "Fervor" or "Foresight",
             _ => false,
         };
     }

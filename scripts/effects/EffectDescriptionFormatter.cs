@@ -171,6 +171,13 @@ public static class EffectDescriptionFormatter
                 return $"Discard {effect.Amount} card{(effect.Amount == 1 ? "" : "s")} at random.";
             case "exhaust_hand":
                 return "Exhaust your hand.";
+            // Was missing until a card used it: gain_gold shipped for a relic,
+            // and relics describe themselves from relics.json rather than from
+            // here, so the gap only showed up as a card with no rules text at
+            // all - which is exactly the silent failure the default arm below
+            // produces for an unknown action.
+            case "gain_gold":
+                return $"Gain {effect.Amount} Gold.";
             default:
                 return "";
         }

@@ -62,16 +62,27 @@ that clear is wiped the instant it is given; the player's clear is in `EndEnemyT
 is mid-loop. (`Regen` heals, so it is indifferent to that ordering; it lives with the other two
 because it is the same *kind* of thing.)
 
-**The status roster is nine, in mirrored pairs.** `Strength`/`Weak` scale damage through
+`Fervor` (Energy) and `Foresight` (cards) are the same idea for the two resources a turn *assigns*
+rather than accumulates, and that is why they are **not** in `ApplyTurnStartGrants`: energy and
+hand size are set outright in `BeginPlayerTurn`, so a grant applied in the pass above would be
+overwritten a line later — the Block ordering trap running the other way. They are folded into the
+assignments themselves (`MaxEnergy + Fervor`, `BaseHandSize + Foresight`), which is what makes that
+unable to happen. They are also the only two grants that are player-only: an enemy has neither
+pool. Between them they are the pool's strongest upgrade delta, and the first thing the balance
+pass should look at.
+
+**The status roster is eleven, in mirrored pairs.** `Strength`/`Weak` scale damage through
 `DamageMath`; `Dexterity`/`Frail` scale Block through `BlockMath`, which is a deliberate copy of
 `DamageMath`'s shape rather than four more methods on it — nothing applies Strength to Block, and
 keeping them apart is what stops a later edit reaching for the wrong multiplier. `Vulnerable` and
-`Poison` sit on the target side; the three turn-start grants above make up the rest. Buffs
+`Poison` sit on the target side; the five turn-start grants above make up the rest. Buffs
 (`Strength`, `Dexterity`, and the grants) never decay; debuffs (`Weak`, `Vulnerable`, `Frail`)
 wear off by 1 a turn at the two `DecayStatus` sites, and `Poison` decays as it ticks. A new status
 needs an icon in `tools/artgen/src/icons/misc.rs`, an arm in `StatusRow.Describe`, and — easy to
 forget, and silent when missed — an entry in `CardUpgrade.ShouldScale`, or upgrading a card that
-grants it produces an identical `+`.
+grants it produces an identical `+`. That last failure now has a sweep behind it rather than a
+warning: `EffectSmokeTest.TestEveryCardUpgradeChangesSomething` fails any card whose `+` moves no
+number, which is how a missing entry announces itself.
 
 **Autoloads** (declared in `project.godot`, in this order — `AudioManager` must come before
 `SettingsManager` because the settings sliders address audio bus indices):
@@ -152,9 +163,9 @@ and cosmetic jitter can never desync a deterministic run.
 
 An earlier shard *shop* was removed — don't reintroduce shard-purchase language.
 
-Content stands at **58 cards** (24 Common / 23 Uncommon / 11 Rare), **15 events**, 27 relics, 12
-potions, **36 enemies** (7 normals + 3 elites per act, plus 6 bosses), 3 acts. Nine statuses, ten
-effect actions, four intent types, fifteen event outcome keys.
+Content stands at **84 cards** (34 Common / 34 Uncommon / 16 Rare, 10 of them Powers), **15
+events**, 27 relics, 12 potions, **36 enemies** (7 normals + 3 elites per act, plus 6 bosses), 3
+acts. Eleven statuses, ten effect actions, four intent types, fifteen event outcome keys.
 
 Enemy sprites are the one asset class that is **sourced rather than generated** — CC0 Dungeon Crawl
 tiles, palette-clamped by `artgen clamp`, mapped act by act in `CREDITS.md`. Adding an enemy means
@@ -253,11 +264,11 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 
 | Test | Covers | Run when you touch |
 |---|---|---|
-| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text, rarity coverage, `CardPool` weighting, Power routing | `scripts/effects/`, `PileManager`, `CardPool`, `cards.json` |
+| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text, rarity coverage, `CardPool` weighting, Power routing, every card's `+` actually changing something | `scripts/effects/`, `PileManager`, `CardPool`, `cards.json` |
 | `CombatSmokeTest` | `CombatScreen.tscn` boots and wires up | `CombatScreen`, `CombatManager` |
 | `CombatTargetingSmokeTest` | enemy target-lock glow | `EnemyView`, `CardView` drag/targeting |
 | `RelicSmokeTest` | relic hooks fire through combat | `scripts/relics/`, relic hooks, `relics.json` |
-| `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic, every intent's telegraph against its effects, the derived label shapes, enemy turn-start grants | intent pickers, statuses, elite rewards, `EnemyView.FormatIntent`, `enemies.json` |
+| `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic, every intent's telegraph against its effects, the derived label shapes, turn-start grants on both sides (`Metallicize` for an enemy, `Fervor`/`Foresight` for the player) | intent pickers, statuses, elite rewards, `EnemyView.FormatIntent`, `BeginPlayerTurn`, `enemies.json` |
 | `HandLayoutSmokeTest` | hand fan spacing at 11+ cards, every card's text fits its box | `RefreshHand`, `HandFanLayout`, `CardView` text |
 | `DeckViewSmokeTest` | pile popups, pile counters, combat-end z-order | `PileViewPopup`, `DeckViewButtons`, `PileCounterBar` |
 | `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders, fits *and fills* the canvas | `MapGenerator`, `MapScreen`, `MapNode`, `acts.json` |

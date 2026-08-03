@@ -732,5 +732,337 @@
 	  { "action": "deal_damage", "amount": 12, "scope": "Target" },
 	  { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
 	]
+  },
+  {
+	"id": "backstep",
+	"name": "Backstep",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "gain_block", "amount": 3, "scope": "Self" },
+	  { "action": "draw_cards", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "cinder_slash",
+	"name": "Cinder Slash",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 6, "scope": "Target" },
+	  { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+	]
+  },
+  {
+	"id": "lash_out",
+	"name": "Lash Out",
+	"cost": 1,
+	"type": "Attack",
+	"target": "AllEnemies",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 4, "scope": "Target" },
+	  { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+	]
+  },
+  {
+	"id": "steel_nerve",
+	"name": "Steel Nerve",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "gain_block", "amount": 6, "scope": "Self" },
+	  { "action": "heal", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "sift",
+	"name": "Sift",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "discard_cards", "amount": 1, "scope": "Self" },
+	  { "action": "draw_cards", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "jab",
+	"name": "Jab",
+	"cost": 0,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 2, "scope": "Target" },
+	  { "action": "deal_damage", "amount": 2, "scope": "Target" }
+	]
+  },
+  {
+	"id": "barbed_guard",
+	"name": "Barbed Guard",
+	"cost": 1,
+	"type": "Skill",
+	"target": "AllEnemies",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "gain_block", "amount": 5, "scope": "Self" },
+	  { "action": "apply_status", "status": "Poison", "amount": 1, "scope": "Target" }
+	]
+  },
+  {
+	"id": "cheap_shot",
+	"name": "Cheap Shot",
+	"cost": 0,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 3, "scope": "Target" },
+	  { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+	]
+  },
+  {
+	"id": "footwork",
+	"name": "Footwork",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "apply_status", "status": "Dexterity", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "tithe",
+	"name": "Tithe",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "gain_gold", "amount": 15, "scope": "Self" }
+	]
+  },
+  {
+	"id": "second_sight",
+	"name": "Second Sight",
+	"cost": 1,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "apply_status", "status": "Foresight", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "hemorrhage",
+	"name": "Hemorrhage",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "deal_damage", "amount": 6, "scope": "Target" },
+	  { "action": "apply_status", "status": "Poison", "amount": 3, "scope": "Target" }
+	]
+  },
+  {
+	"id": "bloodhound",
+	"name": "Bloodhound",
+	"cost": 2,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "deal_damage", "amount": 8, "scope": "Target" },
+	  { "action": "heal", "amount": 4, "scope": "Self" }
+	]
+  },
+  {
+	"id": "flurry",
+	"name": "Flurry",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "deal_damage", "amount": 3, "scope": "Target" },
+	  { "action": "deal_damage", "amount": 3, "scope": "Target" },
+	  { "action": "deal_damage", "amount": 3, "scope": "Target" }
+	]
+  },
+  {
+	"id": "bloodrite",
+	"name": "Bloodrite",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "lose_hp", "amount": 4, "scope": "Self" },
+	  { "action": "apply_status", "status": "Strength", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "blight_storm",
+	"name": "Blight Storm",
+	"cost": 2,
+	"type": "Attack",
+	"target": "AllEnemies",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "deal_damage", "amount": 5, "scope": "Target" },
+	  { "action": "apply_status", "status": "Poison", "amount": 2, "scope": "Target" }
+	]
+  },
+  {
+	"id": "purge",
+	"name": "Purge",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "exhaust_hand", "amount": 0, "scope": "Self" },
+	  { "action": "gain_block", "amount": 12, "scope": "Self" }
+	]
+  },
+  {
+	"id": "stoke",
+	"name": "Stoke",
+	"cost": 1,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "apply_status", "status": "Ritual", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "gravebind",
+	"name": "Gravebind",
+	"cost": 1,
+	"type": "Skill",
+	"target": "AllEnemies",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" },
+	  { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+	]
+  },
+  {
+	"id": "resolve",
+	"name": "Resolve",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "apply_status", "status": "Strength", "amount": 1, "scope": "Self" },
+	  { "action": "draw_cards", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "skullcrack",
+	"name": "Skullcrack",
+	"cost": 2,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "deal_damage", "amount": 11, "scope": "Target" },
+	  { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+	]
+  },
+  {
+	"id": "bloodpact",
+	"name": "Bloodpact",
+	"cost": 3,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "apply_status", "status": "Fervor", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "deep_focus",
+	"name": "Deep Focus",
+	"cost": 2,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "apply_status", "status": "Foresight", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "cataclysm",
+	"name": "Cataclysm",
+	"cost": 3,
+	"type": "Attack",
+	"target": "AllEnemies",
+	"exhaust": true,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "deal_damage", "amount": 22, "scope": "Target" }
+	]
+  },
+  {
+	"id": "last_rite",
+	"name": "Last Rite",
+	"cost": 3,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "heal", "amount": 15, "scope": "Self" },
+	  { "action": "gain_block", "amount": 10, "scope": "Self" }
+	]
+  },
+  {
+	"id": "reap",
+	"name": "Reap",
+	"cost": 1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": true,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "deal_damage", "amount": 8, "scope": "Target" },
+	  { "action": "heal", "amount": 8, "scope": "Self" }
+	]
   }
 ]
