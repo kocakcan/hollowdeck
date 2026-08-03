@@ -282,6 +282,149 @@
     ]
   },
   {
+    "id": "drowned_thrall",
+    "name": "Drowned Thrall",
+    "maxHp": 34,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "flailing_grasp",
+        "intent": { "type": "Attack", "displayAmount": 4 },
+        "effects": [
+          { "action": "deal_damage", "amount": 4, "scope": "Target" },
+          { "action": "deal_damage", "amount": 4, "scope": "Target" }
+        ],
+        "weight": 55
+      },
+      {
+        "moveId": "undertow",
+        "intent": { "type": "Attack", "displayAmount": 6 },
+        "effects": [
+          { "action": "deal_damage", "amount": 6, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+        ],
+        "weight": 45
+      }
+    ]
+  },
+  {
+    "id": "mire_leech",
+    "name": "Mire Leech",
+    "maxHp": 30,
+    "aiType": "sequential",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "sap_will",
+        "intent": { "type": "Debuff", "displayAmount": 2 },
+        "effects": [
+          { "action": "apply_status", "status": "Frail", "amount": 2, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "bloodsuck",
+        "intent": { "type": "Attack", "displayAmount": 6 },
+        "effects": [
+          { "action": "deal_damage", "amount": 6, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "engorge",
+        "intent": { "type": "Buff", "displayAmount": 5 },
+        "effects": [
+          { "action": "heal", "amount": 5, "scope": "Self" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "gaol_rat",
+    "name": "Gaol Rat",
+    "maxHp": 44,
+    "aiType": "sequential",
+    "loopFromIndex": 1,
+    "moves": [
+      {
+        "moveId": "bristle",
+        "intent": { "type": "Buff", "displayAmount": 2 },
+        "effects": [
+          { "action": "apply_status", "status": "Metallicize", "amount": 2, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "gnaw",
+        "intent": { "type": "Attack", "displayAmount": 7 },
+        "effects": [
+          { "action": "deal_damage", "amount": 7, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "filth_bite",
+        "intent": { "type": "Attack", "displayAmount": 5 },
+        "effects": [
+          { "action": "deal_damage", "amount": 5, "scope": "Target" },
+          { "action": "apply_status", "status": "Poison", "amount": 2, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "drowned_matron",
+    "name": "The Drowned Matron",
+    "maxHp": 90,
+    "aiType": "phase_threshold",
+    "loopFromIndex": 0,
+    "enrageHpPercent": 50,
+    "moves": [
+      {
+        "moveId": "keening",
+        "intent": { "type": "Debuff", "displayAmount": 2 },
+        "effects": [
+          { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "tide_slam",
+        "intent": { "type": "Attack", "displayAmount": 11 },
+        "effects": [
+          { "action": "deal_damage", "amount": 11, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "black_prayer",
+        "intent": { "type": "Buff", "displayAmount": 1 },
+        "effects": [
+          { "action": "apply_status", "status": "Ritual", "amount": 1, "scope": "Self" }
+        ]
+      }
+    ],
+    "enrageMoves": [
+      {
+        "moveId": "drowning_grip",
+        "intent": { "type": "Attack", "displayAmount": 14 },
+        "effects": [
+          { "action": "deal_damage", "amount": 14, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "sorrow_wave",
+        "intent": { "type": "Attack", "displayAmount": 8 },
+        "effects": [
+          { "action": "deal_damage", "amount": 8, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "deep_call",
+        "intent": { "type": "Buff", "displayAmount": 2 },
+        "effects": [
+          { "action": "apply_status", "status": "Ritual", "amount": 2, "scope": "Self" }
+        ]
+      }
+    ]
+  },
+  {
     "id": "ember_wisp",
     "name": "Ember Wisp",
     "maxHp": 55,
@@ -559,6 +702,135 @@
         "intent": { "type": "Attack", "displayAmount": 18 },
         "effects": [
           { "action": "deal_damage", "amount": 18, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "cinder_moth",
+    "name": "Cinder Moth",
+    "maxHp": 52,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "ember_flurry",
+        "intent": { "type": "Attack", "displayAmount": 4 },
+        "effects": [
+          { "action": "deal_damage", "amount": 4, "scope": "Target" },
+          { "action": "deal_damage", "amount": 4, "scope": "Target" },
+          { "action": "deal_damage", "amount": 4, "scope": "Target" }
+        ],
+        "weight": 50
+      },
+      {
+        "moveId": "singe",
+        "intent": { "type": "Attack", "displayAmount": 8 },
+        "effects": [
+          { "action": "deal_damage", "amount": 8, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+        ],
+        "weight": 50
+      }
+    ]
+  },
+  {
+    "id": "ashen_priest",
+    "name": "Ashen Priest",
+    "maxHp": 62,
+    "aiType": "sequential",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "ashen_curse",
+        "intent": { "type": "Debuff", "displayAmount": 2 },
+        "effects": [
+          { "action": "apply_status", "status": "Frail", "amount": 2, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "cinder_lash",
+        "intent": { "type": "Attack", "displayAmount": 10 },
+        "effects": [
+          { "action": "deal_damage", "amount": 10, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "smother",
+        "intent": { "type": "Attack", "displayAmount": 7 },
+        "effects": [
+          { "action": "deal_damage", "amount": 7, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "forge_wight",
+    "name": "Forge Wight",
+    "maxHp": 66,
+    "aiType": "sequential",
+    "loopFromIndex": 1,
+    "moves": [
+      {
+        "moveId": "temper",
+        "intent": { "type": "Buff", "displayAmount": 3 },
+        "effects": [
+          { "action": "apply_status", "status": "Metallicize", "amount": 3, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "hammer_fall",
+        "intent": { "type": "Attack", "displayAmount": 12 },
+        "effects": [
+          { "action": "deal_damage", "amount": 12, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "slag_guard",
+        "intent": { "type": "Defend", "displayAmount": 10 },
+        "effects": [
+          { "action": "gain_block", "amount": 10, "scope": "Self" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "emberforge_smith",
+    "name": "The Emberforge Smith",
+    "maxHp": 118,
+    "aiType": "sequential",
+    "loopFromIndex": 1,
+    "moves": [
+      {
+        "moveId": "stoke_the_forge",
+        "intent": { "type": "Buff", "displayAmount": 1 },
+        "effects": [
+          { "action": "apply_status", "status": "Ritual", "amount": 1, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "anvil_chorus",
+        "intent": { "type": "Attack", "displayAmount": 6 },
+        "effects": [
+          { "action": "deal_damage", "amount": 6, "scope": "Target" },
+          { "action": "deal_damage", "amount": 6, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "quench",
+        "intent": { "type": "Defend", "displayAmount": 14 },
+        "effects": [
+          { "action": "gain_block", "amount": 14, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "white_heat",
+        "intent": { "type": "Attack", "displayAmount": 13 },
+        "effects": [
+          { "action": "deal_damage", "amount": 13, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
         ]
       }
     ]
@@ -851,6 +1123,151 @@
         "intent": { "type": "Buff", "displayAmount": 5 },
         "effects": [
           { "action": "apply_status", "status": "Strength", "amount": 5, "scope": "Self" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "wailing_effigy",
+    "name": "Wailing Effigy",
+    "maxHp": 84,
+    "aiType": "weighted_random",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "keening_chorus",
+        "intent": { "type": "Attack", "displayAmount": 6 },
+        "effects": [
+          { "action": "deal_damage", "amount": 6, "scope": "Target" },
+          { "action": "deal_damage", "amount": 6, "scope": "Target" },
+          { "action": "deal_damage", "amount": 6, "scope": "Target" }
+        ],
+        "weight": 45
+      },
+      {
+        "moveId": "splinter",
+        "intent": { "type": "Attack", "displayAmount": 12 },
+        "effects": [
+          { "action": "deal_damage", "amount": 12, "scope": "Target" },
+          { "action": "apply_status", "status": "Frail", "amount": 2, "scope": "Target" }
+        ],
+        "weight": 55
+      }
+    ]
+  },
+  {
+    "id": "gilded_husk",
+    "name": "Gilded Husk",
+    "maxHp": 92,
+    "aiType": "sequential",
+    "loopFromIndex": 1,
+    "moves": [
+      {
+        "moveId": "gild",
+        "intent": { "type": "Buff", "displayAmount": 4 },
+        "effects": [
+          { "action": "apply_status", "status": "Metallicize", "amount": 4, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "gilded_fist",
+        "intent": { "type": "Attack", "displayAmount": 16 },
+        "effects": [
+          { "action": "deal_damage", "amount": 16, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "burnish",
+        "intent": { "type": "Defend", "displayAmount": 14 },
+        "effects": [
+          { "action": "gain_block", "amount": 14, "scope": "Self" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "oath_binder",
+    "name": "Oath Binder",
+    "maxHp": 96,
+    "aiType": "sequential",
+    "loopFromIndex": 0,
+    "moves": [
+      {
+        "moveId": "bind_oath",
+        "intent": { "type": "Debuff", "displayAmount": 2 },
+        "effects": [
+          { "action": "apply_status", "status": "Frail", "amount": 2, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "sworn_edge",
+        "intent": { "type": "Attack", "displayAmount": 17 },
+        "effects": [
+          { "action": "deal_damage", "amount": 17, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "recite",
+        "intent": { "type": "Attack", "displayAmount": 11 },
+        "effects": [
+          { "action": "deal_damage", "amount": 11, "scope": "Target" },
+          { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "sable_inquisitor",
+    "name": "The Sable Inquisitor",
+    "maxHp": 158,
+    "aiType": "phase_threshold",
+    "loopFromIndex": 0,
+    "enrageHpPercent": 40,
+    "moves": [
+      {
+        "moveId": "inquest",
+        "intent": { "type": "Debuff", "displayAmount": 2 },
+        "effects": [
+          { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "sable_edge",
+        "intent": { "type": "Attack", "displayAmount": 18 },
+        "effects": [
+          { "action": "deal_damage", "amount": 18, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "absolve",
+        "intent": { "type": "Buff", "displayAmount": 3 },
+        "effects": [
+          { "action": "apply_status", "status": "Regen", "amount": 3, "scope": "Self" }
+        ]
+      }
+    ],
+    "enrageMoves": [
+      {
+        "moveId": "condemnation",
+        "intent": { "type": "Attack", "displayAmount": 9 },
+        "effects": [
+          { "action": "deal_damage", "amount": 9, "scope": "Target" },
+          { "action": "deal_damage", "amount": 9, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "sanctify",
+        "intent": { "type": "Buff", "displayAmount": 20 },
+        "effects": [
+          { "action": "heal", "amount": 20, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "final_writ",
+        "intent": { "type": "Attack", "displayAmount": 21 },
+        "effects": [
+          { "action": "deal_damage", "amount": 21, "scope": "Target" }
         ]
       }
     ]

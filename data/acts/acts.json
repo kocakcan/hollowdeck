@@ -17,11 +17,18 @@
       ["rot_hound", "slime"],
       ["ward_acolyte"],
       ["ward_acolyte", "rot_hound"],
-      ["cultist", "ward_acolyte"]
+      ["cultist", "ward_acolyte"],
+      ["drowned_thrall"],
+      ["drowned_thrall", "slime"],
+      ["mire_leech", "mire_leech"],
+      ["mire_leech", "cultist"],
+      ["gaol_rat"],
+      ["gaol_rat", "rot_hound"]
     ],
     "eliteEncounters": [
       ["bog_troll"],
       ["possessed_armor"],
+      ["drowned_matron"],
       ["rot_hound", "rot_hound", "ward_acolyte"]
     ],
     "bossIds": ["hollow_king", "gaol_warden"],
@@ -49,11 +56,18 @@
       ["cinder_cultist", "ember_wisp"],
       ["ash_stalker", "ash_stalker"],
       ["slag_brute", "ember_wisp"],
-      ["cinder_cultist", "cinder_cultist"]
+      ["cinder_cultist", "cinder_cultist"],
+      ["cinder_moth", "cinder_moth"],
+      ["cinder_moth", "ash_stalker"],
+      ["ashen_priest"],
+      ["ashen_priest", "ember_wisp"],
+      ["forge_wight"],
+      ["forge_wight", "cinder_moth"]
     ],
     "eliteEncounters": [
       ["molten_sentinel"],
       ["pyre_warden"],
+      ["emberforge_smith"],
       ["pyre_warden", "ember_wisp"]
     ],
     "bossIds": ["emberlord_vashk", "the_slag_maw"],
@@ -81,11 +95,18 @@
       ["bone_choir", "hollow_shade"],
       ["throne_sentry", "void_leech"],
       ["void_leech", "void_leech"],
-      ["bone_choir", "throne_sentry"]
+      ["bone_choir", "throne_sentry"],
+      ["wailing_effigy"],
+      ["wailing_effigy", "hollow_shade"],
+      ["gilded_husk"],
+      ["gilded_husk", "wailing_effigy"],
+      ["oath_binder"],
+      ["oath_binder", "void_leech"]
     ],
     "eliteEncounters": [
       ["crown_reaver"],
       ["silent_judge"],
+      ["sable_inquisitor"],
       ["crown_reaver", "hollow_shade"]
     ],
     "bossIds": ["the_hollow_throne", "nameless_regent"],

@@ -349,7 +349,39 @@ Demoted, not dropped. Still genuinely open:
   - Caught by screenshotting rather than by a test, then pinned as one: the picker and the event's
     own column are both full-rect transparent `CenterContainer`s, so showing one without hiding
     the other interleaves the event's text through the gaps in the card grid.
-- **Cards 58 → 80–120**, and more enemies per act (24 today is ~4 normal encounters' variety each).
+- ✅ **Enemies 24 → 36, and the intent vocabulary that made them worth authoring.** The bullet asked
+  for volume; reading the 24 movesets side by side said volume was not the problem. **Every enemy in
+  the game was the same three moves** — a `deal_damage`, a `deal_damage` plus a debuff, and either a
+  `gain_block` or `+N Strength` — with only the numbers differing. Three things in the code held
+  that ceiling: `IntentType` was `{Attack, Defend, Buff}`, so a move that only debuffs had to
+  telegraph `0`; `EnemyView.FormatIntent` hardcoded Buff as `"+N Str"`, which made Metallicize,
+  Ritual, Regen and Dexterity unusable by enemies (five of nine statuses player-only by accident of
+  a format string); and one `DisplayAmount` meant a multi-hit attack could not be telegraphed
+  truthfully. Twelve more enemies against that would have been numerically distinct and mechanically
+  identical — the exact thing the card pass above landed statuses and effect actions to avoid.
+
+  So the vocabulary went first, and it is *derived* rather than authored, which is the part worth
+  keeping: hit count comes from a run of identical `deal_damage` specs (through
+  `EffectDescriptionFormatter.SameEffect`, so a card's "twice" and an intent's `x2` cannot disagree),
+  and a Buff's status name off the move's first `Self` spec. The single authored number is now pinned
+  against the effects behind it for all 36 enemies by one sweep — a telegraph that lies is the
+  canonical bad bug in this genre, and it was previously prevented only by review.
+
+  Twelve enemies followed, three normals and one elite per act, each shipping to *use* the new
+  vocabulary rather than to pad a count: Mire Leech opens with a damageless Frail curse and heals
+  itself, Gaol Rat and Gilded Husk carry Metallicize, the Drowned Matron and the Emberforge Smith
+  ramp on Ritual, and four enemies across the three acts attack twice or three times. Every act now
+  offers 7 distinct normals and 3 distinct elites, up from 4 and 2, and `ActSmokeTest` asserts that
+  floor rather than leaving it to this document.
+
+  Two holes in the suite got closed on the way, both found by doing the work rather than by reading
+  the tests. Nothing asserted that an **enemy has a sprite** — every coverage check lived under
+  `assets/icons`, so an enemy shipped with no art passed all 17 suites and rendered as an empty
+  rectangle mid-fight. And a newly added PNG with no `.import` sidecar makes `PixelSpecSmokeTest`
+  throw inside `_Ready`, which the watchdog reports as a `TIMEOUT` rather than a missing asset;
+  that is now written down where the next person will hit it.
+
+- **Cards 58 → 80–120.**
 - **Balance the three-act curve.** Authored and smoke-tested but never actually played: enemies
   scale ~1.4x per act against a 50 HP start with +8 max HP and 30% heal per act cleared. Act III
   against a deck with only ~20 card rewards is the open question. Unlock-track thresholds were

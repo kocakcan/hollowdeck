@@ -110,6 +110,16 @@ public partial class ActSmokeTest : Node
         bool climbing = averageHp.Zip(averageHp.Skip(1), (earlier, later) => later > earlier).All(x => x);
         Check("later_acts_have_tougher_normal_enemies", climbing,
             $"averageHp=[{string.Join(", ", averageHp.Select(h => h.ToString("0.0")))}]");
+
+        // Variety, as a floor rather than a note in the roadmap. An act whose
+        // normal pool is four enemies deep shows the player the same fight
+        // three or four times in eight floors, and nothing else here notices:
+        // the pools still resolve, they are still disjoint, they still climb.
+        foreach (var act in ActDatabase.All)
+        {
+            int distinct = act.NormalEncounters.SelectMany(g => g).Distinct().Count();
+            Check($"{act.Id}_offers_enough_normal_enemies", distinct >= 6, $"distinct normals={distinct}");
+        }
     }
 
     private void TestNewRunStartsInFirstAct()

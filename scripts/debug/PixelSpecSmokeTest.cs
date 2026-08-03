@@ -193,23 +193,38 @@ public partial class PixelSpecSmokeTest : Node
         // the enum name, so that is the filename it must match.
         AssertIconsMatch("status",
             System.Enum.GetValues<Combat.StatusType>().Select(s => s.ToString().ToLowerInvariant()));
+
+        // Sprites were the hole in all of the above: every category here is
+        // under assets/icons, so an enemy shipped with no PNG passed the whole
+        // suite and rendered as an empty TextureRect mid-fight. Unlike icons
+        // these are sourced rather than generated, so the fix it points at is
+        // the CREDITS pipeline rather than artgen.
+        EnemyDatabase.LoadAll();
+        AssertArtCovers("enemy_sprites", "res://assets/sprites/enemies",
+            EnemyDatabase.All.Select(e => e.Id),
+            "source a 32x32 CC0 tile, clamp it with tools/artgen, and record it in CREDITS.md");
     }
 
-    private void AssertIconsMatch(string category, System.Collections.Generic.IEnumerable<string> ids)
+    private void AssertIconsMatch(string category, System.Collections.Generic.IEnumerable<string> ids) =>
+        AssertArtCovers($"{category}_icons", $"res://assets/icons/{category}", ids,
+            "add it to tools/artgen/src/icons/");
+
+    private void AssertArtCovers(string label, string directory,
+        System.Collections.Generic.IEnumerable<string> ids, string fixHint)
     {
         var expected = ids.Select(id => id.TrimEnd('+')).Distinct().ToHashSet();
-        var present = FilesUnder($"res://assets/icons/{category}", ".png")
+        var present = FilesUnder(directory, ".png")
             .Select(path => path.GetFile().GetBaseName())
             .ToHashSet();
 
         var missing = expected.Except(present).OrderBy(x => x).ToList();
-        Check($"{category}_icons_cover_every_definition", missing.Count == 0,
-            $"no icon for: {string.Join(", ", missing)} - add it to tools/artgen/src/icons/");
+        Check($"{label}_cover_every_definition", missing.Count == 0,
+            $"no art for: {string.Join(", ", missing)} - {fixHint}");
 
         var orphaned = present.Except(expected).OrderBy(x => x).ToList();
-        Check($"{category}_icons_have_no_orphans", orphaned.Count == 0,
-            $"icon(s) with no matching definition: {string.Join(", ", orphaned)} - " +
-            "an id was renamed in the JSON but not in artgen, or the reverse");
+        Check($"{label}_have_no_orphans", orphaned.Count == 0,
+            $"file(s) with no matching definition: {string.Join(", ", orphaned)} - " +
+            "an id was renamed in the JSON but not in the art, or the reverse");
     }
 
     // tools/artgen/src/palette.rs is a hand-maintained mirror of Ramp.All,

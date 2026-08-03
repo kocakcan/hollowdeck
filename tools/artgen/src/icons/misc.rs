@@ -35,6 +35,7 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "intents", name: "attack", draw: intent_attack },
         Icon { category: "intents", name: "defend", draw: intent_defend },
         Icon { category: "intents", name: "buff", draw: intent_buff },
+        Icon { category: "intents", name: "debuff", draw: intent_debuff },
     ]
 }
 
@@ -340,7 +341,7 @@ fn chevron(
 
 // -- intents ---------------------------------------------------------------
 
-/// The intent set is the game's most load-bearing telegraph, so all three are
+/// The intent set is the game's most load-bearing telegraph, so all four are
 /// drawn oversized and centred with no secondary detail at all.
 fn intent_attack() -> Canvas {
     let mut canvas = new_icon();
@@ -364,6 +365,25 @@ fn intent_buff() -> Canvas {
     canvas.vline(15, 12, 14, G4);
     sparkle(&mut canvas, 26, 8, 4, G5);
     sparkle(&mut canvas, 6, 15, 3, G4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Debuff: buff's arrow inverted, in oxblood rather than gold. The pair has to
+/// be readable as a pair — same shaft weight, same sparkles, opposite direction
+/// and opposite half of the ramp — because the two intents are the same
+/// question asked about opposite sides of the fight.
+///
+/// The colour is what separates it from the Weak and Frail *status* icons,
+/// which are also downward and also grey: those say "you have this", this one
+/// says "you are about to get something". A grey down-arrow here would have
+/// been indistinguishable from Weak's at 1x.
+fn intent_debuff() -> Canvas {
+    let mut canvas = new_icon();
+    arrow(&mut canvas, (16, 4), (16, 27), 4, 8, R3);
+    canvas.vline(15, 6, 18, R4);
+    sparkle(&mut canvas, 26, 24, 4, R4);
+    sparkle(&mut canvas, 6, 17, 3, R3);
     finish(&mut canvas);
     canvas
 }

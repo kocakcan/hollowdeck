@@ -258,7 +258,7 @@ public partial class EnemyView : Button
         var intent = Combatant.CurrentMove?.Intent;
         _intentIcon.Texture = intent is null ? null : ArtAssets.IntentIcon(intent.Type);
         _intentIcon.Visible = _intentIcon.Texture is not null;
-        _intentLabel.Text = FormatIntent(intent, Combatant, CombatManager.Instance?.Player);
+        _intentLabel.Text = FormatIntent(Combatant.CurrentMove, Combatant, CombatManager.Instance?.Player);
 
         // Skip the flash on this view's very first Refresh() (called from
         // _Ready before StartIntentPulse has even run yet) - only an actual
@@ -275,10 +275,14 @@ public partial class EnemyView : Button
         // plain attack until it landed - a small badge of the actual status
         // icon telegraphs it up front, same as the main intent icon does
         // for damage/block/buff.
+        // On a Debuff intent the status *is* the move, so "Also" would be a
+        // lie in the other direction.
         var debuffStatus = IncomingDebuffStatus(Combatant.CurrentMove);
         _debuffIcon.Texture = debuffStatus is null ? null : ArtAssets.StatusIcon(debuffStatus.Value);
         _debuffIcon.Visible = _debuffIcon.Texture is not null;
-        _debuffIcon.TooltipText = debuffStatus is null ? "" : $"Also inflicts {debuffStatus}";
+        _debuffIcon.TooltipText = debuffStatus is null ? ""
+            : intent?.Type == IntentType.Debuff ? $"Inflicts {debuffStatus}"
+            : $"Also inflicts {debuffStatus}";
 
         StatusRow.Populate(_statusRow, Combatant, 16, _lastStatuses);
         _lastStatuses = new Dictionary<StatusType, int>(Combatant.Statuses);
@@ -292,15 +296,65 @@ public partial class EnemyView : Button
     // enemy's own Strength/Weak, and the player's current Vulnerable - a
     // real fact already in effect, not a hypothetical preview like a card's
     // "(~N vs Vulnerable)" parenthetical).
-    private static string FormatIntent(EnemyIntent? intent, Combatant source, Combatant? target)
+    // The label reads the whole move, not just the intent: how many hits it is
+    // and which status it grants are facts about the effects, and deriving them
+    // is what makes a telegraph structurally unable to lie. Only DisplayAmount
+    // is authored, and only because it is the number a designer tunes.
+    public static string FormatIntent(EnemyMove? move, Combatant source, Combatant? target)
     {
-        if (intent is null) return "";
+        var intent = move?.Intent;
+        if (intent is null || move is null) return "";
         return intent.Type switch
         {
-            IntentType.Attack => $"{LiveAttackAmount(intent.DisplayAmount, source, target)}",
+            IntentType.Attack => FormatAttack(intent, move, source, target),
             IntentType.Defend => "",
-            IntentType.Buff => $"+{intent.DisplayAmount} Str",
+            IntentType.Buff => $"+{intent.DisplayAmount} {SelfGrantName(move)}",
+            // The status icon badge beside this label names *which* debuff, so
+            // repeating it here would only cost width the enemy row hasn't got.
+            IntentType.Debuff => $"{intent.DisplayAmount}",
             _ => "",
+        };
+    }
+
+    private static string FormatAttack(EnemyIntent intent, EnemyMove move, Combatant source, Combatant? target)
+    {
+        int amount = LiveAttackAmount(intent.DisplayAmount, source, target);
+        int hits = HitCount(move);
+        return hits > 1 ? $"{amount} x{hits}" : $"{amount}";
+    }
+
+    // A multi-hit is a run of identical deal_damage specs - the same shape
+    // EffectDescriptionFormatter collapses into "twice"/"N times" for cards,
+    // asked through its own SameEffect so the two can't drift apart.
+    private static int HitCount(EnemyMove move)
+    {
+        var effects = move.Effects;
+        for (int i = 0; i < effects.Count; i++)
+        {
+            if (effects[i].Action != "deal_damage") continue;
+            int hits = 1;
+            while (i + hits < effects.Count && EffectDescriptionFormatter.SameEffect(effects[i], effects[i + hits])) hits++;
+            return hits;
+        }
+        return 1;
+    }
+
+    // Short enough for the intent row, which shares an enemy's ~220px column
+    // with the icon and the debuff badge. Falls back to the status's own name
+    // so a tenth status telegraphs something true rather than "Str".
+    private static string SelfGrantName(EnemyMove move)
+    {
+        var grant = move.Effects.FirstOrDefault(e =>
+            e.Scope == EffectScope.Self && (e.Action == "apply_status" || e.Action == "heal"));
+        if (grant is null) return "Str";
+        if (grant.Action == "heal") return "HP";
+        return grant.Status switch
+        {
+            "Strength" => "Str",
+            "Dexterity" => "Dex",
+            "Metallicize" => "Metal",
+            null => "Str",
+            var other => other,
         };
     }
 
@@ -310,13 +364,12 @@ public partial class EnemyView : Button
         return target is null ? amount : DamageMath.ApplyVulnerable(amount, target);
     }
 
-    private static readonly HashSet<string> DebuffStatusNames = new() { "Weak", "Vulnerable", "Poison" };
-
     private static StatusType? IncomingDebuffStatus(EnemyMove? move)
     {
         var effect = move?.Effects.FirstOrDefault(e =>
             e.Action == "apply_status" && e.Scope == EffectScope.Target &&
-            e.Status is not null && DebuffStatusNames.Contains(e.Status));
+            e.Status is not null && System.Enum.TryParse<StatusType>(e.Status, out var parsed) &&
+            StatusRow.IsDebuff(parsed));
         if (effect?.Status is null) return null;
         return System.Enum.Parse<StatusType>(effect.Status);
     }

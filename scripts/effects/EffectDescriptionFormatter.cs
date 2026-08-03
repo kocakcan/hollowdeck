@@ -106,7 +106,11 @@ public static class EffectDescriptionFormatter
     // and cannot be compared directly. Deliberately not converted to a record:
     // it is the shape the content JSON deserializes into, and value semantics
     // are not what the rest of the effect pipeline wants from it.
-    private static bool SameEffect(EffectSpec a, EffectSpec b) =>
+    // Public because EnemyView counts a move's hits with the same rule: a
+    // multi-hit is a run of identical specs on both sides of the game, and
+    // "Deal 4 damage twice" and a "4 x2" telegraph must never disagree about
+    // what counts as one.
+    public static bool SameEffect(EffectSpec a, EffectSpec b) =>
         a.Action == b.Action && a.Amount == b.Amount && a.Status == b.Status && a.Scope == b.Scope;
 
     // DescribeEffect hands back a finished sentence, so the repetition has to

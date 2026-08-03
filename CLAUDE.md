@@ -112,6 +112,20 @@ are exactly where these games accumulate input-during-animation bugs if left imp
    intent.
 5. Repeat to victory/defeat → RewardScreen.
 
+**A telegraph is mostly derived, and that is what keeps it honest.** An `EnemyIntent` is a type —
+`Attack`/`Defend`/`Buff`/`Debuff` — plus a single authored `DisplayAmount`; everything else in the
+label `EnemyView.FormatIntent` builds comes from the move's own `EffectSpec`s. How many hits it is
+(`4 x2`) is a run of identical `deal_damage` specs, counted through
+`EffectDescriptionFormatter.SameEffect` so cards and intents can't disagree about what one hit is;
+which status a Buff grants (`+2 Metal`, `+5 HP`) is read off the first `Self`-scoped spec, which is
+what lets an enemy carry Metallicize/Ritual/Regen at all — the label used to be hardcoded `"+N
+Str"`, and five of the nine statuses were unusable by enemies because of it. The one authored
+number is pinned against its effects for every move of every enemy by
+`Phase4ContentSmokeTest.TestEveryIntentTelegraphsWhatItResolves`; a drifted telegraph is the
+canonical bad bug in this genre, because the player has already committed a turn against it.
+`Debuff` exists so a move that only worsens the player's position doesn't have to be authored as an
+Attack telegraphing 0.
+
 **Input is two layers, and the game is fully playable without a mouse.** Every binding is a named
 `hd_*` action in `project.godot`'s `[input]` — never a raw `Key.X` switch — so there is one place
 to look and a future rebinding UI has something to rebind. Above that, the two surfaces are
@@ -139,7 +153,13 @@ and cosmetic jitter can never desync a deterministic run.
 An earlier shard *shop* was removed — don't reintroduce shard-purchase language.
 
 Content stands at **58 cards** (24 Common / 23 Uncommon / 11 Rare), **15 events**, 27 relics, 12
-potions, 24 enemies, 3 acts. Nine statuses, ten effect actions, fifteen event outcome keys.
+potions, **36 enemies** (7 normals + 3 elites per act, plus 6 bosses), 3 acts. Nine statuses, ten
+effect actions, four intent types, fifteen event outcome keys.
+
+Enemy sprites are the one asset class that is **sourced rather than generated** — CC0 Dungeon Crawl
+tiles, palette-clamped by `artgen clamp`, mapped act by act in `CREDITS.md`. Adding an enemy means
+a row in `enemies.json`, a reference from exactly one act's pool (acts may not share enemies), and
+a 32x32 PNG; the first two are asserted by `ActSmokeTest`, the third by `PixelSpecSmokeTest`.
 
 `ROADMAP.md` tracks what's genuinely still open (packaged export, the rest of the way to 80–120
 cards, more enemies per act, a balance pass over the three-act curve). Don't treat this section as
@@ -219,6 +239,11 @@ inside `_Ready` — a `GetNode` against a path a restructured `.tscn` no longer 
 — never reaches its `GetTree().Quit()`, so Godot sits in an idle main loop and the sweep *stalls*
 rather than failing. The watchdog reports that as `TIMEOUT` and exits nonzero.
 
+A newly added PNG is the other way into that stall, and it looks nothing like an art problem:
+until the editor has imported it there is no `.png.import` sidecar, `GD.Load` returns null, and
+`PixelSpecSmokeTest` throws mid-`_Ready` and hangs. Run `Godot --headless --path . --import` after
+dropping any asset into `assets/`, and commit the sidecars it writes.
+
 `.github/workflows/ci.yml` runs this same script on every push to `main` and every PR. It imports
 assets first (`.godot/` is gitignored, so a fresh checkout resolves no resources at all) and then
 re-runs `artgen generate` to check the committed art still matches its source. A red CI on
@@ -232,7 +257,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `CombatSmokeTest` | `CombatScreen.tscn` boots and wires up | `CombatScreen`, `CombatManager` |
 | `CombatTargetingSmokeTest` | enemy target-lock glow | `EnemyView`, `CardView` drag/targeting |
 | `RelicSmokeTest` | relic hooks fire through combat | `scripts/relics/`, relic hooks, `relics.json` |
-| `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic | intent pickers, statuses, elite rewards |
+| `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic, every intent's telegraph against its effects, the derived label shapes, enemy turn-start grants | intent pickers, statuses, elite rewards, `EnemyView.FormatIntent`, `enemies.json` |
 | `HandLayoutSmokeTest` | hand fan spacing at 11+ cards, every card's text fits its box | `RefreshHand`, `HandFanLayout`, `CardView` text |
 | `DeckViewSmokeTest` | pile popups, pile counters, combat-end z-order | `PileViewPopup`, `DeckViewButtons`, `PileCounterBar` |
 | `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders, fits *and fills* the canvas | `MapGenerator`, `MapScreen`, `MapNode`, `acts.json` |
@@ -243,7 +268,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |
 | `AudioSmokeTest` | stream construction, bus setup, volume round-trip | `scripts/audio/`, `AudioManager`, `SettingsManager` |
 | `TransitionSmokeTest` | cross-screen fade: overlay geometry/layer, the Reduce Motion gate, covered-action firing once | `ScreenFade`, `RunManager.ChangeScreen` |
-| `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon-to-definition coverage, `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
+| `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon- *and sprite*-to-definition coverage, `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
 | `KeyboardSmokeTest` | `hd_*` InputMap coverage and no duplicate keycodes, which control each screen focuses on load, combat's card/potion keys, potion aiming, Continue at combat end | `project.godot` `[input]`, `ScreenKeyboardNav`, any screen's focus wiring, `CombatScreen._UnhandledInput` |
 
 When in doubt run everything — the full sweep takes well under a minute. Restructuring a

@@ -30,6 +30,10 @@ Act I:
 | Possessed Armor | `undead/ancient_champion.png` |
 | Hollow King | `undead/ancient_lich.png` |
 | The Gaol Warden | `humanoids/oni_incarcerator.png` |
+| Drowned Thrall | `undead/drowned_soul.png` |
+| Mire Leech | `animals/tyrant_leech.png` |
+| Gaol Rat | `animals/rat.png` |
+| The Drowned Matron | `undead/silent_spectre.png` |
 
 Act II:
 
@@ -43,6 +47,10 @@ Act II:
 | Pyre Warden | `demons/efreet.png` |
 | Emberlord Vashk | `unique/asmodeus.png` |
 | The Slag Maw | `amorphous/rockslime.png` |
+| Cinder Moth | `animals/moth_of_wrath.png` |
+| Ashen Priest | `undead/searing_wretch.png` |
+| Forge Wight | `nonliving/molten_gargoyle.png` |
+| The Emberforge Smith | `humanoids/ironbound_mechanist.png` |
 
 Act III:
 
@@ -56,6 +64,10 @@ Act III:
 | The Silent Judge | `holy/daeva.png` |
 | The Hollow Throne | `vault/zot_statue.png` |
 | The Nameless Regent | `undead/ancient_lich.png` |
+| Wailing Effigy | `statues/pillar_of_salt.png` |
+| Gilded Husk | `undead/guardian_mummy.png` |
+| Oath Binder | `undead/skeletal_warrior.png` |
+| The Sable Inquisitor | `demons/reaper.png` |
 
 The tiled screen backgrounds in `assets/backgrounds/` are from the same set
 (`crawl-ref/source/rltiles/dngn/floor/`, CC0, upscaled 2×): `crypt0`,
