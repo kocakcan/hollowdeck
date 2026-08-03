@@ -358,8 +358,51 @@ Demoted, not dropped. Still genuinely open:
   `Ritual`, plus `Dexterity`, `Frail` and `Regen` from the content pass above. Keep widening it
   alongside cards that use the new statuses, not speculatively — every one of those landed with
   the cards that grant it, which is the pattern.
-- **Close the relic-hook gap.** `SimpleHookEffectRelic` covers 2 of the 7 hooks `RelicBehavior`
-  defines. Extending it to the other five makes future simple relics data rows instead of classes.
+- ✅ **Close the relic-hook gap.** Went further than the bullet asked, because reading the eleven
+  bespoke relic classes showed why the partial version wasn't worth doing: **every one of them
+  decomposed** into the same five parts — a hook, a target selector, a condition, a firing limit
+  and an `EffectSpec`. Even the three holding per-instance state (`_triggeredThisTurn`,
+  `_cardsThisTurn`, `_usedThisCombat`) were only the firing-limit part wearing a class. Opening the
+  other five hooks and stopping there would have left `relics.json` split down the middle exactly
+  as before, with the vocabulary sitting unused beside eleven classes that needed it.
+
+  So all 27 relics are now data rows, `RelicRegistry` has one factory, and the eleven classes are
+  deleted. `RelicBehavior` stays as the escape hatch with nothing using it — the same standing
+  `IScriptedEffect` has had since Phase 1, and the same argument: the seam is worth proving, not
+  populating.
+
+  The vocabulary is in `scripts/data/RelicTrigger.cs` and every key in it is demanded by a relic
+  that shipped with it (`target`: Self/Attacker/FirstEnemy/RandomEnemy/AllEnemies; `condition`:
+  cardType/outcome/minEnergy/minHpPercent/targetKilled; `limit`: oncePerTurn/oncePerCombat/
+  everyNth). Two decisions worth keeping:
+
+  - **`condition.outcome` is a string, not the `CombatOutcome` enum**, because that enum lives in
+    `Hollowdeck.Combat` and `Hollowdeck.Data` references it nowhere. `hook` was already a string
+    for that reason; `cardType` stays a real enum because `CardType` is already in `Data`.
+  - **The per-turn limits reset in `OnTurnStart`, which only fires on the player's turn**, so a hit
+    taken during the enemy turn shares a bucket with the player turn after it. That is what the
+    bespoke classes did, and preserving it exactly is why the conversion is behaviour-neutral —
+    `RelicSmokeTest`'s eight original checks drive all seven hooks through relics this change
+    converted, and none of them was touched.
+
+  One new effect action, `gain_gold` (ten now): Scavenger's Charm reached into `RunState.Gold`
+  directly and was the single relic no `EffectSpec` could express. It is the first effect that
+  ignores its targets entirely.
+
+  Five new relics, 22 → 27, one per newly-opened hook or selector so the vocabulary ships live
+  rather than as scaffolding — the argument that shipped `Inflame` with the `Power` type. Ossuary
+  Bell (OnTurnEnd, `AllEnemies`), Conduit Sigil (OnCardPlayed, `cardType: Power`), Rusted
+  Portcullis (OnDamageTaken, `oncePerCombat`), Palsy Shackle (OnDamageTaken, `Attacker`), Reaper's
+  Tally (OnDamageDealt, `targetKilled`). Two were renamed off their first drafts by the art rather
+  than the data: "Cracked Aegis" could only be drawn as a cracked shield, which is already the
+  `vulnerable` status icon, and "Sablewood Charm" as a pendant on a cord, which is already
+  `scavengers_charm`. A relic whose icon can't be distinct from an existing one is a relic with the
+  wrong name.
+
+  `RelicSmokeTest` gained five checks for the keys the original eight don't reach. The two limits
+  are measured as a **difference against an unrelicked control** rather than against hardcoded HP —
+  the Cultist's damage is data, and a balance tweak to `enemies.json` should not be able to break a
+  test about firing limits.
 - ✅ **Input actions, and full keyboard support.** `project.godot` now has an `[input]` section:
   every binding is a named `hd_*` action and all three input handlers check `IsActionPressed`
   rather than switching on a raw keycode, so there is finally an `InputMap` layer to rebind.
@@ -393,7 +436,7 @@ Demoted, not dropped. Still genuinely open:
   *Outstanding:* the rebinding **UI** itself, now that there's a layer under it. Gamepad support is
   also much cheaper than it was. Resolution/windowed-size options are still missing.
 - ✅ **CI.** `.github/workflows/ci.yml` runs the whole sweep on every push to `main` and every PR:
-  17 suites, 661 checks, plus `artgen validate` over 121 assets. Godot is pinned to the same
+  17 suites, 770 checks, plus `artgen validate` over 164 assets. Godot is pinned to the same
   4.7.1-stable mono build the csproj SDK and `project.godot` declare, and cached.
 
   Two things were worth getting right. **Importing assets first** — `.godot/` is gitignored, so a

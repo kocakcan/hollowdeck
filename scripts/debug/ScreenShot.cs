@@ -253,7 +253,16 @@ public partial class ScreenShot : Node
     {
         SeedCombat();
         CombatContext.EnemyDefinitionIds = new List<string> { "rot_hound", "rot_hound", "ward_acolyte" };
-        RunState.Relics = RelicDatabase.All.Take(8).Select(r => new RelicInstance(r)).ToList();
+        // Named rather than Take(8): this is the only fixture that renders a
+        // full relic row at the 1x the HUD actually draws icons at, so it is
+        // where new relic art gets looked at. Taking the first eight in file
+        // order meant the newest five were the ones never shown.
+        RunState.Relics = new[]
+            {
+                "ossuary_bell", "conduit_sigil", "rusted_portcullis", "palsy_shackle", "reapers_tally",
+                "anchor_stone", "thorned_carapace", "vampire_fang",
+            }
+            .Select(id => new RelicInstance(RelicDatabase.Get(id))).ToList();
         RunState.Potions = PotionDatabase.All.Take(3).Select(p => new PotionInstance(p)).ToList();
     }
 

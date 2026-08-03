@@ -36,6 +36,7 @@ public partial class EffectSmokeTest : Node
         TestGainBlockAndDraw();
         TestHeal();
         TestGainEnergy();
+        TestGainGold();
         TestEffectDescriptionFormatter();
         TestAllEnemiesWording();
         TestLiveTargetDamage();
@@ -69,7 +70,7 @@ public partial class EffectSmokeTest : Node
 
     private void TestRelicAndPotionDatabasesLoad()
     {
-        Check("relics_loaded", RelicDatabase.All.Count == 22, $"count={RelicDatabase.All.Count}");
+        Check("relics_loaded", RelicDatabase.All.Count == 27, $"count={RelicDatabase.All.Count}");
         Check("potions_loaded", PotionDatabase.All.Count == 12, $"count={PotionDatabase.All.Count}");
 
         int created = 0;
@@ -181,6 +182,21 @@ public partial class EffectSmokeTest : Node
 
         EffectRegistry.Execute(ctx, new EffectSpec { Action = "gain_energy", Amount = 2 });
         Check("gain_energy", player.CurrentEnergy == 3, $"energy={player.CurrentEnergy}");
+    }
+
+    // gain_gold is the one effect that ignores ctx.Targets entirely - gold is
+    // run state, not a combatant property - so the targets list here is
+    // deliberately empty and the amount still has to land.
+    private void TestGainGold()
+    {
+        var player = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 50 };
+        var ctx = new EffectContext { Source = player, Targets = new List<Combatant>(), Combat = null! };
+
+        int before = RunState.Gold;
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "gain_gold", Amount = 7 });
+        Check("gain_gold_ignores_targets", RunState.Gold == before + 7,
+            $"before={before} after={RunState.Gold}");
+        RunState.Gold = before;
     }
 
     private void TestEffectDescriptionFormatter()

@@ -11,7 +11,7 @@ networking, desktop only (Windows/Mac/Linux).
 
 The core loop is playable end-to-end — new run, map, combat, events, shop, rest, treasure,
 rewards, bosses, run-end scoring, unlocks, and mid-run save/resume. Current content is three
-acts: **33 cards, 22 relics, 12 potions, 24 enemies (6 of them bosses), 5 events**. Each act has
+acts: **58 cards, 27 relics, 12 potions, 24 enemies (6 of them bosses), 15 events**. Each act has
 its own enemy pools and a two-boss pool the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
 what's still open.
 
@@ -67,7 +67,7 @@ scripts/
               AudioManager, SettingsManager, RngStreams, PileManager, *Instance types
   combat/     CombatManager state machine, Combatant, EnemyFactory, intent pickers
   effects/    IEffect implementations + EffectRegistry, DamageMath
-  relics/     RelicBehavior (7 hooks) + registry + SimpleHookEffectRelic + bespoke relics
+  relics/     RelicBehavior (7 hooks) + registry + SimpleHookEffectRelic, which every relic uses
   events/     IEventOutcome implementations + EventOutcomeRegistry
   map/        MapGenerator, MapNode, MapNodeType
   data/       Definition classes and the JSON databases that load them, EffectSpec
@@ -136,9 +136,10 @@ Most content needs no C# at all.
 }
 ```
 
-The seven `action` keys `EffectRegistry` currently knows: `deal_damage`, `gain_block`,
-`apply_status`, `draw_cards`, `heal`, `gain_energy`, `lose_hp`. Statuses available to
-`apply_status`: `Vulnerable`, `Weak`, `Strength`, `Poison`. A genuinely new mechanic means a new
+The ten `action` keys `EffectRegistry` currently knows: `deal_damage`, `gain_block`,
+`apply_status`, `draw_cards`, `heal`, `gain_energy`, `lose_hp`, `discard_cards`, `exhaust_hand`,
+`gain_gold`. Statuses available to `apply_status`: `Vulnerable`, `Weak`, `Strength`, `Poison`,
+`Dexterity`, `Frail`, `Metallicize`, `Ritual`, `Regen`. A genuinely new mechanic means a new
 `IEffect` in `scripts/effects/` registered in `EffectRegistry` — reach for that only when the
 mechanic can't be composed from existing actions.
 
@@ -146,8 +147,10 @@ mechanic can't be composed from existing actions.
 (`data/enemies/enemies.json`) is HP plus a list of moves, each pairing a displayed `intent` with
 the `effects` it will actually resolve; `aiType` picks the intent strategy (`sequential`,
 weighted, or phase-threshold). **An event** (`data/events/events.json`) is text plus choices,
-each naming one of `EventOutcomeRegistry`'s eight outcomes (`gain_gold`, `lose_gold`, `heal`,
-`lose_hp`, `gain_random_card`, `gain_relic`, `lose_relic`, `none`).
+each naming one of `EventOutcomeRegistry`'s fifteen outcomes (`gain_gold`, `lose_gold`, `heal`,
+`lose_hp`, `gain_max_hp`, `lose_max_hp`, `gain_random_card`, `gain_relic`, `lose_relic`,
+`gain_potion`, `upgrade_random_card`, `gamble`, `remove_chosen_card`, `upgrade_chosen_card`,
+`none`).
 
 **An act** (`data/acts/acts.json`) is a chapter of a run, in play order: `floorCount`, the
 `normalEncounters` / `eliteEncounters` pools (each entry is one group, so `["slime","slime"]` is a
@@ -163,16 +166,39 @@ then `cargo run --release --manifest-path tools/artgen/Cargo.toml -- generate`. 
 `tools/artgen/README.md`; `PixelSpecSmokeTest` fails if a definition has no icon or an icon has no
 definition.
 
-**A relic** (`data/relics/relics.json`) is data-only when it fires a single effect on
-`OnCombatStart` or `OnTurnStart` — use `"behaviorId": "simple_hook_effect"` with a `hook` and an
-`effect`. Anything else needs a `RelicBehavior` subclass in `scripts/relics/` overriding one of
-the seven hooks (extending `SimpleHookEffectRelic` to the other five hooks is on the roadmap).
+**A relic** (`data/relics/relics.json`) is a data row like everything else. All 27 declare
+`"behaviorId": "simple_hook_effect"`; none is a C# class. A relic is a `hook` — any of
+`RelicBehavior`'s seven — plus the `effect` it fires, narrowed by three optional keys:
+
+```json
+{
+  "id": "ledger_of_ruin",
+  "behaviorId": "simple_hook_effect",
+  "hook": "OnCardPlayed",
+  "target": "Self",
+  "condition": { "cardType": "Attack" },
+  "limit": { "oncePerCombat": true },
+  "effect": { "action": "apply_status", "status": "Strength", "amount": 1 }
+}
+```
+
+- **`target`** — `Self` (the default), `Attacker` (OnDamageTaken's), `FirstEnemy`, `RandomEnemy`,
+  `AllEnemies`. This is the relic's own selector, *not* `EffectSpec.Scope`: a relic has no card
+  targets to inherit, so `scope` is meaningless on a relic effect and is left off.
+- **`condition`** — `cardType`, `outcome` (`"Win"`/`"Lose"`), `minEnergy`, `minHpPercent`,
+  `targetKilled`. Each is checked only when present, and only makes sense on some hooks.
+- **`limit`** — `oncePerTurn`, `oncePerCombat`, `everyNth`. The per-turn counters reset on the
+  player's turn start, so a hit taken during the enemy turn counts against the player turn that
+  follows it.
+
+A `RelicBehavior` subclass in `scripts/relics/` is still the escape hatch for a mechanic none of
+that reaches, but nothing in the game currently needs one — same standing as `IScriptedEffect`.
 
 ## Tests and verification
 
 There's no test framework. Each `scenes/debug/*SmokeTest.tscn` runs assertions in `_Ready`,
 prints `PASS`/`FAIL` per check and a `<Name>: N passed, M failed` summary, then exits nonzero if
-anything failed. 17 suites, 661 checks:
+anything failed. 17 suites, 770 checks:
 
 ```bash
 tools/run-smoke-tests.sh                 # all of them; builds first, nonzero exit on any failure
