@@ -26,7 +26,21 @@ namespace Hollowdeck.Combat;
 // makes it authorable as a Power - a decaying Poison-mirror would have been a
 // Skill's worth of value and would have needed its own tick site next to
 // ApplyPoisonTick, where ordering is already load-bearing.
+// Fervor and Foresight are the other two things a turn can hand you - energy
+// and cards - and they exist because the first six Powers could only ever grant
+// a number that already had a status behind it. They are the archetype anchors:
+// a deck is built around drawing more or spending more, not around 3 Block a
+// turn.
+//
+// Unlike the three above them they are player-only in effect. An enemy has no
+// piles and no energy pool, so ApplyTurnStartGrants cannot pay them out for one
+// - which is why they are granted in BeginPlayerTurn beside the two lines they
+// add to, rather than with the other three. See the comment there: energy and
+// hand size are *assigned* at turn start, so a grant applied before that
+// assignment is overwritten, the same ordering trap Block has in the opposite
+// direction.
 public enum StatusType
 {
     Vulnerable, Weak, Strength, Poison, Metallicize, Ritual, Dexterity, Frail, Regen,
+    Fervor, Foresight,
 }

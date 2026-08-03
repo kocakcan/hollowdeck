@@ -278,3 +278,44 @@ pub fn crack(canvas: &mut Canvas, points: &[(i32, i32)], colour: Rgb) {
         canvas.line(pair[0].0, pair[0].1, pair[1].0, pair[1].1, colour);
     }
 }
+
+/// An open eye: a diamond aperture, an iris and a hard pupil. Lives here
+/// rather than in one icon because three things share it — the Foresight
+/// status and both Powers that grant it — and "seeing more" is the whole
+/// family's mark. A round eye was tried and reads as a ring at 1x; the
+/// diamond's corners are what say *eye* rather than *button*.
+pub fn eye(canvas: &mut Canvas, cx: i32, cy: i32, half_width: i32, half_height: i32, iris: Rgb) {
+    canvas.poly(
+        &[
+            (cx - half_width, cy),
+            (cx, cy - half_height),
+            (cx + half_width, cy),
+            (cx, cy + half_height),
+        ],
+        N8,
+    );
+    canvas.disc(cx, cy, half_height - 1, iris);
+    canvas.disc(cx, cy, (half_height - 1) / 2, N0);
+}
+
+/// The energy orb, the same octagon the combat HUD draws its number inside.
+/// Shared by the Fervor status and the Power that grants it, for the reason
+/// `raised_fist` is shared: the card hands you the status, so they had better
+/// be the same object.
+pub fn orb(canvas: &mut Canvas, cx: i32, cy: i32, radius: i32, body: Rgb, core: Rgb) {
+    let cut = radius / 2;
+    canvas.poly(
+        &[
+            (cx - cut, cy - radius),
+            (cx + cut, cy - radius),
+            (cx + radius, cy - cut),
+            (cx + radius, cy + cut),
+            (cx + cut, cy + radius),
+            (cx - cut, cy + radius),
+            (cx - radius, cy + cut),
+            (cx - radius, cy - cut),
+        ],
+        body,
+    );
+    canvas.disc(cx, cy, radius / 2, core);
+}

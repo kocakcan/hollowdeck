@@ -11,7 +11,7 @@ networking, desktop only (Windows/Mac/Linux).
 
 The core loop is playable end-to-end — new run, map, combat, events, shop, rest, treasure,
 rewards, bosses, run-end scoring, unlocks, and mid-run save/resume. Current content is three
-acts: **58 cards, 27 relics, 12 potions, 36 enemies (6 of them bosses), 15 events**. Each act has
+acts: **84 cards, 27 relics, 12 potions, 36 enemies (6 of them bosses), 15 events**. Each act has
 its own enemy pools and a two-boss pool the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
 what's still open.
 
@@ -73,13 +73,13 @@ scripts/
   data/       Definition classes and the JSON databases that load them, EffectSpec
   ui/         Screen controllers, CardView, EnemyView, theming, layout helpers
   audio/      AudioSynth / AudioCues / AudioMusic — everything is synthesized at runtime
-  debug/      15 smoke-test scenes + the screenshot harness
+  debug/      17 smoke-test scenes + the screenshot harness
 scenes/       11 screens + reusable CardView/EnemyView/PotionView/FloatingText
   debug/      smoke-test and screenshot scenes
 data/         acts / cards / relics / potions / enemies / events — all JSON, the content layer
 assets/       sprites, icons, fonts, backgrounds, themes (see CREDITS.md for licensing)
 tools/        run-smoke-tests.sh
-  artgen/     Rust asset tool — generates the 79 icons, palette-clamps art, validates ART_SPEC
+  artgen/     Rust asset tool — generates the 161 icons, palette-clamps art, validates ART_SPEC
 ```
 
 ## Architecture
@@ -138,10 +138,11 @@ Most content needs no C# at all.
 
 The ten `action` keys `EffectRegistry` currently knows: `deal_damage`, `gain_block`,
 `apply_status`, `draw_cards`, `heal`, `gain_energy`, `lose_hp`, `discard_cards`, `exhaust_hand`,
-`gain_gold`. Statuses available to `apply_status`: `Vulnerable`, `Weak`, `Strength`, `Poison`,
-`Dexterity`, `Frail`, `Metallicize`, `Ritual`, `Regen`. A genuinely new mechanic means a new
-`IEffect` in `scripts/effects/` registered in `EffectRegistry` — reach for that only when the
-mechanic can't be composed from existing actions.
+`gain_gold`. The eleven statuses available to `apply_status`: `Vulnerable`, `Weak`, `Strength`,
+`Poison`, `Dexterity`, `Frail`, `Metallicize`, `Ritual`, `Regen`, `Fervor`, `Foresight` — the last
+five pay out every turn and never decay, which is what a `Power` card buys. A genuinely new
+mechanic means a new `IEffect` in `scripts/effects/` registered in `EffectRegistry` — reach for
+that only when the mechanic can't be composed from existing actions.
 
 **A potion** (`data/potions/potions.json`) has the same `effects` shape. **An enemy**
 (`data/enemies/enemies.json`) is HP plus a list of moves, each pairing a displayed `intent` with

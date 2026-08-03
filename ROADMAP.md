@@ -381,15 +381,47 @@ Demoted, not dropped. Still genuinely open:
   throw inside `_Ready`, which the watchdog reports as a `TIMEOUT` rather than a missing asset;
   that is now written down where the next person will hit it.
 
-- **Cards 58 → 80–120.**
+- ✅ **Cards 58 → 84**, into the 80–120 band. Same order as the enemy pass above, and the analysis
+  came out differently: the Common curve was genuinely close to full at 24 cards, but the **Power**
+  roster was six cards that all granted a flat number. Every Power in the game was Block, Strength
+  or HP per turn, because those were the only three statuses that paid out at turn start — so the
+  card type that is supposed to define a deck could not define one.
+
+  Two statuses fixed that, both authored as ordinary rows the way the roadmap asks: `Fervor`
+  (+Energy each turn) and `Foresight` (+cards each turn) — the two resources a turn *assigns*
+  rather than accumulates, which is exactly why they could not go in `ApplyTurnStartGrants` with
+  the other three. Energy and hand size are set outright in `BeginPlayerTurn`, so a grant applied
+  in that pass is overwritten a line later; they are folded into the assignments themselves
+  (`MaxEnergy + Fervor`, `BaseHandSize + Foresight`), which is the Block ordering trap running the
+  other way and the reason it can't happen. Four cards ship on them, laddered Uncommon→Rare exactly
+  as Metallicize→Demon Form already was. Powers went 6 → 10.
+
+  The other 22 fill measurable gaps rather than adding rows: the pool had **no card above cost 2**
+  (three now, all Rare, all spending a whole turn), no card using `gain_gold` (Tithe), and one card
+  on `Ritual` (Stoke is its Uncommon rung). Four drafts were cut or rewritten during the pass for
+  the reason the enemy pass cut two names — Reprisal was Iron Wave with bigger numbers, Windfall
+  was Sift one rarity up, and "Cinder Storm"/"Sharpen" could not be drawn without contradicting the
+  set's own rules (an ember-named card that applies green Poison, a Skill whose name demands a
+  weapon). Final pool: 34 Common / 34 Uncommon / 16 Rare.
+
+  One bug found by writing the test rather than by playing: `gain_gold` was excluded from
+  `CardUpgrade`'s scaled actions, correctly while it was relic-only — relics don't upgrade — and
+  silently wrong the moment a card used it, so `Tithe+` read and played exactly like `Tithe`.
+  `EffectSmokeTest.TestEveryCardUpgradeChangesSomething` now fails any card whose `+` moves no
+  number, which is the general form of the failure `CardUpgrade.ShouldScale` had only warned about
+  in a comment.
 - **Balance the three-act curve.** Authored and smoke-tested but never actually played: enemies
   scale ~1.4x per act against a 50 HP start with +8 max HP and 30% heal per act cleared. Act III
   against a deck with only ~20 card rewards is the open question. Unlock-track thresholds were
-  scaled to one-act runs and now fill three times faster.
-- **Wider status roster** — nine today: `Vulnerable`, `Weak`, `Strength`, `Poison`, `Metallicize`,
-  `Ritual`, plus `Dexterity`, `Frail` and `Regen` from the content pass above. Keep widening it
-  alongside cards that use the new statuses, not speculatively — every one of those landed with
-  the cards that grant it, which is the pattern.
+  scaled to one-act runs and now fill three times faster. Two known things to look at first, both
+  flagged where they live: `Bloodpact+`/`Deep Focus+` (+2 Energy or +2 cards *every turn*) are the
+  largest upgrade deltas in the pool by a distance, and 74 of the 84 cards are unlocked from the
+  first run, so the unlock track now gates a tenth of the pool rather than a fifth.
+- **Wider status roster** — eleven today: `Vulnerable`, `Weak`, `Strength`, `Poison`,
+  `Metallicize`, `Ritual`, `Dexterity`, `Frail`, `Regen`, plus `Fervor` and `Foresight` from the
+  card pass above. Keep widening it alongside cards that use the new statuses, not speculatively —
+  every one of those landed with the cards that grant it, which is the pattern. Five of the eleven
+  now pay out at turn start, which is what makes `Power` a card type rather than a frame colour.
 - ✅ **Close the relic-hook gap.** Went further than the bullet asked, because reading the eleven
   bespoke relic classes showed why the partial version wasn't worth doing: **every one of them
   decomposed** into the same five parts — a hook, a target selector, a condition, a firing limit

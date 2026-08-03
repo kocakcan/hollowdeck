@@ -31,6 +31,8 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "status", name: "dexterity", draw: dexterity },
         Icon { category: "status", name: "frail", draw: frail },
         Icon { category: "status", name: "regen", draw: regen },
+        Icon { category: "status", name: "fervor", draw: fervor },
+        Icon { category: "status", name: "foresight", draw: foresight },
         // Intents
         Icon { category: "intents", name: "attack", draw: intent_attack },
         Icon { category: "intents", name: "defend", draw: intent_defend },
@@ -337,6 +339,30 @@ fn chevron(
     let (apex, ends) = if up { (y, y + height) } else { (y + height, y) };
     canvas.thick_line(cx - half_width, ends, cx, apex, weight, colour);
     canvas.thick_line(cx, apex, cx + half_width, ends, weight, colour);
+}
+
+/// Fervor: the combat HUD's own energy orb, with a lick of flame off the top.
+/// Drawn as the orb rather than as a bolt because the thing it hands you is
+/// literally the number in that orb - and the energy potion already owns the
+/// bolt.
+fn fervor() -> Canvas {
+    let mut canvas = new_icon();
+    orb(&mut canvas, 16, 19, 12, G2, G4);
+    flame(&mut canvas, 16, 10, 9, E2, E3);
+    canvas.set(11, 15, G5);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Foresight: the eye its two Powers are drawn from, plus the sparkle the set
+/// uses everywhere for "and something extra". A closed-then-open pair was
+/// tried; at 1x a closed eye is a horizontal line and reads as nothing.
+fn foresight() -> Canvas {
+    let mut canvas = new_icon();
+    eye(&mut canvas, 16, 17, 14, 9, B3);
+    sparkle(&mut canvas, 25, 5, 4, B5);
+    finish(&mut canvas);
+    canvas
 }
 
 // -- intents ---------------------------------------------------------------

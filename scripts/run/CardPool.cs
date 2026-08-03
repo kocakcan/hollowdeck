@@ -45,7 +45,7 @@ public static class CardPool
     ///
     /// Draws a *tier* first and then a uniform card within it, rather than
     /// weighting each card by its own rarity. The difference matters: the
-    /// pool is 12 Common / 13 Uncommon / 6 Rare, so per-card weighting would
+    /// pool is 34 Common / 34 Uncommon / 16 Rare, so per-card weighting would
     /// hand Uncommon more total probability than Common purely because there
     /// happen to be more of them, and every card authored later would silently
     /// re-tune the odds of every tier.

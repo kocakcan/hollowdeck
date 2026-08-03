@@ -41,6 +41,7 @@ public partial class Phase4ContentSmokeTest : Node
         TestEveryIntentTelegraphsWhatItResolves();
         TestIntentLabelsAreReadFromTheMove();
         await TestEnemyPowersPayOutEachTurn();
+        await TestFervorAndForesightPayOutEachTurn();
         await TestEliteRewardGrantsGuaranteedRelic();
 
         GD.Print($"Phase4ContentSmokeTest: {_pass} passed, {_fail} failed");
@@ -228,6 +229,52 @@ public partial class Phase4ContentSmokeTest : Node
         await WaitForEnemyTurnToResolve(combat);
         Check("enemy_metallicize_pays_out_on_the_next_turn", enemy.Block == 2,
             $"block={enemy.Block}");
+        combat.QueueFree();
+    }
+
+    // The player-only pair, and the ordering that makes them different from
+    // the other three grants: energy and hand size are *assigned* at turn
+    // start, so these are folded into the assignments in BeginPlayerTurn
+    // rather than added in ApplyTurnStartGrants - where they would be
+    // overwritten a line later and the card would do nothing at all.
+    private async Task TestFervorAndForesightPayOutEachTurn()
+    {
+        var deck = new List<CardDefinition>();
+        for (int i = 0; i < 12; i++) deck.Add(CardDatabase.Get("defend"));
+
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 80, CurrentHp = 80, MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(deck),
+        };
+        var enemy = EnemyFactory.Create(EnemyDatabase.Get("slime"));
+
+        var combat = new CombatManager();
+        AddChild(combat);
+        combat.StartCombat(player, new List<EnemyCombatant> { enemy }, new List<RelicInstance>());
+
+        Check("opening_hand_is_the_base_size",
+            player.Piles.Hand.Count == CombatManager.BaseHandSize,
+            $"hand={player.Piles.Hand.Count}");
+
+        // Granted directly rather than by playing Bloodpact/Second Sight: the
+        // cards cost 3 and 1, and what is under test is the turn-start payout,
+        // not whether a Power resolves (TestPowerCardsLeavePlay covers that).
+        player.AddStatus(StatusType.Fervor, 1);
+        player.AddStatus(StatusType.Foresight, 2);
+
+        combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
+
+        Check("fervor_adds_to_the_energy_the_turn_assigns",
+            player.CurrentEnergy == player.MaxEnergy + 1,
+            $"energy={player.CurrentEnergy}, maxEnergy={player.MaxEnergy}");
+        Check("foresight_adds_to_the_hand_the_turn_draws",
+            player.Piles.Hand.Count == CombatManager.BaseHandSize + 2,
+            $"hand={player.Piles.Hand.Count}");
+        Check("neither_grant_wears_off",
+            player.GetStatus(StatusType.Fervor) == 1 && player.GetStatus(StatusType.Foresight) == 2,
+            $"fervor={player.GetStatus(StatusType.Fervor)}, foresight={player.GetStatus(StatusType.Foresight)}");
         combat.QueueFree();
     }
 

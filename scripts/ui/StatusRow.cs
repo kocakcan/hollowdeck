@@ -117,6 +117,11 @@ public static class StatusRow
         StatusType.Metallicize => $"Metallicize {amount}: gains {amount} Block at the start of each turn. Does not wear off.",
         StatusType.Ritual => $"Ritual {amount}: gains {amount} Strength at the start of each turn. Does not wear off.",
         StatusType.Regen => $"Regen {amount}: heals {amount} HP at the start of each turn. Does not wear off.",
+        // Same "does not wear off" phrasing as the three above, for the same
+        // reason - and the same word for what they pay out, since the player
+        // meets these as a number on an icon before they ever read a card.
+        StatusType.Fervor => $"Fervor {amount}: gains {amount} extra Energy at the start of each turn. Does not wear off.",
+        StatusType.Foresight => $"Foresight {amount}: draws {amount} extra card(s) at the start of each turn. Does not wear off.",
         // Phrased to mirror Strength/Weak word for word - these are the same
         // two effects applied to Block, and the wording is what says so.
         // Percentages come off BlockMath for the same no-drift reason the

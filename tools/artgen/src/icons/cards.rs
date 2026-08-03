@@ -78,6 +78,33 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "cards", name: "gambit", draw: gambit },
         Icon { category: "cards", name: "mending_light", draw: mending_light },
         Icon { category: "cards", name: "phoenix_heart", draw: phoenix_heart },
+        // Second content pass
+        Icon { category: "cards", name: "backstep", draw: backstep },
+        Icon { category: "cards", name: "cinder_slash", draw: cinder_slash },
+        Icon { category: "cards", name: "lash_out", draw: lash_out },
+        Icon { category: "cards", name: "steel_nerve", draw: steel_nerve },
+        Icon { category: "cards", name: "sift", draw: sift },
+        Icon { category: "cards", name: "jab", draw: jab },
+        Icon { category: "cards", name: "barbed_guard", draw: barbed_guard },
+        Icon { category: "cards", name: "cheap_shot", draw: cheap_shot },
+        Icon { category: "cards", name: "footwork", draw: footwork },
+        Icon { category: "cards", name: "tithe", draw: tithe },
+        Icon { category: "cards", name: "second_sight", draw: second_sight },
+        Icon { category: "cards", name: "hemorrhage", draw: hemorrhage },
+        Icon { category: "cards", name: "bloodhound", draw: bloodhound },
+        Icon { category: "cards", name: "flurry", draw: flurry },
+        Icon { category: "cards", name: "bloodrite", draw: bloodrite },
+        Icon { category: "cards", name: "blight_storm", draw: blight_storm },
+        Icon { category: "cards", name: "purge", draw: purge },
+        Icon { category: "cards", name: "stoke", draw: stoke },
+        Icon { category: "cards", name: "gravebind", draw: gravebind },
+        Icon { category: "cards", name: "resolve", draw: resolve },
+        Icon { category: "cards", name: "skullcrack", draw: skullcrack },
+        Icon { category: "cards", name: "bloodpact", draw: bloodpact },
+        Icon { category: "cards", name: "deep_focus", draw: deep_focus },
+        Icon { category: "cards", name: "cataclysm", draw: cataclysm },
+        Icon { category: "cards", name: "last_rite", draw: last_rite },
+        Icon { category: "cards", name: "reap", draw: reap },
     ]
 }
 
@@ -1212,4 +1239,354 @@ fn impact(canvas: &mut Canvas, cx: i32, cy: i32, colour: Rgb) {
     for (dx, dy) in [(-1, -1), (1, -1), (-1, 1), (1, 1)] {
         canvas.line(cx + dx * 10, cy + dy * 10, cx + dx * 13, cy + dy * 13, colour);
     }
+}
+
+// -- second content pass ---------------------------------------------------
+//
+// Same two rules as the set above: Attacks quote a weapon shape and Skills
+// never do, and a card that grants a status is drawn from the same parts as
+// the status itself (Resolve/Bloodrite share Flex's fist, the Foresight pair
+// share the eye, Bloodpact shares Fervor's orb).
+
+/// A shield already stepped back, with the ground it gave up behind it.
+fn backstep() -> Canvas {
+    let mut canvas = new_icon();
+    shield(&mut canvas, 21, 8, 18, 21, SHIELD_FACE, SHIELD_RIM);
+    for (x, y) in [(11, 13), (6, 13)] {
+        canvas.thick_line(x, y, x - 4, y + 4, 2, N6);
+        canvas.thick_line(x - 4, y + 4, x, y + 8, 2, N6);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// The blade family with two embers riding the edge — the cheap opener that
+/// leaves the target Vulnerable.
+fn cinder_slash() -> Canvas {
+    let mut canvas = new_icon();
+    sword(&mut canvas, (9, 24), (26, 6), BLADE, BLADE_EDGE);
+    canvas.disc(23, 14, 2, E2);
+    canvas.disc(27, 19, 2, E2);
+    canvas.set(23, 13, E4);
+    canvas.set(27, 18, E4);
+    canvas.disc(18, 9, 1, E3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A lash uncoiling across the icon with three barbs on it. The only weapon
+/// in the set that isn't straight, which is what separates the sweep of it
+/// from Blade Flurry's arcs.
+fn lash_out() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.thick_line(3, 29, 9, 24, 4, GRIP);
+    canvas.disc(3, 29, 2, GUARD);
+    // One line, tapering as it travels, with the barbs standing clear of it -
+    // a curled lash reads as a horn at 1x, and barbs sunk into the curve read
+    // as nothing at all.
+    canvas.thick_line(9, 24, 19, 17, 3, N5);
+    canvas.thick_line(19, 17, 28, 6, 2, N7);
+    for (x, y) in [(13, 21), (18, 17), (24, 11)] {
+        canvas.thick_line(x, y, x - 4, y - 5, 2, N6);
+        canvas.set(x - 5, y - 6, N8);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// Shield with a bright spine and rivets: holding still, and healing for it.
+fn steel_nerve() -> Canvas {
+    let mut canvas = new_icon();
+    shield(&mut canvas, 16, 4, 24, 26, SHIELD_FACE, SHIELD_RIM);
+    canvas.vline(16, 8, 15, N8);
+    for y in [10, 16, 22] {
+        canvas.disc(16, y, 2, N7);
+    }
+    canvas.disc(16, 16, 1, R3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Three cards, one of them falling out of the pile — the trade the card is.
+fn sift() -> Canvas {
+    let mut canvas = new_icon();
+    for (x, top) in [(3, 3), (11, 5)] {
+        canvas.poly(&[(x, top), (x + 10, top), (x + 10, top + 18), (x, top + 18)], N0);
+        canvas.poly(
+            &[(x + 1, top + 1), (x + 9, top + 1), (x + 9, top + 17), (x + 1, top + 17)],
+            N7,
+        );
+        canvas.hline(x + 3, top + 6, 5, N4);
+        canvas.hline(x + 3, top + 10, 5, N4);
+    }
+    // The discarded one, face-down and already past the others.
+    canvas.poly(&[(21, 19), (30, 24), (25, 31), (17, 27)], N0);
+    canvas.poly(&[(22, 21), (28, 24), (25, 29), (19, 26)], N3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Two short blades thrown in sequence. Deliberately small and low-contrast
+/// against Twin Strike's crossed pair: this is the cheap one.
+fn jab() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (4, 10), (19, 10), 1.5, BLADE, BLADE_EDGE);
+    canvas.thick_line(5, 7, 5, 13, 2, GUARD);
+    blade(&mut canvas, (4, 22), (19, 22), 1.5, BLADE, BLADE_EDGE);
+    canvas.thick_line(5, 19, 5, 25, 2, GUARD);
+    canvas.line(23, 8, 27, 6, N6);
+    canvas.line(23, 24, 27, 26, N6);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The shield family with the poison family's green growing out of it.
+fn barbed_guard() -> Canvas {
+    let mut canvas = new_icon();
+    shield(&mut canvas, 16, 6, 22, 24, SHIELD_FACE, SHIELD_RIM);
+    for (x, y) in [(6, 12), (16, 4), (26, 12)] {
+        canvas.poly(&[(x - 3, y + 6), (x, y - 4), (x + 3, y + 6)], V2);
+        canvas.vline(x, y - 3, 4, V4);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// A low blade and the buckling it leaves behind.
+fn cheap_shot() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (3, 24), (18, 16), 1.5, BLADE, BLADE_EDGE);
+    canvas.thick_line(2, 21, 6, 28, 2, GUARD);
+    for y in [8, 15] {
+        canvas.thick_line(20, y, 25, y + 5, 2, N5);
+        canvas.thick_line(25, y + 5, 30, y, 2, N5);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// The Dexterity mark on its own, at the size the other Dexterity cards only
+/// ever draw it beside a shield. This is the card that is *only* the status.
+fn footwork() -> Canvas {
+    let mut canvas = new_icon();
+    dexterity_mark(&mut canvas, 16, 9, 3);
+    canvas.thick_line(3, 6, 7, 10, 2, N5);
+    canvas.thick_line(29, 6, 25, 10, 2, N5);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Coins. The one card that pays in gold rather than in tempo, so it is drawn
+/// as the currency and nothing else.
+fn tithe() -> Canvas {
+    let mut canvas = new_icon();
+    for (x, y) in [(11, 22), (21, 22), (16, 13)] {
+        canvas.disc(x, y, 6, G2);
+        canvas.disc(x, y, 4, G3);
+        canvas.ring(x, y, 2, 1, G1);
+    }
+    sparkle(&mut canvas, 27, 6, 3, G5);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The eye, plain — the Uncommon rung of the Foresight ladder.
+fn second_sight() -> Canvas {
+    let mut canvas = new_icon();
+    eye(&mut canvas, 16, 16, 13, 8, B3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The poison family's blade, bleeding harder: a spray rather than the two
+/// beads Venom Strike carries.
+fn hemorrhage() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (5, 26), (22, 7), 2.0, BLADE, BLADE_EDGE);
+    canvas.thick_line(2, 23, 9, 28, 2, GUARD);
+    for (x, y, r) in [(24, 12, 3), (28, 19, 2), (21, 21, 2), (26, 26, 1)] {
+        droplet(&mut canvas, x, y, r, V2, V4);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// A blade with the blood coming back up it.
+fn bloodhound() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (7, 28), (24, 8), 2.0, BLADE, BLADE_EDGE);
+    canvas.thick_line(4, 25, 11, 30, 2, GUARD);
+    droplet(&mut canvas, 9, 14, 3, R3, R5);
+    arrow(&mut canvas, (9, 24), (9, 8), 2, 5, R4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Three blades in a row. The count is the card, so nothing else is on it.
+fn flurry() -> Canvas {
+    let mut canvas = new_icon();
+    for x in [5, 14, 23] {
+        blade(&mut canvas, (x, 28), (x, 5), 1.5, BLADE, BLADE_EDGE);
+        canvas.thick_line(x - 2, 26, x + 2, 26, 2, GUARD);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// Flex's fist with the price on it: the Strength is the same gesture, the
+/// blood is what it costs.
+fn bloodrite() -> Canvas {
+    let mut canvas = new_icon();
+    raised_fist(&mut canvas);
+    droplet(&mut canvas, 27, 9, 3, R3, R5);
+    droplet(&mut canvas, 28, 20, 2, R3, R5);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Poison falling on everything. Toxic Cloud is the cloud; this is the rain
+/// off it, which is the half that also does damage.
+fn blight_storm() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.disc(11, 8, 6, V1);
+    canvas.disc(20, 8, 5, V1);
+    canvas.rect(6, 8, 21, 4, V1);
+    canvas.hline(7, 6, 8, V2);
+    for (x, y) in [(8, 17), (15, 20), (22, 16), (11, 25), (19, 26)] {
+        droplet(&mut canvas, x, y, 2, V2, V4);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// A shield standing in the fire the rest of the hand went into.
+fn purge() -> Canvas {
+    let mut canvas = new_icon();
+    shield(&mut canvas, 16, 3, 22, 21, SHIELD_FACE, SHIELD_RIM);
+    flame(&mut canvas, 8, 31, 12, E2, E3);
+    flame(&mut canvas, 16, 31, 9, E2, E3);
+    flame(&mut canvas, 24, 31, 12, E2, E3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A flame with the draught under it — the Uncommon rung of the Ritual
+/// ladder, where Demon Form is the Rare one.
+fn stoke() -> Canvas {
+    let mut canvas = new_icon();
+    // A brazier, not a campfire: the map's Rest node is already crossed logs
+    // under a flame, and two icons that differ only in their kindling is the
+    // collision the relic naming rule exists to catch.
+    canvas.poly(&[(6, 22), (26, 22), (22, 30), (10, 30)], N4);
+    canvas.rect(4, 20, 24, 3, N6);
+    canvas.hline(13, 30, 7, N5);
+    flame(&mut canvas, 16, 21, 18, E2, E3);
+    flame(&mut canvas, 16, 21, 10, E3, E4);
+    sparkle(&mut canvas, 26, 8, 3, E4);
+    sparkle(&mut canvas, 6, 13, 2, E3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Two links closed over a slab. Skills never quote a weapon, and a binding
+/// is the one shape that says "both of these, to everyone".
+fn gravebind() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.poly(&[(5, 6), (27, 6), (25, 30), (7, 30)], N3);
+    canvas.poly(&[(7, 8), (25, 8), (23, 28), (9, 28)], N4);
+    canvas.hline(9, 12, 15, N3);
+    // The chain runs corner to corner, so the links read as a binding across
+    // the stone rather than as a pair of eyes on it.
+    for (x, y) in [(7, 8), (14, 15), (21, 22), (27, 28)] {
+        canvas.ring(x, y, 4, 2, N6);
+        canvas.set(x - 2, y - 2, N8);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// Flex's fist again, over the card it draws.
+fn resolve() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.poly(&[(17, 2), (29, 6), (25, 21), (13, 17)], N0);
+    canvas.poly(&[(18, 4), (27, 7), (24, 19), (15, 16)], N7);
+    raised_fist(&mut canvas);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The skull the set had never used, and the crack it takes.
+fn skullcrack() -> Canvas {
+    let mut canvas = new_icon();
+    skull(&mut canvas, 15, 6, BONE, BONE_SHADE);
+    crack(&mut canvas, &[(9, 6), (14, 11), (11, 15), (16, 20)], N0);
+    canvas.line(24, 3, 30, 9, N8);
+    canvas.line(23, 5, 29, 11, N6);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The energy orb with blood going into it: the cost of the card is a whole
+/// turn, and what comes back is Energy every turn after.
+fn bloodpact() -> Canvas {
+    let mut canvas = new_icon();
+    orb(&mut canvas, 16, 19, 11, G2, G4);
+    droplet(&mut canvas, 16, 6, 3, R3, R5);
+    sparkle(&mut canvas, 27, 8, 3, G5);
+    sparkle(&mut canvas, 5, 10, 2, G4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The same eye as Second Sight, opened wider and given rays. The pair has to
+/// read as one ladder, so the difference is degree rather than subject.
+fn deep_focus() -> Canvas {
+    let mut canvas = new_icon();
+    eye(&mut canvas, 16, 16, 11, 9, B4);
+    for (x0, y0, x1, y1) in [(2, 4, 6, 8), (30, 4, 26, 8), (2, 28, 6, 24), (30, 28, 26, 24)] {
+        canvas.line(x0, y0, x1, y1, B5);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// The heaviest attack in the game: a blade brought down through the whole
+/// icon, and the ground giving way under it.
+fn cataclysm() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (16, 2), (16, 23), 3.0, BLADE, BLADE_EDGE);
+    canvas.thick_line(10, 5, 22, 5, 3, GUARD);
+    canvas.rect(5, 25, 23, 3, E1);
+    crack(&mut canvas, &[(16, 25), (10, 28), (3, 26)], E3);
+    crack(&mut canvas, &[(16, 25), (22, 29), (29, 26)], E3);
+    crack(&mut canvas, &[(16, 25), (15, 31)], E3);
+    impact(&mut canvas, 16, 18, E3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A chalice under a halo. Nothing else in the set is a vessel, which is what
+/// keeps the game's one big heal from reading as another shield.
+fn last_rite() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.ring(16, 13, 11, 2, G3);
+    canvas.poly(&[(9, 11), (23, 11), (20, 21), (12, 21)], G2);
+    canvas.poly(&[(11, 13), (21, 13), (19, 19), (13, 19)], G4);
+    canvas.rect(15, 21, 3, 5, G2);
+    canvas.rect(11, 26, 11, 3, G3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A scythe, curved the one way no other weapon here is, and taking blood
+/// back with it.
+fn reap() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.thick_line(6, 30, 24, 6, 3, WOOD);
+    canvas.poly(&[(24, 6), (7, 8), (3, 14), (12, 11), (23, 10)], BLADE);
+    canvas.line(7, 8, 3, 14, BLADE_EDGE);
+    canvas.line(3, 14, 12, 11, BLADE_EDGE);
+    droplet(&mut canvas, 9, 20, 3, R3, R5);
+    finish(&mut canvas);
+    canvas
 }
