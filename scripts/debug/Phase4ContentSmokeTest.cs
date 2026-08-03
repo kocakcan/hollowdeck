@@ -1,10 +1,12 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
 using Hollowdeck.Effects;
 using Hollowdeck.Run;
+using Hollowdeck.UI;
 
 namespace Hollowdeck.Debug;
 
@@ -36,6 +38,9 @@ public partial class Phase4ContentSmokeTest : Node
         await TestPoisonTickBypassesBlockAndDecays();
         TestLoseHpEffect();
         TestEnragePickerSwitchesAtThreshold();
+        TestEveryIntentTelegraphsWhatItResolves();
+        TestIntentLabelsAreReadFromTheMove();
+        await TestEnemyPowersPayOutEachTurn();
         await TestEliteRewardGrantsGuaranteedRelic();
 
         GD.Print($"Phase4ContentSmokeTest: {_pass} passed, {_fail} failed");
@@ -122,6 +127,108 @@ public partial class Phase4ContentSmokeTest : Node
         Check("enrage_picker_switches_to_enrage_moves_at_threshold",
             boss.Definition.EnrageMoves.Exists(m => m.MoveId == enragedMove.MoveId),
             $"got moveId={enragedMove.MoveId}");
+    }
+
+    // A move's telegraph is one authored number (EnemyIntent.DisplayAmount)
+    // sitting beside the effects that actually resolve, and nothing but this
+    // stops the two drifting. A drifted telegraph is precisely the bug the
+    // intent system exists to prevent: the player commits a turn against a
+    // number the game then doesn't honour. Swept over every move of every
+    // enemy, including enrage lists, because the cost of a miss is highest on
+    // exactly the moves seen least often.
+    private void TestEveryIntentTelegraphsWhatItResolves()
+    {
+        var problems = new List<string>();
+        foreach (var def in EnemyDatabase.All)
+        {
+            foreach (var move in def.Moves.Concat(def.EnrageMoves))
+            {
+                var backing = move.Intent.Type switch
+                {
+                    IntentType.Attack => move.Effects.FirstOrDefault(e => e.Action == "deal_damage"),
+                    IntentType.Defend => move.Effects.FirstOrDefault(e => e.Action == "gain_block"),
+                    IntentType.Buff => move.Effects.FirstOrDefault(e =>
+                        e.Scope == EffectScope.Self && (e.Action == "apply_status" || e.Action == "heal")),
+                    IntentType.Debuff => move.Effects.FirstOrDefault(e =>
+                        e.Scope == EffectScope.Target && e.Action == "apply_status"),
+                    _ => null,
+                };
+
+                if (backing is null)
+                {
+                    problems.Add($"{def.Id}/{move.MoveId}: {move.Intent.Type} intent with no effect behind it");
+                }
+                else if (backing.Amount != move.Intent.DisplayAmount)
+                {
+                    problems.Add($"{def.Id}/{move.MoveId}: telegraphs {move.Intent.DisplayAmount}, resolves {backing.Amount}");
+                }
+            }
+        }
+
+        Check("every_intent_telegraphs_what_it_resolves", problems.Count == 0, string.Join("; ", problems));
+    }
+
+    // The label's *other* half is derived rather than authored - how many hits
+    // a move is, and which status a buff grants, are facts about its effects.
+    // These pin the four shapes that derivation has to produce.
+    private void TestIntentLabelsAreReadFromTheMove()
+    {
+        var target = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 50 };
+
+        string Label(string enemyId, string moveId)
+        {
+            var def = EnemyDatabase.Get(enemyId);
+            var move = def.Moves.Concat(def.EnrageMoves).First(m => m.MoveId == moveId);
+            return EnemyView.FormatIntent(move, EnemyFactory.Create(def), target);
+        }
+
+        Check("single_hit_attack_telegraphs_a_bare_number",
+            Label("cultist", "dark_strike") == "6", $"got '{Label("cultist", "dark_strike")}'");
+        Check("multi_hit_attack_telegraphs_its_hit_count",
+            Label("drowned_thrall", "flailing_grasp") == "4 x2", $"got '{Label("drowned_thrall", "flailing_grasp")}'");
+        Check("strength_buff_keeps_its_short_name",
+            Label("cultist", "incantation") == "+3 Str", $"got '{Label("cultist", "incantation")}'");
+        Check("non_strength_buff_names_its_own_status",
+            Label("gaol_rat", "bristle") == "+2 Metal", $"got '{Label("gaol_rat", "bristle")}'");
+        Check("self_heal_buff_reads_as_hp",
+            Label("mire_leech", "engorge") == "+5 HP", $"got '{Label("mire_leech", "engorge")}'");
+        Check("debuff_intent_telegraphs_its_amount",
+            Label("mire_leech", "sap_will") == "2", $"got '{Label("mire_leech", "sap_will")}'");
+        Check("defend_intent_leaves_the_number_to_its_icon",
+            Label("bog_troll", "hardened_hide") == "", $"got '{Label("bog_troll", "hardened_hide")}'");
+    }
+
+    // The enemy half of ApplyTurnStartGrants. A Power-style status on an enemy
+    // is what the Buff telegraph above exists to make authorable, and the
+    // ordering it depends on is the fragile part: the grant has to land *after*
+    // the enemy's own Block clear or it is wiped the instant it is given.
+    private async Task TestEnemyPowersPayOutEachTurn()
+    {
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 80, CurrentHp = 80, MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(new List<CardDefinition> { CardDatabase.Get("defend") }),
+        };
+        // gaol_rat opens on bristle (Metallicize 2) and never returns to it
+        // (loopFromIndex 1), so turn one grants and turn two has to pay out.
+        var enemy = EnemyFactory.Create(EnemyDatabase.Get("gaol_rat"));
+
+        var combat = new CombatManager();
+        AddChild(combat);
+        combat.StartCombat(player, new List<EnemyCombatant> { enemy }, new List<RelicInstance>());
+
+        combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
+        Check("enemy_buff_move_applies_its_status", enemy.GetStatus(StatusType.Metallicize) == 2,
+            $"metallicize={enemy.GetStatus(StatusType.Metallicize)}");
+        Check("enemy_grant_does_not_pay_out_on_the_turn_it_lands", enemy.Block == 0,
+            $"block={enemy.Block}");
+
+        combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
+        Check("enemy_metallicize_pays_out_on_the_next_turn", enemy.Block == 2,
+            $"block={enemy.Block}");
+        combat.QueueFree();
     }
 
     private async Task TestEliteRewardGrantsGuaranteedRelic()

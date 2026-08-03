@@ -100,7 +100,9 @@ public static class StatusRow
         tween.TweenCallback(Callable.From(ghost.QueueFree));
     }
 
-    private static bool IsDebuff(StatusType status) =>
+    // Public because EnemyView's incoming-debuff badge asks the same question:
+    // one list, so a tenth status can't be a debuff here and not there.
+    public static bool IsDebuff(StatusType status) =>
         status is StatusType.Weak or StatusType.Vulnerable or StatusType.Poison or StatusType.Frail;
 
     private static string Describe(StatusType status, int amount) => status switch

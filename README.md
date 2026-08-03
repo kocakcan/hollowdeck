@@ -11,7 +11,7 @@ networking, desktop only (Windows/Mac/Linux).
 
 The core loop is playable end-to-end — new run, map, combat, events, shop, rest, treasure,
 rewards, bosses, run-end scoring, unlocks, and mid-run save/resume. Current content is three
-acts: **58 cards, 27 relics, 12 potions, 24 enemies (6 of them bosses), 15 events**. Each act has
+acts: **58 cards, 27 relics, 12 potions, 36 enemies (6 of them bosses), 15 events**. Each act has
 its own enemy pools and a two-boss pool the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
 what's still open.
 
@@ -146,7 +146,12 @@ mechanic can't be composed from existing actions.
 **A potion** (`data/potions/potions.json`) has the same `effects` shape. **An enemy**
 (`data/enemies/enemies.json`) is HP plus a list of moves, each pairing a displayed `intent` with
 the `effects` it will actually resolve; `aiType` picks the intent strategy (`sequential`,
-weighted, or phase-threshold). **An event** (`data/events/events.json`) is text plus choices,
+weighted, or phase-threshold). An intent is one of `Attack` / `Defend` / `Buff` / `Debuff` plus a
+`displayAmount`, and that number is the *only* authored part of the telegraph — the hit count and
+the name of the status a Buff grants are derived from the move's own effects, so a move can't
+promise something it doesn't do. A new enemy also needs a 32x32 sprite at
+`assets/sprites/enemies/<id>.png` (sourced and clamped, see `CREDITS.md`) and a reference from
+some act's pool; both are asserted. **An event** (`data/events/events.json`) is text plus choices,
 each naming one of `EventOutcomeRegistry`'s fifteen outcomes (`gain_gold`, `lose_gold`, `heal`,
 `lose_hp`, `gain_max_hp`, `lose_max_hp`, `gain_random_card`, `gain_relic`, `lose_relic`,
 `gain_potion`, `upgrade_random_card`, `gamble`, `remove_chosen_card`, `upgrade_chosen_card`,

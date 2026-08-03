@@ -84,6 +84,10 @@ public partial class ScreenShot : Node
         // on, painting over the leftmost enemy - and with it the target-lock
         // glow, which is that enemy's own background.
         ["combatfull"] = new("res://scenes/CombatScreen.tscn", SeedCrowdedCombat, AfterCombatReady),
+        // The three telegraph shapes plain "combat" cannot show, since both of
+        // its enemies attack: a multi-hit count, a non-Strength buff, and a
+        // Debuff intent.
+        ["combatintents"] = new("res://scenes/CombatScreen.tscn", SeedIntentCombat, ShowNewIntents),
         // The pile popup is spawned on demand by DeckViewButtons rather than
         // being a screen of its own, so it needs a host screen plus the click
         // that opens it. Deck is deliberately larger than one row of the grid,
@@ -247,6 +251,35 @@ public partial class ScreenShot : Node
         var cover = RunManager.Instance.Fade.GetNode<ColorRect>("Cover");
         cover.Visible = true;
         cover.Color = new Color(cover.Color, 0.62f);
+    }
+
+    // One shot of all three telegraph shapes the enemy vocabulary gained: a
+    // multi-hit attack, a Buff naming a status that isn't Strength, and a
+    // Debuff intent with no damage at all. Each label is derived from its
+    // move's effects, so what needs looking at is whether the derived text
+    // still fits an enemy's share of the row beside the icon and the badge -
+    // the one thing no assertion covers.
+    //
+    // The moves are pinned rather than waited for: two of the three are
+    // reachable on turn 1 only through a weighted roll, and a fixture that
+    // shows a different intent depending on the seed is not a regression shot.
+    private static void SeedIntentCombat()
+    {
+        SeedCombat();
+        CombatContext.EnemyDefinitionIds = new List<string> { "drowned_thrall", "gaol_rat", "mire_leech" };
+    }
+
+    private static void ShowNewIntents(Node screen)
+    {
+        var pinned = new[] { "flailing_grasp", "bristle", "sap_will" };
+        foreach (var view in EnemyView.Instances)
+        {
+            var definition = view.Combatant.Definition;
+            var move = definition.Moves.FirstOrDefault(m => pinned.Contains(m.MoveId));
+            if (move is null) continue;
+            view.Combatant.CurrentMove = move;
+            view.Refresh();
+        }
     }
 
     private static void SeedCrowdedCombat()
