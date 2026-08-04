@@ -19,7 +19,7 @@ public partial class ScreenSmokeTest : Node
     private int _pass;
     private int _fail;
 
-    public override void _Ready()
+    public override async void _Ready()
     {
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
@@ -27,13 +27,25 @@ public partial class ScreenSmokeTest : Node
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
+        // Captured before the screen tests run, and used for Quit below - the
+        // same trap ActSmokeTest and KeyboardSmokeTest document. TestRestScreen
+        // drives a button into RunManager.ChangeScreen, which replaces the
+        // tree's current scene (this test), so GetTree() on the now-detached
+        // node comes back null and the run hangs with no summary. Harmless
+        // while _Ready was synchronous; the moment the first await went in, the
+        // continuation started running after that detachment.
+        var tree = GetTree();
+
+        await TestKeywordTooltipOnANonInteractiveCard();
+        await TestRewardScreenOpensQuietly();
+        TestRewardScreenActClearedBanner();
         TestRewardScreen();
         TestTreasureScreen();
         TestShopScreen();
         TestRestScreen();
 
         GD.Print($"ScreenSmokeTest: {_pass} passed, {_fail} failed");
-        GetTree().Quit(_fail == 0 ? 0 : 1);
+        tree.Quit(_fail == 0 ? 0 : 1);
     }
 
     private void Check(string name, bool condition, string detail)
@@ -48,6 +60,155 @@ public partial class ScreenSmokeTest : Node
         var instance = packed.Instantiate();
         AddChild(instance);
         return instance;
+    }
+
+    // Every non-combat screen shows its cards with Interactive = false, and for
+    // a long time that single flag was also what suppressed the keyword hover
+    // panel: the !Interactive guard sat above ShowKeywordTooltip rather than
+    // beside it, so Reward, Shop, the upgrade picker and the deck popup all
+    // received the mouse_entered signal and threw the explanation away.
+    //
+    // Driven through focus rather than a synthesised mouse event because that
+    // is the path with no OS input behind it - if the keyboard can raise the
+    // panel, the mouse (which shares the code below the guard) can too.
+    private async System.Threading.Tasks.Task TestKeywordTooltipOnANonInteractiveCard()
+    {
+        var tree = GetTree();
+        var view = GD.Load<PackedScene>("res://scenes/CardView.tscn").Instantiate<CardView>();
+        AddChild(view);
+        view.Interactive = false;
+        // Bash applies Vulnerable, so its generated text carries a keyword.
+        view.SetCardInstance(new CardInstance(CardDatabase.Get("bash")));
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        int before = CountTooltips();
+        view.GrabFocus();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        int focused = CountTooltips();
+
+        view.ReleaseFocus();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame); // QueueFree lands next frame
+        int released = CountTooltips();
+
+        Check("non_interactive_card_shows_a_keyword_tooltip_on_focus",
+            before == 0 && focused > before,
+            $"tooltips before={before}, focused={focused} - the Interactive guard is swallowing it again");
+        Check("keyword_tooltip_is_freed_when_focus_leaves", released == 0,
+            $"{released} tooltip(s) left on screen after the card lost focus");
+
+        // The panel outranks PileViewPopup, which sets itself to 2000. At the
+        // old ZIndex of 500 a deck-view tooltip rendered behind the very popup
+        // that spawned it.
+        Check("keyword_tooltip_outranks_the_deck_popup",
+            HoverTooltipZIndexBeatsPopup(),
+            "a tooltip raised from the deck view would paint underneath it");
+
+        view.QueueFree();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+    }
+
+    private int CountTooltips() =>
+        GetTree().CurrentScene.GetChildren().OfType<HoverTooltip>().Count();
+
+    private bool HoverTooltipZIndexBeatsPopup()
+    {
+        var probe = GD.Load<PackedScene>("res://scenes/CardView.tscn").Instantiate<CardView>();
+        AddChild(probe);
+        probe.Interactive = false;
+        probe.SetCardInstance(new CardInstance(CardDatabase.Get("bash")));
+        var tooltip = HoverTooltip.Show(probe, Keywords.Find("Apply 2 Vulnerable."));
+        bool beats = tooltip is not null && tooltip.ZIndex > 2000;
+        tooltip?.Dismiss();
+        probe.QueueFree();
+        return beats;
+    }
+
+    // A screen taking focus for the player is not the player pointing at
+    // anything. Every choice screen grabs focus for its first card on load, and
+    // because CardView raised the keyword panel from OnFocusEntered
+    // unconditionally, Reward/Shop/the pickers all came up with a panel already
+    // floating over the layout before a key had been pressed - the leftmost
+    // card explaining Vulnerable to nobody. The halo has to stay (it is how the
+    // player finds the keyboard); only the panel waits.
+    private async System.Threading.Tasks.Task TestRewardScreenOpensQuietly()
+    {
+        var tree = GetTree();
+        RewardContext.ActCleared = null;
+        RewardContext.GoldAwarded = 25;
+        // Bash first, deliberately: it applies Vulnerable, so the card that
+        // gets the automatic focus is one that *has* something to say. A
+        // keywordless first card would pass this test no matter what.
+        RewardContext.CardChoices = new List<CardDefinition>
+        {
+            CardDatabase.Get("bash"),
+            CardDatabase.Get("defend"),
+            CardDatabase.Get("strike"),
+        };
+
+        var screen = LoadScene("res://scenes/RewardScreen.tscn");
+        // Two frames: ScreenKeyboardNav defers its grab, and HoverTooltip would
+        // place itself on the frame after that.
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        var cards = screen.GetNode<Control>("CardChoicesArea").GetChildren().OfType<CardView>().ToList();
+        var focused = GetViewport().GuiGetFocusOwner();
+
+        Check("reward_auto_focuses_its_first_card",
+            cards.Count > 1 && ReferenceEquals(focused, cards[0]),
+            $"focus landed on '{focused?.Name}' - the rest of this test needs it on a keyworded card");
+        Check("reward_opens_without_a_keyword_tooltip", CountTooltips() == 0,
+            $"{CountTooltips()} tooltip(s) on screen before the player touched anything");
+
+        // ...and the suppression is scoped to that grab, not a general mute:
+        // the player moving focus themselves still raises the panel.
+        if (cards.Count > 1)
+        {
+            cards[1].GrabFocus();
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            Check("reward_raises_the_tooltip_when_the_player_moves_focus", CountTooltips() > 0,
+                "focusing a second card by hand raised nothing - the suppression has become a mute");
+        }
+
+        screen.QueueFree();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+    }
+
+    // The reward after a boss is the only place the player is told an act
+    // ended, which act starts next, and that clearing one just raised their max
+    // HP and healed them. All of it was silent, and the screen kept its
+    // "Victory Reward" title - so beating act 2's boss looked exactly like
+    // beating the run, and the fresh map that followed looked like a restart.
+    private void TestRewardScreenActClearedBanner()
+    {
+        RewardContext.GoldAwarded = 60;
+        RewardContext.CardChoices = new List<CardDefinition> { CardDatabase.Get("strike") };
+        RewardContext.ActCleared = new ActClear(
+            ClearedNumber: 1, ClearedName: "The Sunken Ward",
+            NextNumber: 2, NextName: "The Ember Reach",
+            TotalActs: 3, MaxHpBonus: 8, Healed: 20);
+
+        var screen = LoadScene("res://scenes/RewardScreen.tscn");
+        var title = screen.GetNode<Label>("TitleBlock/TitleLabel");
+        var act = screen.GetNode<Label>("TitleBlock/ActLabel");
+
+        Check("act_cleared_retitles_the_reward_screen", title.Text == "Act 1 Cleared",
+            $"title='{title.Text}' - a boss reward still reads like any other fight's");
+        Check("act_cleared_names_the_next_act_and_the_bonus",
+            act.Visible && act.Text.Contains("8") && act.Text.Contains("20")
+            && act.Text.Contains("Act 2 of 3") && act.Text.Contains("The Ember Reach"),
+            $"text='{act.Text}' (visible={act.Visible})");
+        screen.QueueFree();
+
+        // And an ordinary fight's reward is untouched by it.
+        RewardContext.ActCleared = null;
+        var plain = LoadScene("res://scenes/RewardScreen.tscn");
+        Check("ordinary_reward_has_no_act_banner",
+            !plain.GetNode<Label>("TitleBlock/ActLabel").Visible
+            && plain.GetNode<Label>("TitleBlock/TitleLabel").Text == "Victory Reward",
+            "the act-cleared banner leaked onto a non-boss reward");
+        plain.QueueFree();
     }
 
     private void TestRewardScreen()

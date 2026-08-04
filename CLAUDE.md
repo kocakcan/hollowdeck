@@ -236,7 +236,7 @@ There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Rea
 failure.
 
 ```bash
-tools/run-smoke-tests.sh                 # all 17; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh                 # all 18; builds first, nonzero exit on any failure
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 
@@ -280,7 +280,8 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `AudioSmokeTest` | stream construction, bus setup, volume round-trip | `scripts/audio/`, `AudioManager`, `SettingsManager` |
 | `TransitionSmokeTest` | cross-screen fade: overlay geometry/layer, the Reduce Motion gate, covered-action firing once | `ScreenFade`, `RunManager.ChangeScreen` |
 | `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon- *and sprite*-to-definition coverage, `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
-| `KeyboardSmokeTest` | `hd_*` InputMap coverage and no duplicate keycodes, which control each screen focuses on load, combat's card/potion keys, potion aiming, Continue at combat end | `project.godot` `[input]`, `ScreenKeyboardNav`, any screen's focus wiring, `CombatScreen._UnhandledInput` |
+| `KeyboardSmokeTest` | `hd_*` InputMap coverage and no duplicate keycodes, which control each screen focuses on load, the card picker's grid navigation (down a column, out to Cancel, back in), combat's card/potion keys, potion aiming, Continue at combat end | `project.godot` `[input]`, `ScreenKeyboardNav`, `CardPicker`, any screen's focus wiring, `CombatScreen._UnhandledInput` |
+| `VictorySmokeTest` | the final act's boss win routing to `RunEndScreen` rather than another reward, and that screen reading VICTORY | `CombatScreen.OnContinuePressed`, `RunState.IsFinalAct`/`AdvanceAct`, `RunEndScreen` |
 
 When in doubt run everything — the full sweep takes well under a minute. Restructuring a
 `.tscn` will break tests that assert on `GetNode` paths, on purpose — that's the alarm working;
@@ -301,7 +302,15 @@ A suite whose last act changes scene must capture `GetTree()` into a local *befo
 nothing asynchronous afterwards: `ChangeSceneToFile` replaces the tree's current scene, which is
 the test itself, and `GetTree()` on the now-detached node comes back null — the run then hangs with
 no summary and no `Quit()`, which the watchdog reports as a `TIMEOUT`. `ActSmokeTest` and
-`KeyboardSmokeTest` both document this at their `_Ready`.
+`KeyboardSmokeTest` both document this at their `_Ready`. That budget of one scene change per
+suite is why `VictorySmokeTest` exists separately from `ActSmokeTest` at all.
+
+`VictorySmokeTest` needs frames *after* its change, because the screen it lands on deletes the run
+save and banks a score into the meta save from its own `_Ready` — during the deferred swap, i.e.
+after a scoped `RunSaveGuard` in the test method has already restored. It buys them by handing the
+`CurrentScene` title to an empty stand-in node first, so the swap deletes that instead of the
+suite. Anything else that drives a screen far enough to reach `RunEndScreen` needs the same
+treatment; without it the test eats the developer's in-progress run.
 
 A suite that drives a button into `RunManager.ChangeScreen` also needs `HardCutGuard.Protect()`
 alongside `RunSaveGuard`: the Phase 5 fade defers `ChangeSceneToFile` into a tween callback, so

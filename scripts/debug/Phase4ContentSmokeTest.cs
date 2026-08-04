@@ -40,6 +40,7 @@ public partial class Phase4ContentSmokeTest : Node
         TestEnragePickerSwitchesAtThreshold();
         TestEveryIntentTelegraphsWhatItResolves();
         TestIntentLabelsAreReadFromTheMove();
+        TestEveryMoveDescribesItselfInTheEnemyVoice();
         await TestEnemyPowersPayOutEachTurn();
         await TestFervorAndForesightPayOutEachTurn();
         await TestEliteRewardGrantsGuaranteedRelic();
@@ -197,6 +198,65 @@ public partial class Phase4ContentSmokeTest : Node
             Label("mire_leech", "sap_will") == "2", $"got '{Label("mire_leech", "sap_will")}'");
         Check("defend_intent_leaves_the_number_to_its_icon",
             Label("bog_troll", "hardened_hide") == "", $"got '{Label("bog_troll", "hardened_hide")}'");
+    }
+
+    // The intent row tells the player how much; the hover panel tells them what
+    // kind of move it is, in prose. That prose is generated from the same
+    // EffectSpecs the row's number is derived from, so it inherits the same
+    // no-lying property - but only if every move actually produces some. A move
+    // whose only action has no formatter arm renders as an empty string, which
+    // on a card would be a blank rules box and here is a tooltip that explains
+    // nothing.
+    private void TestEveryMoveDescribesItselfInTheEnemyVoice()
+    {
+        var target = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 50 };
+        var silent = new List<string>();
+        var firstPerson = new List<string>();
+
+        foreach (var def in EnemyDatabase.All)
+        {
+            var source = EnemyFactory.Create(def);
+            foreach (var move in def.Moves.Concat(def.EnrageMoves))
+            {
+                string prose = EnemyView.DescribeMove(move, source, target);
+                if (string.IsNullOrWhiteSpace(prose)) { silent.Add($"{def.Id}/{move.MoveId}"); continue; }
+
+                // The imperative forms are the player's voice. An enemy
+                // telegraph reading "Deal 12 damage." is an instruction to the
+                // player to do it, which is exactly backwards.
+                if (prose.StartsWith("Deal ") || prose.StartsWith("Gain ")
+                    || prose.StartsWith("Apply ") || prose.StartsWith("Heal "))
+                {
+                    firstPerson.Add($"{def.Id}/{move.MoveId}: {prose}");
+                }
+            }
+        }
+
+        Check("every_enemy_move_describes_itself", silent.Count == 0,
+            $"no hover prose for: {string.Join(", ", silent)} - a formatter arm is missing");
+        Check("every_enemy_move_reads_in_the_enemy_voice", firstPerson.Count == 0,
+            $"still imperative: {string.Join("; ", firstPerson)}");
+
+        // Pinned end to end on one attack and one debuff, because the wording
+        // is the deliverable here, not just its non-emptiness.
+        var cultist = EnemyDatabase.Get("cultist");
+        string darkStrike = EnemyView.DescribeMove(
+            cultist.Moves.First(m => m.MoveId == "dark_strike"), EnemyFactory.Create(cultist), target);
+        Check("attack_move_prose_names_damage_and_recipient",
+            darkStrike == "Deals 6 damage to you.", $"got '{darkStrike}'");
+
+        var leech = EnemyDatabase.Get("mire_leech");
+        string sapWill = EnemyView.DescribeMove(
+            leech.Moves.First(m => m.MoveId == "sap_will"), EnemyFactory.Create(leech), target);
+        Check("debuff_move_prose_names_the_status",
+            sapWill == "Applies 2 Frail to you.", $"got '{sapWill}'");
+        // …and that status is what the shared roster raises a keyword box for,
+        // so a card and an enemy explain Frail with the same sentence. Frail is
+        // also one of the seven statuses that had no card-side explanation at
+        // all before Keywords replaced CardView's five-entry local roster.
+        Check("debuff_move_prose_raises_a_keyword_box",
+            Keywords.Find(sapWill).Any(e => e.Keyword == "Frail"),
+            $"no Frail keyword found in '{sapWill}'");
     }
 
     // The enemy half of ApplyTurnStartGrants. A Power-style status on an enemy

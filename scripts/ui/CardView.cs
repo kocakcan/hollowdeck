@@ -10,23 +10,6 @@ using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
 
-file static class KeywordHighlights
-{
-    // Blurb + color per keyword that can appear in EffectDescriptionFormatter
-    // output - kept CardView-local (not in EffectDescriptionFormatter itself)
-    // since this is purely a presentation decoration; the formatter's plain-
-    // text output stays the single source of truth other screens (Reward/
-    // Shop/PileViewPopup) read unmodified.
-    public static readonly (string Keyword, Color Color, string Blurb)[] All =
-    {
-        ("Vulnerable", UiTheme.Palette.StatusDebuff, "Takes more damage from attacks. Wears off by 1 each turn."),
-        ("Weak", UiTheme.Palette.StatusDebuff, "Deals less damage with attacks. Wears off by 1 each turn."),
-        ("Poison", UiTheme.Palette.StatusDebuff, "Loses HP each turn, ignoring Block, then drops by 1."),
-        ("Strength", UiTheme.Palette.StatusBuff, "Attacks deal more damage."),
-        ("Block", UiTheme.Palette.Block, "Reduces incoming damage this turn."),
-    };
-}
-
 // Hover (scale tween) + manual drag on a Control-based card. Home position is
 // tracked and laid out manually by whoever spawns this (CombatScreen), rather
 // than via a real Container - that sidesteps the Container-vs-manual-Position
@@ -134,8 +117,8 @@ public partial class CardView : Panel
     // whichever of OnMouseEntered/OnMouseExited last fired, whether that
     // came from real mouse hover or CombatScreen's SetHighlighted (arrow-key
     // selection) - one code path covers both input methods identically.
-    private List<(string Keyword, string ColorHex, string Blurb)> _activeKeywords = new();
-    private Control? _keywordTooltipPanel;
+    private List<Keywords.Entry> _activeKeywords = new();
+    private HoverTooltip? _keywordTooltip;
 
     public override void _Ready()
     {
@@ -183,20 +166,44 @@ public partial class CardView : Panel
         FocusExited += OnFocusExited;
     }
 
-    // How much a focused choice card grows. Border colour alone is not enough
-    // here: a Rare card's *resting* border is already RarityRareGlow, which is
-    // the same top-of-ramp gold FocusRing is, so on a reward screen offering a
-    // Rare the focused card and the Rare card looked identical. Size is the
-    // one channel nothing else on these cards uses, and it reuses the "the
-    // card you are on stands up" language combat's hover already speaks.
-    private static readonly Vector2 FocusScale = new(1.08f, 1.08f);
+    // How far the focus glow bleeds past the card's own edge. Border colour
+    // alone is not enough here: a Rare card's *resting* border is already
+    // RarityRareGlow, which is the same top-of-ramp gold FocusRing is, so on a
+    // reward screen offering a Rare the focused card and the Rare card looked
+    // identical. A halo is the channel nothing else on these cards uses.
+    //
+    // This was a 1.08x scale tween, which is the wrong channel for three
+    // reasons that all showed at once on the rest site's upgrade grid. It is a
+    // fractional scale over pixel art, so the 32px icon drawn at CardArtScale 3
+    // became 103.68px and the 16px bitmap text became 17.28 - both resampled,
+    // which is precisely what PixelSpec exists to forbid. It grew the card
+    // outside its 176x240 grid cell, over its own Upgrade button (12px of
+    // separation against 19.2px of growth) and into its neighbours. And the
+    // ScrollContainer that grid lives in clipped whatever grew past the
+    // viewport edge. A StyleBoxFlat shadow draws outside the box for free, so
+    // the card itself stays at exactly 1.0 and every pixel stays on the grid.
+    private const int FocusHaloSize = 8;
 
     // Non-interactive cards get no hover visual at all (OnMouseEntered bails
     // on !Interactive), so keyboard focus needs its own or a focused reward
     // card is indistinguishable from the two beside it.
-    private void OnFocusEntered() => ApplyFocusFrame(true);
+    private void OnFocusEntered()
+    {
+        ApplyFocusFrame(true);
+        // The halo always moves with focus - it is how the player finds the
+        // keyboard on a screen full of cards. The keyword panel does not,
+        // because focus arriving is not the same event as the player looking:
+        // every choice screen grabs focus for its first card on load
+        // (ScreenKeyboardNav), and that used to open a panel over the layout
+        // before the player had touched anything.
+        if (!ScreenKeyboardNav.GrantingFocus) ShowKeywordTooltip();
+    }
 
-    private void OnFocusExited() => ApplyFocusFrame(false);
+    private void OnFocusExited()
+    {
+        ApplyFocusFrame(false);
+        HideKeywordTooltip();
+    }
 
     private void ApplyFocusFrame(bool focused)
     {
@@ -204,16 +211,20 @@ public partial class CardView : Panel
 
         var def = CardInstance.Definition;
         var style = ChromeStyles.CardFrameStyle(def.Type, def.Rarity, focused, CardUpgrade.IsUpgraded(def));
-        if (focused) style.BorderColor = UiTheme.Palette.FocusRing;
+        if (focused)
+        {
+            style.BorderColor = UiTheme.Palette.FocusRing;
+            style.ShadowColor = new Color(UiTheme.Palette.FocusRing, 0.55f);
+            style.ShadowSize = FocusHaloSize;
+            style.ShadowOffset = Vector2.Zero; // a halo, not a drop shadow
+        }
         AddThemeStyleboxOverride("panel", style);
 
-        // Scale about the card's middle, not its top-left corner. RewardScreen
-        // sets this itself for its fan, but the shop and the pile popup lay
-        // their cards out in containers and never touch it.
-        PivotOffset = Size / 2f;
+        // Paint over the neighbours the halo now overlaps. No tween and no
+        // ReduceMotion gate needed: this is a static repaint, not motion -
+        // which also retires the bug where arrow-keying faster than
+        // UiTheme.Motion.Fast left two live tweens fighting over "scale".
         ZIndex = focused ? 10 : 0;
-        var tween = GetTree().CreateTween().SetTrans(UiTheme.Motion.EaseStandard);
-        tween.TweenProperty(this, "scale", focused ? FocusScale : Vector2.One, UiTheme.Motion.Fast);
     }
 
     public void SetCardInstance(CardInstance card)
@@ -255,12 +266,7 @@ public partial class CardView : Panel
         // place across refreshes, so a stale tooltip from whatever this view
         // used to show must go too.
         HideKeywordTooltip();
-        _activeKeywords = KeywordPattern.Matches(described.Text)
-            .Select(m => m.Value)
-            .Distinct()
-            .Select(k => KeywordHighlights.All.First(h => h.Keyword == k))
-            .Select(h => (h.Keyword, h.Color.ToHtml(false), h.Blurb))
-            .ToList();
+        _activeKeywords = Keywords.Find(described.Text);
     }
 
     // The enemy this card would currently hit, when that's knowable: the one
@@ -353,18 +359,6 @@ public partial class CardView : Panel
         return "…";
     }
 
-    // Single regex pass over the original plain text, rather than a
-    // sequential string.Replace-per-keyword loop - that would re-scan its
-    // own already-substituted output on every pass, so a later keyword
-    // (e.g. "Block") could match text sitting inside an earlier keyword's
-    // just-inserted markup (Poison's blurb literally contains the word
-    // "Block"). Regex.Replace only ever matches against the original
-    // input, so replacement text is never re-scanned. Also reused by
-    // SetCardInstance to find which keywords this card's text mentions, for
-    // the hover/selection tooltip panel below.
-    private static readonly Regex KeywordPattern = new(
-        string.Join("|", KeywordHighlights.All.Select(k => Regex.Escape(k.Keyword))));
-
     // Modified damage numbers (Strength/Weak on the player, Vulnerable on the
     // enemy being targeted) are tinted so it's visible *that* the number
     // moved, not just what it moved to - the number alone gives the player no
@@ -380,12 +374,12 @@ public partial class CardView : Panel
     {
         var numbers = described.Buffed.Concat(described.Weakened).Distinct().ToList();
         var pattern = numbers.Count == 0
-            ? KeywordPattern
-            : new Regex($"{KeywordPattern}|{string.Join("|", numbers.Select(n => $@"\b{n}\b"))}");
+            ? Keywords.Pattern
+            : new Regex($"{Keywords.Pattern}|{string.Join("|", numbers.Select(n => $@"\b{n}\b"))}");
 
         return pattern.Replace(plain, match =>
         {
-            var keyword = KeywordHighlights.All.FirstOrDefault(k => k.Keyword == match.Value);
+            var keyword = Keywords.All.FirstOrDefault(k => k.Keyword == match.Value);
             if (keyword.Keyword is not null)
             {
                 return $"[color=#{keyword.Color.ToHtml(false)}]{keyword.Keyword}[/color]";
@@ -397,89 +391,26 @@ public partial class CardView : Panel
         });
     }
 
-    // Shows every keyword this card's text mentions as a small stacked
-    // panel above the card - triggered from OnMouseEntered/OnMouseExited
-    // below, so it responds identically to real mouse hover and to
-    // CombatScreen's keyboard SetHighlighted (arrow-key card selection).
-    // Deliberately not Godot's built-in per-BBCode-span tooltip system
-    // ([hint=...]/_make_custom_tooltip) - that only ever fires from actual
-    // OS mouse motion, which arrow-key selection has none of.
+    // Shows every keyword this card's text mentions as a small stacked panel
+    // beside the card. Driven from four places that all mean "the player is
+    // looking at this card": real mouse hover (OnMouseEntered/Exited below),
+    // keyboard focus on the choice screens (OnFocusEntered/Exited), and
+    // CombatScreen's SetHighlighted for arrow-key selection in the hand, which
+    // routes through the hover pair.
+    //
+    // The panel itself is HoverTooltip, shared with the enemy intent telegraph
+    // so a card and an enemy explain Weak in identical furniture.
     private void ShowKeywordTooltip()
     {
-        if (_activeKeywords.Count == 0 || _keywordTooltipPanel is not null) return;
-
-        var container = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore, ZIndex = 500 };
-        container.AddThemeConstantOverride("separation", 4);
-        foreach (var (keyword, colorHex, blurb) in _activeKeywords)
-        {
-            container.AddChild(BuildKeywordBox(keyword, colorHex, blurb));
-        }
-
-        GetTree().CurrentScene.AddChild(container);
-        _keywordTooltipPanel = container;
-
-        // Rough placement now (container's real size isn't known until its
-        // own layout pass runs); RepositionKeywordTooltip corrects it one
-        // idle frame later once Size reflects actual content.
-        container.GlobalPosition = GlobalPosition + new Vector2(0, -40 * _activeKeywords.Count - 8);
-        CallDeferred(nameof(RepositionKeywordTooltip));
-    }
-
-    private void RepositionKeywordTooltip()
-    {
-        if (_keywordTooltipPanel is null || !IsInstanceValid(_keywordTooltipPanel)) return;
-        _keywordTooltipPanel.GlobalPosition = GlobalPosition + new Vector2(0, -_keywordTooltipPanel.Size.Y - 8);
+        if (_activeKeywords.Count == 0 || _keywordTooltip is not null) return;
+        _keywordTooltip = HoverTooltip.Show(this, _activeKeywords);
     }
 
     private void HideKeywordTooltip()
     {
-        if (_keywordTooltipPanel is null) return;
-        if (IsInstanceValid(_keywordTooltipPanel)) _keywordTooltipPanel.QueueFree();
-        _keywordTooltipPanel = null;
-    }
-
-    // One small dark bronze-bordered box per keyword: a colored title line
-    // (matching that keyword's inline highlight color in the card text)
-    // plus its description below - stacked by ShowKeywordTooltip when a
-    // card mentions more than one keyword, same as the reference layout.
-    private const float KeywordBoxWidth = 200f;
-
-    private static Control BuildKeywordBox(string keyword, string colorHex, string blurb)
-    {
-        var panel = new PanelContainer
-        {
-            MouseFilter = MouseFilterEnum.Ignore,
-            SizeFlagsHorizontal = SizeFlags.ShrinkBegin,
-            SizeFlagsVertical = SizeFlags.ShrinkBegin,
-        };
-        panel.AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
-
-        var vbox = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
-        vbox.AddThemeConstantOverride("separation", 2);
-        panel.AddChild(vbox);
-
-        var title = new Label
-        {
-            Text = keyword,
-            CustomMinimumSize = new Vector2(KeywordBoxWidth, 0),
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        title.AddThemeColorOverride("font_color", Color.FromHtml(colorHex));
-        title.AddThemeFontSizeOverride("font_size", 16);
-        vbox.AddChild(title);
-
-        var body = new Label
-        {
-            Text = blurb,
-            CustomMinimumSize = new Vector2(KeywordBoxWidth, 0),
-            AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            MouseFilter = MouseFilterEnum.Ignore,
-        };
-        body.AddThemeFontSizeOverride("font_size", 16);
-        body.AddThemeColorOverride("font_color", new Color(0.85f, 0.85f, 0.85f));
-        vbox.AddChild(body);
-
-        return panel;
+        if (_keywordTooltip is null) return;
+        if (IsInstanceValid(_keywordTooltip)) _keywordTooltip.Dismiss();
+        _keywordTooltip = null;
     }
 
     // pos/rotationDeg are this card's resting slot in the fan (CombatScreen
@@ -529,28 +460,45 @@ public partial class CardView : Panel
         if (number is { } n) _hotkeyLabel.Text = n.ToString();
     }
 
+    // The stand-up-and-grow visual is combat-hand-only (it is the "this is the
+    // card you would play" language, and it fights the choice screens' own
+    // layouts). The tooltip is not: the !Interactive guard used to sit above
+    // ShowKeywordTooltip, and since Reward/Shop/CardPicker/PileViewPopup all
+    // set Interactive = false, every one of them silently dropped the hover
+    // explanation on the floor. Splitting the guard is the whole fix - the
+    // mouse_entered signal was always firing, it was just discarded.
     private void OnMouseEntered()
     {
-        if (_dragging || !Interactive || _leavingHand) return;
-        ZIndex = 100;
-        var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
-        tween.SetParallel(true);
-        tween.TweenProperty(this, "scale", HoverScale, 0.12);
-        tween.TweenProperty(this, "rotation_degrees", 0f, 0.12); // "stands up straight"
-        if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: true, CardUpgrade.IsUpgraded(CardInstance.Definition)));
+        if (_dragging || _leavingHand) return;
+        if (Interactive)
+        {
+            ZIndex = 100;
+            var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
+            tween.SetParallel(true);
+            tween.TweenProperty(this, "scale", HoverScale, 0.12);
+            tween.TweenProperty(this, "rotation_degrees", 0f, 0.12); // "stands up straight"
+            if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: true, CardUpgrade.IsUpgraded(CardInstance.Definition)));
+        }
         ShowKeywordTooltip();
     }
 
     private void OnMouseExited()
     {
-        if (_dragging || !Interactive || _leavingHand) return;
-        ZIndex = _restZIndex;
-        var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
-        tween.SetParallel(true);
-        tween.TweenProperty(this, "scale", NormalScale, 0.12);
-        tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.12);
-        if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: false, CardUpgrade.IsUpgraded(CardInstance.Definition)));
-        HideKeywordTooltip();
+        if (_dragging || _leavingHand) return;
+        if (Interactive)
+        {
+            ZIndex = _restZIndex;
+            var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
+            tween.SetParallel(true);
+            tween.TweenProperty(this, "scale", NormalScale, 0.12);
+            tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.12);
+            if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: false, CardUpgrade.IsUpgraded(CardInstance.Definition)));
+        }
+        // Not on a non-interactive card that still holds keyboard focus: the
+        // mouse leaving is not the player looking away when the card is also
+        // the focused one, and hiding here would strand OnFocusExited with
+        // nothing left to hide.
+        if (Interactive || !HasFocus()) HideKeywordTooltip();
     }
 
     // Cards animate in from the draw pile when newly added to hand -

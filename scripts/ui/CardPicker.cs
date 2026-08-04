@@ -32,16 +32,22 @@ public static class CardPicker
     /// under the button, or null for pickers where nothing changes about the
     /// card itself.
     ///
-    /// Returns the first button, so the caller can hand it to
-    /// ScreenKeyboardNav as the focus owner - a grid nobody can tab into is
-    /// the failure mode this screen family has hit before.
-    public static Button? Populate(
+    /// `exit` is the control the grid leads *out* to - RestScreen's Cancel
+    /// button. It is wired as the bottom neighbour of the last row (and only
+    /// the last row); pass null on a picker that has no way out, which is what
+    /// EventScreen's deliberately is.
+    ///
+    /// Returns the first card, so the caller can hand it to ScreenKeyboardNav
+    /// as the focus owner - a grid nobody can tab into is the failure mode this
+    /// screen family has hit before.
+    public static CardView? Populate(
         GridContainer grid,
         IEnumerable<int> indices,
         string buttonText,
         Func<int, CardDefinition> preview,
         Func<int, string?> subtitle,
-        Action<int> onChosen)
+        Action<int> onChosen,
+        Control? exit = null)
     {
         foreach (var child in grid.GetChildren())
         {
@@ -50,11 +56,17 @@ public static class CardPicker
         }
 
         var cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
-        Button? first = null;
+        var cards = new List<CardView>();
 
         foreach (int deckIndex in indices)
         {
             int index = deckIndex; // Captured per iteration, not per loop.
+
+            void Choose()
+            {
+                AudioManager.Instance?.PlaySfx("reward_pickup");
+                onChosen(index);
+            }
 
             var column = new VBoxContainer
             {
@@ -66,18 +78,26 @@ public static class CardPicker
 
             var view = cardScene.Instantiate<CardView>();
             column.AddChild(view);
+            // Interactive = false is what makes a CardView focusable (its
+            // setter inverts: no drag-to-play, so it can hold focus instead).
             view.Interactive = false;
+            view.Clicked += _ => Choose();
             view.SetCardInstance(new CardInstance(preview(index)));
 
             var button = new Button { Text = buttonText };
             ChromeStyles.ApplyEmphasisButtonStyle(button);
-            button.Pressed += () =>
-            {
-                AudioManager.Instance?.PlaySfx("reward_pickup");
-                onChosen(index);
-            };
+            button.Pressed += Choose;
+            // The card is the keyboard stop, not the button. Both used to be,
+            // which cost two presses per card to walk the grid and made "down
+            // to the next row" ambiguous - and Enter on the card did nothing at
+            // all, because Clicked (which CardView already fires for a focused
+            // non-interactive card) was never subscribed. Now the thing that is
+            // focused, the thing that glows, and the thing that shows the
+            // keyword tooltip are the same card. The button stays for the
+            // mouse, which is the only thing that ever used it.
+            button.FocusMode = Control.FocusModeEnum.None;
             column.AddChild(button);
-            first ??= button;
+            cards.Add(view);
 
             if (subtitle(index) is { } line)
             {
@@ -92,7 +112,48 @@ public static class CardPicker
             }
         }
 
-        return first;
+        WireGridNavigation(grid, cards, exit);
+        return cards.Count > 0 ? cards[0] : null;
+    }
+
+    // Arrow keys walk the grid by *index*, not by geometry. Godot's own
+    // directional focus search is a nearest-edge distance test over everything
+    // focusable on screen, and on the rest site it kept answering Down from row
+    // one with the Cancel button under the ScrollContainer rather than the card
+    // below the fold - so the second row could only be reached with a mouse
+    // wheel, and the grid's own scroll-into-view never got a focus change to
+    // act on. EventScreen's picker hid it, because that one has no Cancel for
+    // the search to find.
+    //
+    // Left/Right deliberately wrap across rows: the choice is "one of these
+    // cards", which reads as a list, and wrapping means the whole grid is
+    // walkable on one axis. Only the last row leads out to `exit`, and only
+    // downward - Up from Cancel comes back in.
+    private static void WireGridNavigation(GridContainer grid, List<CardView> cards, Control? exit)
+    {
+        if (cards.Count == 0) return;
+
+        int columns = Mathf.Max(1, grid.Columns);
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var card = cards[i];
+            if (i > 0) card.FocusNeighborLeft = card.GetPathTo(cards[i - 1]);
+            if (i + 1 < cards.Count) card.FocusNeighborRight = card.GetPathTo(cards[i + 1]);
+            if (i >= columns) card.FocusNeighborTop = card.GetPathTo(cards[i - columns]);
+
+            // Tab follows the same order, so the two ways of walking a grid
+            // can't disagree about what comes next.
+            card.FocusPrevious = i > 0 ? card.GetPathTo(cards[i - 1]) : new NodePath();
+            card.FocusNext = i + 1 < cards.Count ? card.GetPathTo(cards[i + 1]) : new NodePath();
+
+            Control? below = i + columns < cards.Count ? cards[i + columns] : exit;
+            card.FocusNeighborBottom = below is null ? new NodePath() : card.GetPathTo(below);
+        }
+
+        if (exit is null) return;
+        var lastRowFirst = cards[cards.Count - 1 - (cards.Count - 1) % columns];
+        exit.FocusNeighborTop = exit.GetPathTo(lastRowFirst);
+        exit.FocusPrevious = exit.GetPathTo(lastRowFirst);
     }
 
     /// The "was: ..." line the upgrade pickers put under their button. The

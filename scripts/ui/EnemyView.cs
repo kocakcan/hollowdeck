@@ -56,6 +56,7 @@ public partial class EnemyView : Button
     private Tween? _idleTween;
     private Tween? _intentPulseTween;
     private string? _lastMoveId;
+    private HoverTooltip? _intentTooltip;
 
     public override void _Ready()
     {
@@ -105,6 +106,8 @@ public partial class EnemyView : Button
         _hpLabel.ThemeTypeVariation = "CombatDisplayLabel";
         ChromeStyles.ApplyHpBarStyle(_hpBar, _ghostHpBar);
         Pressed += OnPressed;
+        MouseEntered += ShowIntentTooltip;
+        MouseExited += HideIntentTooltip;
         Instances.Add(this);
         Refresh();
         StartIdleBob();
@@ -230,8 +233,69 @@ public partial class EnemyView : Button
 
     public override void _ExitTree()
     {
+        HideIntentTooltip();
         Instances.Remove(this);
     }
+
+    // What the enemy is about to do, in the same stacked panel a card explains
+    // its keywords in - the standard the reference genre sets, and the reason
+    // HoverTooltip was pulled out of CardView. Before this, the only thing
+    // explaining an intent was a 20x20 debuff badge with a stock Godot tooltip
+    // reading "Inflicts Weak"; the damage number and hit count on the row said
+    // what would land but never what kind of move it was.
+    //
+    // The first box is the move: its intent type as the title, and its own
+    // EffectSpecs rendered in the enemy's voice as the body. Every box after it
+    // is a keyword that sentence mentions, identical to a card's. So an enemy
+    // applying Frail and a card applying Frail explain it with the same words.
+    private void ShowIntentTooltip()
+    {
+        if (_intentTooltip is not null) return;
+        if (Combatant.CurrentMove is not { } move) return;
+
+        var (title, color) = IntentLabel(move.Intent.Type);
+        string body = DescribeMove(move, Combatant, CombatManager.Instance?.Player);
+
+        var boxes = new List<Keywords.Entry> { new(title, color, body) };
+        boxes.AddRange(Keywords.Find(body));
+        // Beside, not above: this view is 220x300 with its intent row on the
+        // top edge, so the card placement's "above, flipping below when it
+        // doesn't fit" always flipped - and below a 300px-tall enemy is the
+        // hand. See HoverTooltip.Placement.
+        _intentTooltip = HoverTooltip.Show(this, boxes, HoverTooltip.Placement.BesideAnchor);
+    }
+
+    private void HideIntentTooltip()
+    {
+        if (_intentTooltip is null) return;
+        if (IsInstanceValid(_intentTooltip)) _intentTooltip.Dismiss();
+        _intentTooltip = null;
+    }
+
+    // Static, and taking source/target the way FormatIntent already does, so
+    // Phase4ContentSmokeTest can sweep every move of every enemy without
+    // standing up a scene - the same reason the telegraph label is static.
+    public static string DescribeMove(EnemyMove move, Combatant source, Combatant? target) =>
+        EffectDescriptionFormatter.Describe(move.Effects, new DescribeContext(
+            Source: source,
+            // The real player, not null: passing them resolves their live
+            // Vulnerable into the printed number instead of the hypothetical
+            // "(~N vs Vulnerable)" hint a card shows before it is aimed - the
+            // same reason LiveAttackAmount takes a target for the row label.
+            Targets: target is null ? null : new[] { target },
+            Voice: DescribeVoice.Enemy));
+
+    // Debuff shares Attack's oxblood: both are the enemy doing something to
+    // you, and the title only has to separate the four types from each other,
+    // which the word already does.
+    private static (string Title, Color Color) IntentLabel(IntentType type) => type switch
+    {
+        IntentType.Attack => ("Attack", UiTheme.Palette.Damage),
+        IntentType.Defend => ("Defend", UiTheme.Palette.Block),
+        IntentType.Buff => ("Buff", UiTheme.Palette.StatusBuff),
+        IntentType.Debuff => ("Debuff", UiTheme.Palette.StatusDebuff),
+        _ => ("Intent", UiTheme.Palette.AccentGold),
+    };
 
     // Toggled continuously by CardView while dragging a SingleEnemy card.
     //
@@ -240,8 +304,17 @@ public partial class EnemyView : Button
     // stand free on the backdrop, and removing the override would fall back
     // to the theme's Button stylebox and paint the panel this deliberately
     // got rid of.
-    public void SetTargetLocked(bool locked) =>
+    public void SetTargetLocked(bool locked)
+    {
         AddThemeStyleboxOverride("normal", locked ? TargetLockStyle : new StyleBoxEmpty());
+
+        // Keyboard target-cycling gets the intent tooltip too. This view opts
+        // out of Godot's focus navigation (see _Ready), so the lock *is* its
+        // keyboard-selected state - the same reason CombatScreen drives the
+        // hand's hover visual from SetHighlighted rather than from focus.
+        if (locked) ShowIntentTooltip();
+        else HideIntentTooltip();
+    }
 
     // For CombatTargetingSmokeTest: the lock state is now a question of which
     // stylebox is installed, not whether one is, since there is always one.
@@ -267,6 +340,15 @@ public partial class EnemyView : Button
         if (_lastMoveId is not null && currentMoveId != _lastMoveId && _intentIcon.Visible)
         {
             PlayIntentChangeFlash();
+            // An open tooltip is describing the move that just changed. Rebuild
+            // rather than leave it: an intent telegraph that has gone stale is
+            // the canonical bad bug in this genre, and it is worse in prose
+            // than on the row, because the prose is what the player believed.
+            if (_intentTooltip is not null)
+            {
+                HideIntentTooltip();
+                ShowIntentTooltip();
+            }
         }
         _lastMoveId = currentMoveId;
 
@@ -277,12 +359,17 @@ public partial class EnemyView : Button
         // for damage/block/buff.
         // On a Debuff intent the status *is* the move, so "Also" would be a
         // lie in the other direction.
+        //
+        // It carries no tooltip of its own any more. It used to be the only
+        // explanation an intent had ("Inflicts Weak"), and now the hover panel
+        // says the whole move including that status and what it does. Leaving
+        // it would fire a second, worse tooltip alongside the panel - this is
+        // also the only child in the tree with a non-Ignore mouse filter, so
+        // stopping it from taking hover is what keeps the panel the one answer.
         var debuffStatus = IncomingDebuffStatus(Combatant.CurrentMove);
         _debuffIcon.Texture = debuffStatus is null ? null : ArtAssets.StatusIcon(debuffStatus.Value);
         _debuffIcon.Visible = _debuffIcon.Texture is not null;
-        _debuffIcon.TooltipText = debuffStatus is null ? ""
-            : intent?.Type == IntentType.Debuff ? $"Inflicts {debuffStatus}"
-            : $"Also inflicts {debuffStatus}";
+        _debuffIcon.MouseFilter = MouseFilterEnum.Ignore;
 
         StatusRow.Populate(_statusRow, Combatant, 16, _lastStatuses);
         _lastStatuses = new Dictionary<StatusType, int>(Combatant.Statuses);

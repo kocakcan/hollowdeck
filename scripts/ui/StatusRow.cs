@@ -1,14 +1,14 @@
 using System.Collections.Generic;
 using Godot;
 using Hollowdeck.Combat;
-using Hollowdeck.Effects;
 
 namespace Hollowdeck.UI;
 
 // Fills an HBoxContainer with icon+count pairs for a combatant's active
-// statuses (shared by EnemyView and CombatScreen's player info). Tooltips
-// state the actual mechanics, with numbers sourced from DamageMath so the
-// text can't drift from the resolution code.
+// statuses (shared by EnemyView and CombatScreen's player info). The tooltip
+// prose lives in Keywords, which the card and intent hover panels read from
+// too - the wording of what Weak does is one sentence in one place, whether
+// the player meets it on an icon, a card or an enemy's telegraph.
 public static class StatusRow
 {
     // previous is the caller's last-seen Statuses snapshot (same before/
@@ -27,7 +27,7 @@ public static class StatusRow
         foreach (var (status, amount) in combatant.Statuses)
         {
             if (amount <= 0) continue;
-            var tooltip = Describe(status, amount);
+            var tooltip = Keywords.StatusTooltip(status, amount);
             bool isNew = previous is not null &&
                          (!previous.TryGetValue(status, out var prevAmount) || prevAmount <= 0);
 
@@ -105,29 +105,4 @@ public static class StatusRow
     public static bool IsDebuff(StatusType status) =>
         status is StatusType.Weak or StatusType.Vulnerable or StatusType.Poison or StatusType.Frail;
 
-    private static string Describe(StatusType status, int amount) => status switch
-    {
-        StatusType.Strength => $"Strength {amount}: attacks deal +{amount} damage.",
-        StatusType.Weak => $"Weak {amount}: attacks deal {(int)((1 - DamageMath.WeakMultiplier) * 100)}% less damage. Wears off by 1 each turn.",
-        StatusType.Vulnerable => $"Vulnerable {amount}: takes {(int)((DamageMath.VulnerableMultiplier - 1) * 100)}% more damage. Wears off by 1 each turn.",
-        StatusType.Poison => $"Poison {amount}: loses {amount} HP each turn (ignores Block), then Poison drops by 1.",
-        // Both spell out "does not wear off" - every other status in the game
-        // decays, so persistence is the surprising half and the reason a Power
-        // is worth a card that never comes back.
-        StatusType.Metallicize => $"Metallicize {amount}: gains {amount} Block at the start of each turn. Does not wear off.",
-        StatusType.Ritual => $"Ritual {amount}: gains {amount} Strength at the start of each turn. Does not wear off.",
-        StatusType.Regen => $"Regen {amount}: heals {amount} HP at the start of each turn. Does not wear off.",
-        // Same "does not wear off" phrasing as the three above, for the same
-        // reason - and the same word for what they pay out, since the player
-        // meets these as a number on an icon before they ever read a card.
-        StatusType.Fervor => $"Fervor {amount}: gains {amount} extra Energy at the start of each turn. Does not wear off.",
-        StatusType.Foresight => $"Foresight {amount}: draws {amount} extra card(s) at the start of each turn. Does not wear off.",
-        // Phrased to mirror Strength/Weak word for word - these are the same
-        // two effects applied to Block, and the wording is what says so.
-        // Percentages come off BlockMath for the same no-drift reason the
-        // Weak/Vulnerable lines take theirs off DamageMath.
-        StatusType.Dexterity => $"Dexterity {amount}: gains +{amount} Block.",
-        StatusType.Frail => $"Frail {amount}: gains {(int)((1 - BlockMath.FrailMultiplier) * 100)}% less Block. Wears off by 1 each turn.",
-        _ => $"{status} {amount}",
-    };
 }

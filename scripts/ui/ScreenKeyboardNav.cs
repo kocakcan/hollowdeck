@@ -50,6 +50,28 @@ public static class ScreenKeyboardNav
         return "";
     }
 
+    // True only for the duration of a GrabFocusQuietly call - i.e. while *code*
+    // is placing focus rather than the player moving it. Godot emits
+    // focus_entered synchronously from grab_focus(), so a handler reading this
+    // is reading it about its own focus change.
+    //
+    // It exists for one distinction a Control cannot otherwise make: a card
+    // that has focus because the screen just opened is not a card the player is
+    // asking about. Without it, every choice screen came up with its leftmost
+    // card's keyword panel already floating over the layout (CardView
+    // .OnFocusEntered).
+    internal static bool GrantingFocus { get; private set; }
+
+    // The focus grab a screen does *for* the player. The glow still moves - the
+    // player has to be able to see where the keyboard is - but anything that
+    // means "the player is looking at this" stays quiet until they act.
+    public static void GrabFocusQuietly(Control control)
+    {
+        GrantingFocus = true;
+        try { control.GrabFocus(); }
+        finally { GrantingFocus = false; }
+    }
+
     // A Control that can actually hold focus - GrabFocus refuses (and logs an
     // error) otherwise. Disabled is the common case: a shop offer the player
     // can't afford, a map node that isn't reachable. Hidden is the other one:
@@ -79,7 +101,40 @@ public partial class ScreenKeyboardNavListener : Node
         _onCancel = onCancel;
     }
 
-    public override void _Ready() => Regrab();
+    public override void _Ready()
+    {
+        GetViewport().GuiFocusChanged += OnFocusChanged;
+        Regrab();
+    }
+
+    public override void _ExitTree()
+    {
+        if (GetViewport() is { } viewport) viewport.GuiFocusChanged -= OnFocusChanged;
+    }
+
+    // The other half of this file's thesis. Arrow-key navigation itself was
+    // never missing - Godot's geometric focus nav has always worked, and what
+    // was missing was that nothing called GrabFocus. This is the same shape of
+    // omission one level down: focus *moved* onto a control below the fold and
+    // nothing scrolled to it, so the rest site's upgrade grid could only be
+    // walked past row one with a mouse wheel. A picker column is ~330px tall
+    // inside a 424px viewport, so row two was effectively unreachable.
+    //
+    // Viewport-wide rather than per-screen even though the listener is scoped
+    // to one screen: GuiFocusChanged fires for anything focusable under that
+    // viewport, so an overlay the screen spawned (PileViewPopup's card grid)
+    // is covered by the same handler with no wiring of its own.
+    private void OnFocusChanged(Control control)
+    {
+        for (Node? node = control.GetParent(); node is not null; node = node.GetParent())
+        {
+            if (node is ScrollContainer scroll)
+            {
+                scroll.EnsureControlVisible(control);
+                return;
+            }
+        }
+    }
 
     // Deferred, always. Containers size and enable their children in the
     // layout pass *after* _Ready, and a screen that calls this from a button
@@ -101,7 +156,7 @@ public partial class ScreenKeyboardNavListener : Node
         if (ScreenKeyboardNav.CanTakeFocus(current)) return;
 
         var target = _initialFocus();
-        if (ScreenKeyboardNav.CanTakeFocus(target)) target!.GrabFocus();
+        if (ScreenKeyboardNav.CanTakeFocus(target)) ScreenKeyboardNav.GrabFocusQuietly(target!);
     }
 
     // _UnhandledKeyInput rather than _UnhandledInput: hd_cancel also carries

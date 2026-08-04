@@ -62,6 +62,7 @@ public partial class KeyboardSmokeTest : Node
         TestFocusModeSplit();
         await TestEveryNonCombatScreenTakesFocus(tree);
         await TestEventPickerTakesFocus(tree);
+        await TestRestPickerGridNavigation(tree);
         await TestCombatKeyboard(tree);
 
         GD.Print($"KeyboardSmokeTest: {_pass} passed, {_fail} failed");
@@ -273,8 +274,14 @@ public partial class KeyboardSmokeTest : Node
             RunState.PlayerCurrentHp = 50;
             RunState.Relics = new List<RelicInstance>();
             RunState.Potions = new List<PotionInstance>();
+            // Deliberately more than the grid's 5 columns, so the picker wraps
+            // to a second row and the scroll-into-view check below has
+            // something below the fold to reach for. Three cards fit on one
+            // row, which is exactly the case that hid the bug.
             RunState.Deck = new List<CardDefinition>
             {
+                CardDatabase.Get("strike"), CardDatabase.Get("defend"), CardDatabase.Get("bash"),
+                CardDatabase.Get("strike"), CardDatabase.Get("defend"), CardDatabase.Get("bash"),
                 CardDatabase.Get("strike"), CardDatabase.Get("defend"), CardDatabase.Get("bash"),
             };
 
@@ -304,14 +311,52 @@ public partial class KeyboardSmokeTest : Node
             await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
 
             var focused = GetViewport().GuiGetFocusOwner();
-            var pickerButtons = pickerList.GetChildren()
-                .SelectMany(c => c.GetChildren()).OfType<Button>().ToList();
+            var columns = pickerList.GetChildren().SelectMany(c => c.GetChildren()).ToList();
+            var pickerCards = columns.OfType<CardView>().ToList();
+            var pickerButtons = columns.OfType<Button>().ToList();
 
             Check("event_picker_has_a_focus_owner", focused is not null,
                 "nothing focused - the grid opened and the keyboard had nowhere to go");
-            Check("event_picker_focuses_one_of_its_card_buttons",
-                focused is Button button && pickerButtons.Contains(button),
+            // The card, not the Choose button under it. Both used to be focus
+            // stops, which cost two arrow presses per card to walk the grid and
+            // left Enter-on-a-card doing nothing at all. CardPicker now makes
+            // the card the only stop and subscribes its Clicked.
+            Check("event_picker_focuses_one_of_its_cards",
+                focused is CardView card && pickerCards.Contains(card),
                 $"focus landed on '{focused?.Name}' ({focused?.GetType().Name})");
+            Check("event_picker_buttons_are_not_focus_stops",
+                pickerButtons.Count > 0 && pickerButtons.All(b => b.FocusMode == Control.FocusModeEnum.None),
+                $"{pickerButtons.Count(b => b.FocusMode != Control.FocusModeEnum.None)} of {pickerButtons.Count} "
+                + "buttons still take focus - arrow keys will alternate card/button down each column");
+
+            // The grid was only walkable past row one with a mouse wheel: focus
+            // moved onto a card below the fold and nothing scrolled to it. A
+            // column is ~330px tall inside a 424px viewport, so row two was
+            // effectively unreachable from the keyboard. ScreenKeyboardNav now
+            // answers GuiFocusChanged by walking up to the nearest
+            // ScrollContainer - which is why this asserts on scroll offset
+            // rather than on any code the picker itself runs.
+            var scroll = instance.GetNode<ScrollContainer>(
+                "PickerCenterContainer/PickerVBox/ScrollContainer");
+            var secondRow = pickerCards.Skip(pickerList.Columns).FirstOrDefault();
+
+            Check("event_picker_wraps_to_a_second_row",
+                secondRow is not null,
+                $"only {pickerCards.Count} cards in a {pickerList.Columns}-column grid - "
+                + "the scroll check below would pass vacuously");
+
+            if (secondRow is not null)
+            {
+                int restingScroll = scroll.ScrollVertical;
+                secondRow.GrabFocus();
+                await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+                await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+                Check("event_picker_scrolls_to_follow_keyboard_focus",
+                    scroll.ScrollVertical > restingScroll,
+                    $"scroll stayed at {scroll.ScrollVertical} after focusing a row-2 card - "
+                    + "the grid is keyboard-unreachable below the fold");
+            }
 
             instance.QueueFree();
             await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
@@ -320,6 +365,106 @@ public partial class KeyboardSmokeTest : Node
 
         Check("event_screen_rolls_a_picker_event_within_80_attempts", false,
             "no picker event rolled - are any still authored?");
+    }
+
+    // The rest site's Smith grid is the same CardPicker as above plus one
+    // thing: a Cancel button under the ScrollContainer. That button is enough
+    // to break the grid, and the way it broke is why this test walks the whole
+    // thing instead of checking one step.
+    //
+    // Godot's directional focus search is a nearest-edge distance test over
+    // everything focusable on screen. From row one it answered Down correctly,
+    // because row two is partly visible under it. But focus moving there
+    // scrolls the grid to show it (ScreenKeyboardNav.OnFocusChanged), and from
+    // there on the next row is clipped entirely out of the viewport while
+    // Cancel is sitting right below the fold - so Down went to Cancel, every
+    // time, from row two onward. A player with a 21-card deck could reach two
+    // rows of five and was then thrown out of the grid, which is exactly the
+    // "it jumps to Cancel instead of scrolling" report. CardPicker now wires
+    // the neighbours from the grid's own order, so the answer doesn't depend on
+    // what happens to be on screen.
+    //
+    // Asserted through FindValidFocusNeighbor - the engine's own answer to
+    // "where does Down go from here" - rather than by reading back the property
+    // this test's subject just wrote, and with focus really moved (and a frame
+    // given to the scroll) at each step so the geometry is the geometry a
+    // player would be navigating.
+    private async Task TestRestPickerGridNavigation(SceneTree tree)
+    {
+        using var saveGuard = RunSaveGuard.Protect();
+        using var cutGuard = HardCutGuard.Protect();
+
+        RunState.Gold = 0;
+        RunState.PlayerMaxHp = 50;
+        RunState.PlayerCurrentHp = 40;
+        RunState.Relics = new List<RelicInstance>();
+        RunState.Potions = new List<PotionInstance>();
+        // 21 unupgraded cards against a 5-column grid: five rows, four of them
+        // below the fold. A two-row deck passes this test even unfixed.
+        RunState.Deck = Enumerable.Range(0, 7)
+            .SelectMany(_ => new[] { CardDatabase.Get("strike"), CardDatabase.Get("defend"), CardDatabase.Get("bash") })
+            .ToList();
+
+        var instance = GD.Load<PackedScene>("res://scenes/RestScreen.tscn").Instantiate();
+        AddChild(instance);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        instance.GetNode<Button>("CenterContainer/VBoxContainer/ChoiceColumn/SmithButton")
+            .EmitSignal(Button.SignalName.Pressed);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        var grid = instance.GetNode<GridContainer>(
+            "UpgradeCenterContainer/UpgradeVBox/ScrollContainer/UpgradeList");
+        var cancel = instance.GetNode<Button>("UpgradeCenterContainer/UpgradeVBox/CancelButton");
+        var cards = grid.GetChildren().SelectMany(c => c.GetChildren()).OfType<CardView>().ToList();
+        int columns = grid.Columns;
+        int rows = (cards.Count + columns - 1) / columns;
+
+        Check("rest_picker_fills_more_rows_than_fit_on_screen", rows >= 3,
+            $"{cards.Count} cards in a {columns}-column grid is only {rows} row(s) - "
+            + "the walk below would never scroll, which is the case that passes while broken");
+
+        // Down the first column, one row per press, all the way out to Cancel.
+        var expected = new List<Control>();
+        for (int i = columns; i < cards.Count; i += columns) expected.Add(cards[i]);
+        expected.Add(cancel);
+
+        Control current = cards[0];
+        ScreenKeyboardNav.GrabFocusQuietly(current);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        var walked = new List<string>();
+        bool onCourse = true;
+        foreach (var want in expected)
+        {
+            var next = current.FindValidFocusNeighbor(Side.Bottom);
+            walked.Add(next == cancel ? "Cancel" : next is CardView cv ? $"card{cards.IndexOf(cv)}" : $"'{next?.Name}'");
+            if (!ReferenceEquals(next, want)) { onCourse = false; break; }
+
+            current = next!;
+            ScreenKeyboardNav.GrabFocusQuietly(current);
+            // Two frames: one for the focus change to reach the ScrollContainer,
+            // one for the scroll it performs to land in the layout.
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        }
+
+        Check("rest_picker_walks_down_every_row_before_reaching_cancel", onCourse,
+            $"Down from card0 went {string.Join(" -> ", walked)}; expected one card per row then Cancel. "
+            + "Landing on Cancel early is the grid dropping the player out instead of scrolling");
+
+        Check("rest_picker_right_walks_the_grid",
+            ReferenceEquals(cards[0].FindValidFocusNeighbor(Side.Right), cards[1]),
+            $"Right from the first card went to '{cards[0].FindValidFocusNeighbor(Side.Right)?.Name}'");
+
+        var back = cancel.FindValidFocusNeighbor(Side.Top);
+        Check("rest_picker_up_from_cancel_returns_to_the_grid",
+            back is CardView returned && cards.Contains(returned),
+            $"Up from Cancel went to '{back?.Name}' ({back?.GetType().Name})");
+
+        instance.QueueFree();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
     }
 
     // --- 4. combat's own handler ------------------------------------------

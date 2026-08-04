@@ -63,7 +63,10 @@ public partial class MapScreen : Control
         // scene - the relics as a bare 30x30 TextureRect strip pinned to
         // y=570, which is why a lone relic rendered as an unframed icon
         // floating in the map's dead space.
-        ScreenChrome.AddTitle(this, $"Act {RunState.ActIndex + 1} — {act.Name}");
+        // "of N", not just the act number: a run's length was nowhere on screen,
+        // so a player who had just cleared act 2's boss had no way to know a
+        // third chapter was what the fresh map in front of them meant.
+        ScreenChrome.AddTitle(this, $"Act {RunState.ActIndex + 1} of {ActDatabase.Count} — {act.Name}");
         ScreenChrome.AddRunStatus(this);
 
         BuildLayout();

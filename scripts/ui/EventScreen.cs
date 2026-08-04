@@ -103,8 +103,10 @@ public partial class EventScreen : Control
     {
         if (_pickerView.Visible)
         {
+            // The card, not the button under it - CardPicker makes the card the
+            // grid's only focus stop so arrow keys walk it one press per card.
             return _pickerList.GetChildren().SelectMany(c => c.GetChildren())
-                .OfType<Button>().FirstOrDefault();
+                .OfType<CardView>().FirstOrDefault();
         }
         return _choicesList.GetChildren().OfType<Button>().FirstOrDefault() ?? (Control?)_continueButton;
     }

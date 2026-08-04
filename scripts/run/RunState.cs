@@ -6,6 +6,21 @@ using Hollowdeck.Map;
 
 namespace Hollowdeck.Run;
 
+// What clearing an act just did, handed back by RunState.AdvanceAct so the
+// reward screen after a boss can say it. All of it - the chapter that ended,
+// the one starting, and the max-HP bonus and heal that came with the change -
+// used to happen silently, which is a large part of why a run's shape was
+// invisible: a player who has just beaten a boss and been dropped on a fresh
+// map has no way to tell "act 2 of 3 begins" from "the game is over".
+public readonly record struct ActClear(
+    int ClearedNumber,
+    string ClearedName,
+    int NextNumber,
+    string NextName,
+    int TotalActs,
+    int MaxHpBonus,
+    int Healed);
+
 // Run-persistent state: survives scene changes within a run the same way
 // CombatContext/RunEndContext do (only the node tree is torn down, not the
 // CLR), just with run-length lifetime instead of single-transition lifetime.
@@ -69,11 +84,16 @@ public static class RunState
     // Floors are counted cumulatively for scoring (RunScore's Floors Climbed)
     // because the new act's floor numbering restarts at 0; without the offset,
     // reaching act 2 would *lower* the recorded progress.
-    public static void AdvanceAct()
+    // Returns what it just did (null on the final act, where it does nothing) -
+    // the reward screen shown immediately afterwards is the only place the
+    // player can be told any of it. Callers that only care about the state
+    // change can ignore the value.
+    public static ActClear? AdvanceAct()
     {
-        if (IsFinalAct) return;
+        if (IsFinalAct) return null;
 
         var cleared = CurrentAct;
+        int clearedNumber = ActIndex + 1;
         Stats.FloorsInPreviousActs += cleared.FloorCount;
 
         ActIndex++;
@@ -86,7 +106,15 @@ public static class RunState
         // amounts come from the cleared act's data - see ActDefinition.
         PlayerMaxHp += cleared.ClearMaxHpBonus;
         int heal = cleared.ClearHealPercent * PlayerMaxHp / 100;
+        int before = PlayerCurrentHp;
         PlayerCurrentHp = Math.Min(PlayerMaxHp, PlayerCurrentHp + heal);
+
+        // The HP actually restored, not the nominal percentage: a player at
+        // full health is healed 0, and saying otherwise on the reward screen
+        // would be the same kind of lie a drifted intent telegraph is.
+        return new ActClear(
+            clearedNumber, cleared.Name, ActIndex + 1, CurrentAct.Name,
+            ActDatabase.Count, cleared.ClearMaxHpBonus, PlayerCurrentHp - before);
     }
 
     public static MapNode GetMapNode(string id) => MapNodes.First(n => n.Id == id);

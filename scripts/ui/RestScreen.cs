@@ -66,8 +66,10 @@ public partial class RestScreen : Control
         _keyboardNav = ScreenKeyboardNav.Attach(this, PreferredFocus, OnCancelRequested);
     }
 
+    // The card, not the Upgrade button under it - CardPicker makes the card the
+    // grid's only focus stop so arrow keys walk it one press per card.
     private Control? PreferredFocus() => _upgradeView.Visible
-        ? _upgradeList.GetChildren().SelectMany(c => c.GetChildren()).OfType<Button>().FirstOrDefault()
+        ? _upgradeList.GetChildren().SelectMany(c => c.GetChildren()).OfType<CardView>().FirstOrDefault()
           ?? (Control)_cancelButton
         : _healButton;
 
@@ -127,7 +129,11 @@ public partial class RestScreen : Control
             "Upgrade",
             index => CardUpgrade.Apply(RunState.Deck[index]),
             index => CardPicker.WasLine(RunState.Deck[index]),
-            OnCardUpgraded);
+            OnCardUpgraded,
+            // Down off the last row lands on Cancel - and nowhere else does,
+            // which is the whole point: it used to win the geometric focus
+            // search from row one and strand the rest of the grid.
+            _cancelButton);
 
         _choicesView.Visible = false;
         _upgradeView.Visible = true;

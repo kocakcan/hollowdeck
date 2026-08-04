@@ -23,8 +23,9 @@ With no screen names it shoots all of them. Unknown names exit 1 and list the va
 
 ## Screens
 
-`combat` `combatfull` `combat2` `combat3` `reward` `shop` `map` `map2` `map3` `rest` `restupgrade`
-`treasure` `event` `eventpicker` `unlocks` `runend` `mainmenu` `settings` `deckpopup` `fade`
+`combat` `combatfull` `combatintents` `combat2` `combat3` `reward` `rewardactclear` `shop` `map`
+`map2` `map3` `rest` `restupgrade` `treasure` `event` `eventpicker` `unlocks` `runend` `mainmenu`
+`settings` `deckpopup` `fade`
 
 `map2`/`map3` and `combat2`/`combat3` are the later acts — each has its own backdrop tint, title,
 boss sprites and floor count, none of which act 1's shots show. `map3` is also the longest map (10
@@ -34,6 +35,12 @@ floors), which is where node layout runs out of horizontal room first.
 enemies and 1 relic, so it cannot show top-left chrome colliding with the enemy row — which is a
 real bug that shipped, the relic bar growing rightward across the leftmost enemy and painting over
 its target-lock glow. Reach for this one for any HUD or enemy-row layout change.
+
+`combatintents` is the only shot carrying an enemy's intent hover panel: it pins three telegraph
+shapes plain `combat` can't roll and target-locks the last enemy, which is how a keyboard player
+raises that panel. Reach for it after any `HoverTooltip` or `EnemyView` change — the panel used to
+place itself over the hand, which no assertion about its text could see. `rewardactclear` is the
+boss-reward variant of `reward`, carrying the longest line the title block ever holds.
 
 `deckpopup` opens the pile popup over the map with a 13-card deck, since the popup is spawned on
 demand by `DeckViewButtons` rather than being a screen of its own. `restupgrade` is the same idea
