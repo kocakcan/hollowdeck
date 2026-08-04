@@ -208,6 +208,12 @@ a to-do list.
   boss pool all come from the `ActDefinition` passed in)
 - `scripts/data/ActDefinition.cs` + `ActDatabase.cs` — the three acts and what varies per act
 - `data/*/*.json` — the content layer; the schema is the data-vs-code split everything depends on
+- `scripts/data/DataFile.cs` — the one place a content JSON is read off `res://`. The null guard
+  here is what turns a mis-packed build from a bare `NullReferenceException` into a named error;
+  it lives in one file rather than six because six copies of a guard is six places to forget it
+- `export_presets.cfg` + `tools/build-export.sh` — the three export presets and the one command that
+  builds and then *boots* them. The cfg is committed; nothing secret lives in it, because Godot
+  routes codesign and notarization credentials to `.godot/export_credentials.cfg`, already gitignored
 - `scenes/CombatScreen.tscn` — card drag/hover/targeting
 - `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic
   status block, framed panel, art plinth), attached from `_Ready` like `ScreenBackground` and
@@ -225,6 +231,14 @@ a to-do list.
   keycode compare. `IsActionPressed` defaults `exact_match` to false, so a modifier binding
   (`Shift+1`) also matches its unmodified action (`hd_card_1`) unless you pass `exactMatch: true` —
   which is why the potion keys are `Z`/`X`/`C`.
+- **A data file with a non-resource extension needs a line in `export_presets.cfg`.** Godot 4 loads
+  `.json` through a built-in resource loader, so `export_filter="all_resources"` packs the six
+  content files on its own and a new `.json` under `data/` needs nothing (measured: blanking
+  `include_filter` produces a byte-identical `.pck`). The `include_filter="data/*.json"` on all three
+  presets is deliberate insurance, not the mechanism. A `data/foo.txt` or `.csv` is verifiably *not*
+  packed and does need the filter widened. Keep it anchored to `data/` — Godot's glob crosses `/`,
+  so a bare `*.json` would also pack several hundred Cargo fingerprint files from
+  `tools/artgen/target/`.
 - **`dotnet build` before running or testing anything** — C# is compiled ahead of time, so
   otherwise you exercise the previous binary.
 - Godot is not on `PATH` on this machine; use the full path to the Mono build, or `$GODOT`.
@@ -327,6 +341,22 @@ restores both save files on scope exit.
 Smoke tests are not full coverage. The phase-level bar remains: the game launches from the editor
 and from a packaged export, the loop is playable end-to-end by hand, and no console
 errors/warnings appear in the Godot debugger during that playthrough.
+
+"And from a packaged export" now has a command behind it: `tools/build-export.sh`, which exports
+and then **boots** the result headlessly, failing on any `ERROR:` line rather than on the exit code.
+That distinction is measured, not assumed: an unhandled C# exception is logged by Godot's .NET layer
+through `GD.PushError` and does *not* abort the process, so a build force-exported with `data/`
+excluded boots to a menu with no cards, no enemies and no acts — and exits **0**. The boot is the
+only check in the repo running against a `.pck` instead of the source tree. CI runs it as a separate
+**Export** job (Linux only; the pack contents are platform-independent).
+
+Two export-only failure modes worth knowing, both found by running the thing rather than reading
+about it. macOS `codesign/codesign=1` (Godot's built-in ad-hoc signer) produces a signature
+`codesign -vvv` calls valid and that AMFI then rejects with "failed parsing DER entitlements" — the
+kernel `SIGKILL`s the app on launch, no stdout, no crash report. Use `3` (Apple's own `codesign`),
+which needs a macOS host. And a `universal`/`arm64` macOS export requires
+`textures/vram_compression/import_etc2_astc=true` in `project.godot` or Godot refuses the preset
+outright.
 
 ## Genre-specific risks to keep in mind
 

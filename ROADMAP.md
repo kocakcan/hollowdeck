@@ -518,8 +518,68 @@ Demoted, not dropped. Still genuinely open:
   *Outstanding:* coverage is the deeper gap — drag/targeting, the project's own stated
   highest-risk area, still has only the target-lock glow asserted. CI makes that gap cheaper to
   close, it does not close it.
-- **Packaged export pass** on Windows/Mac/Linux, and a **balance and bug-bash pass** once content
-  lands, hunting the input-during-animation bugs the state machine was designed to prevent.
+- ✅ **Packaged export.** `export_presets.cfg` for Windows Desktop / macOS / Linux,
+  `tools/build-export.sh` as the one-command entry point, and a CI job that exports Linux and boots
+  the result.
+
+  **The premise it started from was wrong, and finding that out was most of the value.** The plan
+  was built on a plausible reading of Godot's exporter: the six content JSONs are read as raw text
+  through `FileAccess.Open`, they carry no `.import` sidecar, so `export_filter="all_resources"`
+  would never see them and a default preset would ship a deckbuilder with no cards. Exporting and
+  then blanking `include_filter` to prove it produced a **byte-identical `.pck`**. Godot 4 loads
+  `.json` through a built-in resource loader; the files were always going to pack. The
+  `include_filter="data/*.json"` that survives on all three presets is deliberate insurance rather
+  than the mechanism — a `data/foo.txt` *is* verifiably dropped without a filter that matches it,
+  and the line states the intent instead of depending on how Godot classifies an extension.
+
+  What the exercise did establish is the failure *shape*, and it is worse than the guess. Forcing
+  the case with an `exclude_filter`: the export exits 0, and the resulting build boots to a menu
+  with no cards, no enemies and no acts — and **also exits 0**. Godot's .NET layer logs an unhandled
+  exception through `GD.PushError` and lets the main loop carry on rather than aborting. So a
+  content-less build is not a crash; it is a silent success. That is why the boot check greps the
+  log and not `$?`, and it is the only check in the repo running against a `.pck` rather than a
+  source tree.
+
+  Two real bugs came out of actually running the thing, neither of them the one the plan predicted.
+  Godot's built-in ad-hoc macOS signer (`codesign/codesign=1`) emits a signature `codesign -vvv`
+  calls valid and that AMFI rejects — `failed parsing DER entitlements` — so the kernel `SIGKILL`s
+  the app at launch with no stdout, no crash report, exit 137. **The Mac build could not start at
+  all**, and the boot check is what caught it; Apple's own `codesign` (`3`) fixes it, at the cost of
+  needing a Mac to build for Mac. And a `universal`/`arm64` macOS export is refused outright unless
+  `textures/vram_compression/import_etc2_astc=true` is set project-wide — the alternative being an
+  x86_64-only build putting every Apple Silicon player on Rosetta.
+
+  `scripts/data/DataFile.cs` stayed regardless. Its null check turns a bare `NullReferenceException`
+  into a line naming the file and the preset, and it lives in one place instead of six copies of the
+  same eight lines — six copies of a guard is six places to forget it, and the seventh database gets
+  written by copy-pasting whichever of the six was open.
+
+  `project.godot` gained exactly one line, `config/version`, which Godot feeds into the Windows
+  `.exe` version fields and the macOS `Info.plist` on its own, and which MainMenu now reads back out
+  of `ProjectSettings` and displays so it can reach a bug report. Window size and mode were
+  considered and deliberately left out: 1152x648 *is* the engine default and `ProjectSettings` drops
+  any setting equal to its default on save, so writing it would have produced a load-bearing-looking
+  line that silently deletes itself — and window mode already has an owner in `SettingsManager`,
+  which applies it from `user://settings.json` on every boot.
+
+  *Outstanding:* the macOS build is ad-hoc signed and **not notarized**. Downloaded from anywhere it
+  carries `com.apple.quarantine`, and macOS 15 removed the Control-click bypass, so a playtester
+  needs System Settings → Privacy & Security → Open Anyway or an `xattr -dr`. The trap is that a
+  locally built `.app` has no quarantine attribute, so it never reproduces on the machine that made
+  it. Fixing it is an Apple Developer Program membership, a Developer ID certificate and
+  `notarytool` credentials as CI secrets — a launch decision, not a build-script one. Also open: CI
+  exports Linux only (and cannot export macOS at all now that the preset needs Apple's `codesign`),
+  and `CREDITS.md` ships as a file beside the binary because there is still no in-game credits
+  screen.
+
+  One thing found on the way and filed rather than fixed, because it belongs to the bullet below:
+  `window/stretch/aspect="expand"` grows the canvas past 1152 units on a non-16:9 window, while
+  `ScreenChrome` still centres a fixed 1152-wide panel and `MapScreen` lays out against `1152f`.
+  Identical at any 16:9 size, so it is invisible on the developer's display and appears the first
+  time someone maximises on a 16:10 laptop.
+
+- A **balance and bug-bash pass** once content lands, hunting the input-during-animation bugs the
+  state machine was designed to prevent.
 
 ## Sequencing notes
 

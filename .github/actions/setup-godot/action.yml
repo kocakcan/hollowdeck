@@ -1,0 +1,100 @@
+name: Set up Godot
+description: >-
+  Downloads (and caches) the pinned Godot mono build, points $GODOT at it, and
+  optionally installs the matching export templates.
+
+# Extracted from ci.yml when the export job arrived and needed the same four
+# steps the smoke job already had. Same argument as scripts/data/DataFile.cs:
+# two copies of setup is two places to forget a version bump. The explanatory
+# comments came with it - they were the reason ci.yml was readable.
+#
+# Checkout is deliberately left to the caller: a composite action's steps run
+# against whatever the workflow has already checked out, and doing it here would
+# make it non-obvious which job owns the working tree.
+
+inputs:
+  godot-version:
+    description: Godot version, e.g. 4.7.1-stable. Must match Hollowdeck.csproj's Godot.NET.Sdk and project.godot's config/features.
+    required: true
+  export-templates:
+    description: >-
+      "true" to also install export templates. Off by default - the .tpz is
+      ~1.1GB and only the export job needs it.
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    # The Godot mono build is ~106MB compressed and never changes for a pinned
+    # version, so it is worth caching even though the download is the only slow
+    # step in the smoke job.
+    - name: Cache Godot
+      id: cache-godot
+      uses: actions/cache@v4
+      with:
+        path: ~/godot
+        key: godot-mono-linux-x86_64-${{ inputs.godot-version }}
+
+    - name: Download Godot
+      if: steps.cache-godot.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        GODOT_VERSION: ${{ inputs.godot-version }}
+      run: |
+        set -euo pipefail
+        name="Godot_v${GODOT_VERSION}_mono_linux_x86_64"
+        url="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/${name}.zip"
+        curl -sSfL -o /tmp/godot.zip "$url"
+        unzip -q /tmp/godot.zip -d /tmp/godot-extract
+        mkdir -p "$HOME/godot"
+        # Flattened deliberately: the mono build loads GodotSharp/ from beside
+        # the executable, so the two must stay siblings.
+        mv /tmp/godot-extract/"$name"/* "$HOME/godot/"
+        # Note the '.' before x86_64 in the binary but '_' in the directory.
+        mv "$HOME/godot/Godot_v${GODOT_VERSION}_mono_linux.x86_64" "$HOME/godot/godot"
+        chmod +x "$HOME/godot/godot"
+
+    # Its own step rather than part of the download, so it still runs on a cache
+    # hit. tools/run-smoke-tests.sh and tools/build-export.sh both read $GODOT
+    # and fall back to the developer's macOS path otherwise.
+    - name: Point the tooling at Godot
+      shell: bash
+      run: echo "GODOT=$HOME/godot/godot" >> "$GITHUB_ENV"
+
+    # Only the Linux release template is kept - see the unzip below. The key
+    # names that, so widening the list busts the cache instead of silently
+    # exporting against a stale trim.
+    - name: Cache export templates
+      if: inputs.export-templates == 'true'
+      id: cache-templates
+      uses: actions/cache@v4
+      with:
+        path: ~/.local/share/godot/export_templates
+        key: godot-templates-linux-release-${{ inputs.godot-version }}
+
+    - name: Install export templates
+      if: inputs.export-templates == 'true' && steps.cache-templates.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        GODOT_VERSION: ${{ inputs.godot-version }}
+      run: |
+        set -euo pipefail
+        url="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_mono_export_templates.tpz"
+        curl -sSfL -o /tmp/templates.tpz "$url"
+        # The full .tpz is ~1.1GB and carries every platform Godot supports.
+        # This job exports Linux release only, and Godot's
+        # has_valid_export_configuration accepts the release template on its own
+        # (debug || release), so everything else is cache weight that would
+        # eventually evict the editor entry. Adding a platform here means
+        # widening the cache key above too; forget that and the failure is
+        # Godot's own "no export templates found", which reads like a download
+        # problem and is not one.
+        unzip -q -j /tmp/templates.tpz \
+            'templates/version.txt' 'templates/linux_release.x86_64' -d /tmp/tpz
+        # The destination directory is whatever version.txt says, which is what
+        # Godot looks for (GODOT_VERSION_FULL_CONFIG, e.g. 4.7.1.stable.mono).
+        # Deriving it beats hardcoding for the same reason.
+        dest="$HOME/.local/share/godot/export_templates/$(cat /tmp/tpz/version.txt)"
+        mkdir -p "$dest"
+        mv /tmp/tpz/version.txt /tmp/tpz/linux_release.x86_64 "$dest/"

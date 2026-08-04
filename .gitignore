@@ -6,6 +6,14 @@
 .mono/
 data_*/
 
+# Packaged exports (tools/build-export.sh). Each build is a *directory*, not a
+# file: dotnet/embed_build_outputs is off, so the .NET assemblies land in a
+# sibling data_Hollowdeck_<platform>_<arch>/ folder beside the executable rather
+# than inside the .pck - which is what the data_*/ rule above has been covering
+# since the Mono era. Neither line is redundant; delete either and something
+# ships that shouldn't be tracked.
+/build/
+
 # C#/.NET build artifacts (the .sln/.csproj themselves ARE committed)
 .vs/
 .idea/
