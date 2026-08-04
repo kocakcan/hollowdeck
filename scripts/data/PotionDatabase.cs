@@ -1,7 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using Godot;
 
 namespace Hollowdeck.Data;
 
@@ -9,17 +6,9 @@ public static class PotionDatabase
 {
     private static readonly Dictionary<string, PotionDefinition> ById = new();
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() },
-    };
-
     public static void LoadAll()
     {
-        using var file = FileAccess.Open("res://data/potions/potions.json", FileAccess.ModeFlags.Read);
-        var json = file.GetAsText();
-        var defs = JsonSerializer.Deserialize<List<PotionDefinition>>(json, Options)!;
+        var defs = DataFile.LoadList<PotionDefinition>("res://data/potions/potions.json");
         ById.Clear();
         foreach (var def in defs) ById[def.Id] = def;
     }

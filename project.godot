@@ -11,6 +11,12 @@ config_version=5
 [application]
 
 config/name="Hollowdeck"
+; The only source Godot has for the Windows .exe's file/product version and the
+; macOS Info.plist's CFBundleShortVersionString, since export_presets.cfg leaves
+; both of those blank - so this is the one number to bump. Numeric-and-dots
+; only: a "0.1.0-dev" here makes Godot warn and silently substitute 1.0.0.
+; MainMenu reads it back out of ProjectSettings so it can reach a bug report.
+config/version="0.1.0"
 run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 config/icon="res://icon.svg"
@@ -177,3 +183,11 @@ environment/defaults/default_clear_color=Color(0.027451, 0.023529, 0.039216, 1)
 ; covers them; the two smooth procedural gradients in ScreenBackground opt
 ; back to Linear explicitly.
 textures/canvas_textures/default_texture_filter=0
+; Required to export macOS as universal or arm64 - Godot refuses the preset
+; outright without it, because an Apple Silicon build has no S3TC/BPTC path.
+; Costs nothing here in practice: every texture in this project is a 2D sprite
+; or icon imported losslessly (VRAM compression is a 3D concern), so this adds
+; an import variant nothing samples rather than recompressing any pixel art.
+; The alternative was an x86_64-only Mac build running every Apple Silicon
+; player under Rosetta.
+textures/vram_compression/import_etc2_astc=true

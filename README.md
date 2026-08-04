@@ -254,8 +254,67 @@ Beyond that, the bar is the same as it's always been: the game launches from the
 a packaged export, the loop is playable end-to-end by hand, and no errors or warnings appear in
 the Godot debugger during that playthrough.
 
+## Packaged builds
+
+```bash
+tools/build-export.sh                 # Linux, Windows Desktop, macOS
+tools/build-export.sh Linux           # a subset; arguments are preset names
+```
+
+Output lands in `build/<platform>/`. **Each build is a directory, not a file** — the .NET
+assemblies live in a sibling `data_Hollowdeck_<platform>_<arch>/` folder the executable loads at
+startup, so ship the folder. `CREDITS.md` is copied beside each binary, which is what makes the
+"must ship with any build" line below true; there is no in-game credits screen yet.
+
+Exporting needs the **export templates** for the pinned version, which the editor does not install
+with itself:
+
+```bash
+curl -L -o /tmp/templates.tpz \
+  https://github.com/godotengine/godot/releases/download/4.7.1-stable/Godot_v4.7.1-stable_mono_export_templates.tpz
+unzip -q /tmp/templates.tpz -d /tmp/tpz
+mkdir -p "$HOME/Library/Application Support/Godot/export_templates"
+mv /tmp/tpz/templates \
+   "$HOME/Library/Application Support/Godot/export_templates/$(cat /tmp/tpz/templates/version.txt)"
+```
+
+After exporting, the script **boots the build** (`--headless --quit-after 60`) and fails on any
+`ERROR:` line. It greps rather than checking the exit code on purpose, and that is measured rather
+than assumed: Godot's .NET layer logs an unhandled exception through `GD.PushError` and keeps
+running, so a build force-exported with `data/` excluded boots to a menu with no cards, no enemies
+and no acts — and **exits 0**. That boot is the only check in the repo that runs against a `.pck`
+rather than the source tree. CI runs the same script (`tools/build-export.sh Linux`) as its own
+**Export** job.
+
+On what actually ships: Godot 4 loads `.json` through a built-in resource loader, so
+`export_filter="all_resources"` packs the six content files under `data/` on its own — a new `.json`
+there needs nothing. The `include_filter="data/*.json"` on all three presets is deliberate insurance,
+not the mechanism (blanking it produces a byte-identical `.pck`). A data file with a *non*-resource
+extension — `.txt`, `.csv` — is verifiably not packed and does need the filter widened.
+
+The macOS preset uses `codesign/codesign=3` (Apple's own `codesign`), **not** `1`, Godot's built-in
+ad-hoc signer. `1` produces a signature `codesign -vvv` calls valid and that AMFI then refuses —
+`failed parsing DER entitlements` in the kernel log — and the app is `SIGKILL`ed on launch with no
+stdout and no crash report. The cost is that macOS can only be exported from a Mac with the Xcode
+command line tools, which is why CI exports Linux. A `universal`/`arm64` macOS build also requires
+`textures/vram_compression/import_etc2_astc=true` in `project.godot`; Godot refuses the preset
+without it.
+
+**The macOS build is ad-hoc signed and not notarized.** Downloaded from anywhere it arrives with
+`com.apple.quarantine`, and macOS 15 removed the Control-click bypass — a playtester needs System
+Settings → Privacy & Security → Open Anyway, or:
+
+```bash
+xattr -dr com.apple.quarantine Hollowdeck.app
+```
+
+Note a *locally built* `.app` carries no quarantine attribute, so this never reproduces on the
+machine that made it. Fixing it properly costs an Apple Developer Program membership, a Developer ID
+certificate and `notarytool` credentials in CI secrets — a launch decision, not a build-script one.
+
 ## Docs
 
 - [CLAUDE.md](CLAUDE.md) — architecture, conventions, and guidance for Claude Code
 - [ROADMAP.md](ROADMAP.md) — what's still open
-- [CREDITS.md](CREDITS.md) — asset licensing and attribution; **must ship with any build**
+- [CREDITS.md](CREDITS.md) — asset licensing and attribution; **must ship with any build**, which
+  `tools/build-export.sh` is what actually makes true (it copies the file beside each binary)

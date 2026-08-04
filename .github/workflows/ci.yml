@@ -40,37 +40,12 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      # The Godot mono build is ~106MB compressed and never changes for a
-      # pinned version, so it is worth caching even though the download is the
-      # only slow step here.
-      - name: Cache Godot
-        id: cache-godot
-        uses: actions/cache@v4
+      # Download/cache/$GODOT lives in a composite action because the export
+      # job below needs the identical four steps - see
+      # .github/actions/setup-godot/action.yml.
+      - uses: ./.github/actions/setup-godot
         with:
-          path: ~/godot
-          key: godot-mono-linux-x86_64-${{ env.GODOT_VERSION }}
-
-      - name: Download Godot
-        if: steps.cache-godot.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          name="Godot_v${GODOT_VERSION}_mono_linux_x86_64"
-          url="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/${name}.zip"
-          curl -sSfL -o /tmp/godot.zip "$url"
-          unzip -q /tmp/godot.zip -d /tmp/godot-extract
-          mkdir -p "$HOME/godot"
-          # Flattened deliberately: the mono build loads GodotSharp/ from
-          # beside the executable, so the two must stay siblings.
-          mv /tmp/godot-extract/"$name"/* "$HOME/godot/"
-          # Note the '.' before x86_64 in the binary but '_' in the directory.
-          mv "$HOME/godot/Godot_v${GODOT_VERSION}_mono_linux.x86_64" "$HOME/godot/godot"
-          chmod +x "$HOME/godot/godot"
-
-      # Its own step rather than part of the download, so it still runs on a
-      # cache hit. run-smoke-tests.sh reads $GODOT and falls back to the
-      # developer's macOS path otherwise.
-      - name: Point the suite at Godot
-        run: echo "GODOT=$HOME/godot/godot" >> "$GITHUB_ENV"
+          godot-version: ${{ env.GODOT_VERSION }}
 
       - name: Version check
         run: |
@@ -110,3 +85,70 @@ jobs:
                  "Run 'cargo run --release --manifest-path tools/artgen/Cargo.toml -- generate' and commit the result."
             exit 1
           fi
+
+  # A separate job rather than more steps on `smoke`, because it needs ~1.1GB of
+  # export templates that the test job must never pay for. In parallel it costs
+  # no wall clock on a warm cache, and a red job named "Export" says what broke.
+  #
+  # It gates PRs on the same triggers as `smoke`. CI budget is a real
+  # counter-argument and this job is the expensive one - but this is the single
+  # bug class in the project that is structurally invisible to every other
+  # check. It does not exist in the editor (res:// there IS the source tree), no
+  # smoke suite runs against a .pck, and an unhandled C# exception does not move
+  # an exit code. This file's own header says the gap CI closed was "anything
+  # that ran it other than a person remembering to"; a main-only gate would
+  # reintroduce exactly that, for the failure with the worst blast radius - a
+  # shipped build with no content.
+  #
+  # Linux only. The pack contents are what is under test and they are
+  # platform-independent; adding Windows and macOS triples the dotnet publish
+  # cross-compile for no extra signal. The one thing a Linux-only boot cannot
+  # see - a Windows preset whose include_filter drifted - is covered by the grep
+  # at the top of tools/build-export.sh, which runs on every platform.
+  export:
+    name: Export
+    runs-on: ubuntu-latest
+    # Two dotnet publish runs and a ~1.1GB template download on a cold cache.
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - uses: ./.github/actions/setup-godot
+        with:
+          godot-version: ${{ env.GODOT_VERSION }}
+          export-templates: 'true'
+
+      # Same reason as the smoke job: .godot/ is gitignored, so a fresh checkout
+      # resolves no resources at all.
+      - name: Import assets
+        run: |
+          "$GODOT" --headless --path . --import
+          "$GODOT" --headless --path . --import
+
+      # Exports build/linux/, copies CREDITS.md beside it, then boots the real
+      # binary headlessly and fails on any ERROR line. That boot is the only
+      # check in this repo that runs against a .pck rather than a source tree,
+      # and it is the only thing that can see a content JSON missing from it.
+      - name: Export and boot
+        run: tools/build-export.sh Linux
+
+      # Only from main - a downloadable build is for handing to a playtester,
+      # and every PR producing one is noise. tar'd first because
+      # upload-artifact rezips and drops the executable bit (every file becomes
+      # 644), which would make the download unrunnable without a chmod nobody
+      # would guess at.
+      - name: Package artifact
+        if: github.event_name == 'push'
+        run: tar czf hollowdeck-linux.tar.gz -C build/linux .
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: hollowdeck-linux-${{ github.sha }}
+          path: hollowdeck-linux.tar.gz
+          retention-days: 14

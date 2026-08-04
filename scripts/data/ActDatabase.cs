@@ -1,6 +1,4 @@
 using System.Collections.Generic;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Godot;
 
 namespace Hollowdeck.Data;
@@ -12,21 +10,13 @@ public static class ActDatabase
 {
     private static readonly List<ActDefinition> Acts = new();
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() },
-    };
-
     public static IReadOnlyList<ActDefinition> All => Acts;
 
     public static int Count => Acts.Count;
 
     public static void LoadAll()
     {
-        using var file = FileAccess.Open("res://data/acts/acts.json", FileAccess.ModeFlags.Read);
-        var json = file.GetAsText();
-        var defs = JsonSerializer.Deserialize<List<ActDefinition>>(json, Options)!;
+        var defs = DataFile.LoadList<ActDefinition>("res://data/acts/acts.json");
         Acts.Clear();
         Acts.AddRange(defs);
     }
