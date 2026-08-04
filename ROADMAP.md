@@ -410,13 +410,83 @@ Demoted, not dropped. Still genuinely open:
   `EffectSmokeTest.TestEveryCardUpgradeChangesSomething` now fails any card whose `+` moves no
   number, which is the general form of the failure `CardUpgrade.ShouldScale` had only warned about
   in a comment.
-- **Balance the three-act curve.** Authored and smoke-tested but never actually played: enemies
-  scale ~1.4x per act against a 50 HP start with +8 max HP and 30% heal per act cleared. Act III
-  against a deck with only ~20 card rewards is the open question. Unlock-track thresholds were
-  scaled to one-act runs and now fill three times faster. Two known things to look at first, both
-  flagged where they live: `Bloodpact+`/`Deep Focus+` (+2 Energy or +2 cards *every turn*) are the
-  largest upgrade deltas in the pool by a distance, and 74 of the 84 cards are unlocked from the
-  first run, so the unlock track now gates a tenth of the pool rather than a fifth.
+- **Balance the three-act curve.** Authored and smoke-tested but never actually played. The numbers
+  below were measured off the data rather than estimated, so this bullet is now a worklist rather
+  than a worry.
+
+  **The core tension, quantified.** Encounter HP scales **1.48x then 1.44x** per act (66 → 98 → 141
+  average for a normal group) and incoming damage **1.6x then 1.3x** (8.6 → 13.9 → 18.1 per turn),
+  while the player's defensive side scales only **1.16x per act** (50 max HP, +8 and a 30% heal per
+  act cleared → 50 → 58 → 66). The entire difference has to be covered by deck power, drawn from
+  **~16.5 three-card rewards** on an average winning path — the "~20" this bullet used to claim is
+  the optimistic end, reached only by picking a fight at every branch. A starter-rate deck does ~18
+  damage a turn; an act III normal encounter is 141 HP at 18.1 DPT against 66 max HP. Throughput has
+  to roughly triple.
+
+  **Four anomalies to look at first**, in order of how odd they are:
+  - **Elites hit softer per turn than normal fights, in all three acts** (7.9 vs 8.6, 10.5 vs 13.9,
+    13.5 vs 18.1 group DPT). Elites are mostly singletons while normal encounters stack 2–3 enemies,
+    so an elite is currently a *longer* fight rather than a harder one. Widest outlier inside a
+    single pool: act I's `rot_hound/rot_hound/ward_acolyte` at 16.1 DPT against `possessed_armor`'s
+    3.0.
+  - **Boss enrage DPT is flat across the whole game** (14.0 → 14.8 → 14.3) while max HP rises 50 → 66,
+    which makes act III's enrage phase *relatively weaker* than act I's. Boss DPT act I→II is 1.10x
+    against 1.47x more HP.
+  - **`Deep Focus+` draws 8 cards a turn, not 7.** `CardUpgrade.Apply` is `max(amount + 1, round(amount
+    * 1.4))`, and at amount 2 the `+1` floor beats the multiplier — so the data produces Foresight 3
+    where this document and the code comment both say +2. `Bloodpact+` is 5 energy every turn for one
+    cost-3 card. Both are still the largest upgrade deltas in the pool by a distance. (The comment in
+    `CardUpgrade.ShouldScale` also justifies them as "both cost-3 Rares"; `Deep Focus` is cost 2.)
+  - **`RunScore`'s Mystery Machine wants 5 event rooms; an average run visits 1.6.** Effectively
+    unreachable. The whole score table was authored for one-act runs — a winning three-act run now
+    banks ~400–600, so the 5500-point unlock track completes in ~10–14 wins. `RunScore.cs`'s header
+    comment already asks for this pass and its stated premise ("a 30-card pool, 22 relics") is stale
+    against 84 and 27.
+
+  Also still true: 74 of the 84 cards are unlocked from the first run, so the unlock track gates a
+  tenth of the pool rather than a fifth.
+
+  **There is no balance tooling of any kind** — no simulator, no curve printer, no auto-player;
+  every number above was computed by hand outside the repo. The cheap way in is that the pieces are
+  already headless-drivable: every `*SmokeTest.cs` constructs `PlayerCombatant`/enemies directly, and
+  `MapGenerator.Generate(Random, ActDefinition)` is a pure function. A `BalanceSmokeTest.tscn` in the
+  existing style, running N seeded runs with a greedy auto-player and printing HP-remaining and
+  turns-per-fight per act, would reuse the harness rather than being new infrastructure — and would
+  turn "act III is the open question" into a number.
+
+- **Close the drag/targeting test gap** — risk 5, the project's own stated highest-risk area, and the
+  thinnest coverage in the repo. `CombatTargetingSmokeTest` never instantiates a `CardView`: its
+  target-lock checks drive `EnemyView.SetTargetLocked` directly, and its other two groups are layout
+  assertions. **Every combat test in the suite calls `CombatManager.TryPlayCard` directly**, which is
+  precisely the layer *below* the one that carries the risk. `TryPlayFromHand`,
+  `FindEnemyViewUnderMouse`, `SnapHome`, `_leavingHand` and `UpdateTargetHighlight` appear in zero
+  tests.
+
+  Nine checks are assertable in the existing `_Ready`/PASS-FAIL style with no new machinery —
+  `TryPlayFromHand` and `_GuiInput` are both public, and reflection into privates is already an
+  accepted idiom (`HandLayoutSmokeTest`). Highest value first:
+  1. **The rejected-drop round trip.** `TryPlayFromHand(null)` on a `SingleEnemy` card must return
+     false *and* leave the node re-parented under `HandArea` at its home position. Nothing checks the
+     reparent is undone; a card orphaned under `CurrentScene` is invisible to `RefreshHand` forever.
+  2. **The reparent-before-resolve invariant** — a successful play must leave the node under
+     `CurrentScene` with `_leavingHand` set. That is what the comment at `CardView.cs:668` exists to
+     protect, and the bug it prevents (a played card animating as *discarded*) is silent.
+  3. **`FindEnemyViewUnderMouse` skips dead enemies** — a corpse winning the hit test is a bug that
+     already shipped once and is currently prevented only by a comment.
+  4. **`_ExitTree` clears the glow**, or a freed card leaves a permanent lock on an enemy nobody is
+     aiming at.
+  5. **`CancelTargeting` restores a clean board** — potion still in `RunState.Potions`, hint hidden,
+     no enemy left locked (`RefreshStateUi`'s clear-on-exit has no test).
+  6. **The mouse `AwaitingTarget` path** — `EnemyView.OnPressed` is untested; `KeyboardSmokeTest`
+     covers only the keyboard half.
+  7. **`TryPlayCard`'s three rejection gates as a table**, asserting the hand is *unchanged* in all
+     three (no energy spent, card still in hand). Only the null-target case is incidentally covered.
+  8. **`UpdateTargetHighlight` is a no-op for non-`SingleEnemy` cards.**
+  9. **`RefreshDescriptionForTarget` actually changes the text** against a Vulnerable enemy — the
+     "drag over a target and see the real number" promise, and pure string comparison.
+
+- **Play a packaged build end to end.** The last unchecked item on the phase bar in `CLAUDE.md`.
+  `tools/build-export.sh` proves a build boots and quits clean; nobody has played a run inside one.
 - **Wider status roster** — eleven today: `Vulnerable`, `Weak`, `Strength`, `Poison`,
   `Metallicize`, `Ritual`, `Dexterity`, `Frail`, `Regen`, plus `Fervor` and `Foresight` from the
   card pass above. Keep widening it alongside cards that use the new statuses, not speculatively —
