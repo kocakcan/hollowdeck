@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using Hollowdeck.Data;
@@ -16,6 +17,7 @@ public partial class RewardScreen : Control
         ScreenBackground.Attach(this, "crypt", new Color(0.6f, 0.6f, 0.65f));
         DeckViewButtons.Attach(this);
         GetNode<Label>("TitleBlock/GoldLabel").Text = $"You found {RewardContext.GoldAwarded} gold.";
+        BuildActClearedBanner();
 
         var relicLabel = GetNode<Label>("TitleBlock/RelicLabel");
         if (RewardContext.GuaranteedRelic is { } relic)
@@ -39,6 +41,40 @@ public partial class RewardScreen : Control
         ScreenKeyboardNav.Attach(this,
             () => GetNode<Control>("CardChoicesArea").GetChildren().OfType<CardView>().FirstOrDefault(),
             OnSkipPressed);
+    }
+
+    // Every fight's reward screen is titled "Victory Reward", which is fine
+    // after a normal fight and actively misleading after a boss: a player who
+    // has just killed one and is told "Victory" has every reason to think the
+    // run is over, and the only thing that would have said otherwise - a new
+    // map, one act further along - looks like the game restarting. So a boss
+    // that ended an act retitles the screen with the act it ended, and names
+    // both the act coming next and the max-HP bonus and heal that clearing one
+    // silently granted (RunState.ActClear).
+    private void BuildActClearedBanner()
+    {
+        var label = GetNode<Label>("TitleBlock/ActLabel");
+        if (RewardContext.ActCleared is not { } cleared)
+        {
+            label.Visible = false;
+            return;
+        }
+
+        GetNode<Label>("TitleBlock/TitleLabel").Text = $"Act {cleared.ClearedNumber} Cleared";
+
+        // Act 3 grants neither bonus, and act 3's boss never reaches this
+        // screen anyway - but the parts are dropped by value rather than by act
+        // so a data change can't produce "+0 Max HP".
+        var gains = new List<string>();
+        if (cleared.MaxHpBonus > 0) gains.Add($"+{cleared.MaxHpBonus} Max HP");
+        if (cleared.Healed > 0) gains.Add($"healed {cleared.Healed}");
+
+        // ASCII only, like every other string in the game's UI: the pixel faces
+        // in PixelSpec carry no punctuation past it (ART_SPEC section 5).
+        string next = $"Next: Act {cleared.NextNumber} of {cleared.TotalActs} - {cleared.NextName}";
+        label.Visible = true;
+        label.Text = gains.Count > 0 ? $"{string.Join(", ", gains)}. {next}" : next;
+        label.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
     }
 
     // Real CardView instances (the same frame combat hands/deck-view use)

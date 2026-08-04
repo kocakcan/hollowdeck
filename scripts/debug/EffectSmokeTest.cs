@@ -6,6 +6,7 @@ using Hollowdeck.Data;
 using Hollowdeck.Effects;
 using Hollowdeck.Relics;
 using Hollowdeck.Run;
+using Hollowdeck.UI;
 
 namespace Hollowdeck.Debug;
 
@@ -48,6 +49,8 @@ public partial class EffectSmokeTest : Node
         TestExhaustHandCardDoesNotEatItself();
         TestNewStatusDescriptions();
         TestEveryCardUpgradeChangesSomething();
+        TestEveryStatusHasAKeywordBlurb();
+        TestEnemyVoiceDescriptions();
         await TestTurnStartGrantingStatuses();
         await TestRegenHealsEachTurn();
 
@@ -554,6 +557,86 @@ public partial class EffectSmokeTest : Node
         Check("every_card_upgrade_changes_something", unchanged.Count == 0,
             $"upgrading these changes nothing: {string.Join(", ", unchanged)} - " +
             "the status or action is missing from CardUpgrade's scale lists");
+    }
+
+    // The same silent-omission failure CardUpgrade.ShouldScale has, one layer
+    // up. Keywords.Blurb's default arm renders a status as bare "Weak." rather
+    // than throwing, so a twelfth StatusType would ship with a hover panel that
+    // explains nothing and nothing anywhere would go red. This is what goes red.
+    //
+    // Before Keywords existed there were two rosters - eleven statuses in
+    // StatusRow's tooltips against five in CardView's hover panel - and the gap
+    // had gone unnoticed through every status added since.
+    private void TestEveryStatusHasAKeywordBlurb()
+    {
+        var missing = new List<string>();
+        foreach (var status in System.Enum.GetValues<StatusType>())
+        {
+            string generic = Keywords.Blurb(status);
+            string withAmount = Keywords.Blurb(status, 3);
+            // The default arm's shape: the status name and nothing else.
+            if (generic == $"{status}." || withAmount == $"{status} 3.") missing.Add(status.ToString());
+        }
+
+        Check("every_status_has_a_keyword_blurb", missing.Count == 0,
+            $"no hover explanation for: {string.Join(", ", missing)} - add an arm to Keywords.Blurb");
+
+        Check("every_status_is_in_the_keyword_roster",
+            System.Enum.GetValues<StatusType>().All(s => Keywords.All.Any(e => e.Keyword == s.ToString())),
+            "a status missing from Keywords.All never gets highlighted or explained in card text");
+
+        // StatusRow's icon tooltips are the one caller that re-attaches the
+        // name, and their wording is load-bearing enough to pin: this is the
+        // text a player reads to learn what the number on the icon means.
+        Check("status_tooltip_composes_name_amount_and_blurb",
+            Keywords.StatusTooltip(StatusType.Strength, 3) == "Strength 3: attacks deal +3 damage.",
+            $"got '{Keywords.StatusTooltip(StatusType.Strength, 3)}'");
+    }
+
+    // An enemy's telegraph is the same EffectSpecs as a card, described from the
+    // other side. One formatter with a voice, rather than a second formatter -
+    // so this pins that the voice actually changes the verb and that the
+    // player-facing default is untouched by it.
+    private void TestEnemyVoiceDescriptions()
+    {
+        // Both sides get a known target, which is what EnemyView does for real
+        // (CombatManager.Instance.Player) and what suppresses the hypothetical
+        // "(~N vs Vulnerable)" hint an un-aimed card carries. Without it every
+        // expectation below would be testing that parenthetical rather than the
+        // verb, which is the thing this actually cares about.
+        var victim = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 50 };
+        var targets = new List<Combatant> { victim };
+
+        string Enemy(params EffectSpec[] effects) =>
+            EffectDescriptionFormatter.Describe(effects.ToList(),
+                new DescribeContext(Targets: targets, Voice: DescribeVoice.Enemy));
+        string Player(params EffectSpec[] effects) =>
+            EffectDescriptionFormatter.Describe(effects.ToList(), new DescribeContext(Targets: targets));
+
+        var attack = new EffectSpec { Action = "deal_damage", Amount = 12, Scope = EffectScope.Target };
+        var block = new EffectSpec { Action = "gain_block", Amount = 8, Scope = EffectScope.Self };
+        var debuff = new EffectSpec { Action = "apply_status", Status = "Weak", Amount = 2, Scope = EffectScope.Target };
+        var buff = new EffectSpec { Action = "apply_status", Status = "Strength", Amount = 3, Scope = EffectScope.Self };
+
+        Check("enemy_voice_uses_third_person_verbs",
+            Enemy(attack) == "Deals 12 damage to you."
+            && Enemy(block) == "Gains 8 Block."
+            && Enemy(debuff) == "Applies 2 Weak to you."
+            && Enemy(buff) == "Gains 3 Strength.",
+            $"got '{Enemy(attack)}' / '{Enemy(block)}' / '{Enemy(debuff)}' / '{Enemy(buff)}'");
+
+        Check("player_voice_is_unchanged_by_the_new_field",
+            Player(attack) == "Deal 12 damage."
+            && Player(block) == "Gain 8 Block."
+            && Player(debuff) == "Apply 2 Weak."
+            && Player(buff) == "Gain 3 Strength.",
+            $"got '{Player(attack)}' / '{Player(block)}' / '{Player(debuff)}' / '{Player(buff)}'");
+
+        // The multi-hit collapse is shared with the intent row's "12 x2", so a
+        // tooltip and the number beside it can't disagree about what one hit is.
+        Check("enemy_voice_collapses_multi_hits",
+            Enemy(attack, attack) == "Deals 12 damage to you twice.",
+            $"got '{Enemy(attack, attack)}'");
     }
 
     private void TestNewStatusDescriptions()

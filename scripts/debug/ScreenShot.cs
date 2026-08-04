@@ -68,6 +68,12 @@ public partial class ScreenShot : Node
     {
         ["combat"] = new("res://scenes/CombatScreen.tscn", SeedCombat, AfterCombatReady),
         ["reward"] = new("res://scenes/RewardScreen.tscn", SeedReward),
+        // The same screen after a boss that ended an act, which retitles it and
+        // adds a line naming the next act and the max-HP bonus and heal that
+        // clearing one grants. That line is the longest string the title block
+        // ever holds, so this is where it would run into the deck button or
+        // wrap into the cards.
+        ["rewardactclear"] = new("res://scenes/RewardScreen.tscn", SeedActClearedReward),
         ["shop"] = new("res://scenes/ShopScreen.tscn", SeedShop),
         ["map"] = new("res://scenes/MapScreen.tscn", SeedMap),
         // One map + one boss fight per later act: each act has its own title,
@@ -196,6 +202,11 @@ public partial class ScreenShot : Node
         cover.Visible = false;
         cover.Color = new Color(cover.Color, 0f);
 
+        // Same reason as the cover above: RewardContext is a static that
+        // outlives a shot, so without this the act-cleared banner would leak
+        // onto every reward-screen shot taken after "rewardactclear".
+        RewardContext.ActCleared = null;
+
         RunState.Gold = 129;
         RunState.PlayerMaxHp = 50;
         RunState.PlayerCurrentHp = 34;
@@ -280,6 +291,13 @@ public partial class ScreenShot : Node
             view.Combatant.CurrentMove = move;
             view.Refresh();
         }
+
+        // Target-lock the last enemy so the shot also carries its intent hover
+        // panel - the row's icon and number are only half the telegraph now,
+        // and the prose half is the half a smoke test can only prove non-empty.
+        // Locking is also how keyboard target-cycling raises it, so this is the
+        // real path rather than a synthesised mouse event.
+        EnemyView.Instances.LastOrDefault()?.SetTargetLocked(true);
     }
 
     private static void SeedCrowdedCombat()
@@ -348,6 +366,22 @@ public partial class ScreenShot : Node
         {
             CardDatabase.Get("twin_strike"), CardDatabase.Get("shrug_it_off"), CardDatabase.Get("inflame"),
         };
+    }
+
+    // Act 2 cleared, i.e. the widest case: the longest act name of the three
+    // acts that can precede one, and both bonus terms present. Act 3 grants
+    // neither and its boss never reaches this screen at all.
+    private static void SeedActClearedReward()
+    {
+        SeedReward();
+        RewardContext.GoldAwarded = 60;
+        var cleared = ActDatabase.At(1);
+        var next = ActDatabase.At(2);
+        RewardContext.ActCleared = new ActClear(
+            ClearedNumber: 2, ClearedName: cleared.Name,
+            NextNumber: 3, NextName: next.Name,
+            TotalActs: ActDatabase.Count,
+            MaxHpBonus: cleared.ClearMaxHpBonus, Healed: 20);
     }
 
     // Gold is set just above two card prices (50g each) and below a relic's

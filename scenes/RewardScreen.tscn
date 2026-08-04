@@ -20,7 +20,7 @@ anchor_bottom = 0.0
 offset_left = -210.0
 offset_top = 24.0
 offset_right = 210.0
-offset_bottom = 130.0
+offset_bottom = 160.0
 
 [node name="TitleLabel" type="Label" parent="TitleBlock"]
 layout_mode = 2
@@ -28,6 +28,13 @@ theme_type_variation = &"CombatDisplayLabel"
 theme_override_font_sizes/font_size = 32
 horizontal_alignment = 1
 text = "Victory Reward"
+
+[node name="ActLabel" type="Label" parent="TitleBlock"]
+layout_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 3
+visible = false
+text = ""
 
 [node name="GoldLabel" type="Label" parent="TitleBlock"]
 layout_mode = 2

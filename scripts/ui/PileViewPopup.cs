@@ -173,7 +173,18 @@ public partial class PileViewPopup : Control
     {
         if (_focusBeforeOpen is { } previous && IsInstanceValid(previous) && previous.IsInsideTree())
         {
-            previous.CallDeferred(Control.MethodName.GrabFocus);
+            // Quietly, and therefore through a Callable rather than
+            // CallDeferred(MethodName.GrabFocus): handing focus back where it
+            // was is the popup tidying up after itself, not the player pointing
+            // at whatever is underneath - which on a reward screen is a card
+            // that would otherwise raise its keyword panel on the way out.
+            Callable.From(() =>
+            {
+                if (GodotObject.IsInstanceValid(previous) && previous.IsInsideTree())
+                {
+                    ScreenKeyboardNav.GrabFocusQuietly(previous);
+                }
+            }).CallDeferred();
         }
     }
 }

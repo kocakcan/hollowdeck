@@ -1312,7 +1312,9 @@ public partial class CombatScreen : Control
             }
             else
             {
-                if (CombatContext.IsBoss) RunState.AdvanceAct();
+                // Assigned unconditionally, so an act-clear banner can't be
+                // left over from the last boss onto an ordinary fight's reward.
+                RewardContext.ActCleared = CombatContext.IsBoss ? RunState.AdvanceAct() : null;
                 RewardContext.CardChoices = SampleCardChoices(3);
                 RewardContext.GoldAwarded = CombatContext.GoldReward;
                 // A boss is worth a guaranteed relic too, not just elites.

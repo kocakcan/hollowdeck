@@ -22,7 +22,20 @@ namespace Hollowdeck.Effects;
 public readonly record struct DescribeContext(
     Combatant? Source = null,
     CardTargetType TargetType = CardTargetType.None,
-    IReadOnlyList<Combatant>? Targets = null);
+    IReadOnlyList<Combatant>? Targets = null,
+    DescribeVoice Voice = DescribeVoice.Player);
+
+// Who the sentence is about. Everything here was written in the imperative,
+// because until enemy intents needed explaining, every caller was describing a
+// card the player was about to play: "Deal 6 damage. Apply 2 Weak."
+//
+// An enemy's telegraph is the same effects seen from the other side, and it has
+// to read as a statement about the enemy rather than an instruction to the
+// player - "Deals 6 damage. Applies 2 Weak to you." Doing that as a voice on
+// the one formatter, rather than a second formatter or a regex over finished
+// prose, is what stops the two descriptions of the same EffectSpec drifting
+// apart. Player is the default, so no existing call site changes.
+public enum DescribeVoice { Player, Enemy }
 
 // The numbers a description ended up printing that differ from the authored
 // base amount, so a presentation layer can call them out (CardView tints
@@ -134,7 +147,7 @@ public static class EffectDescriptionFormatter
             {
                 int outgoing = Outgoing(effect.Amount, ctx.Source);
                 Record(effect.Amount, outgoing, buffed, weakened);
-                return $"Deal {DamageAmount(outgoing, effect, ctx, buffed)} damage{Suffix(effect, ctx, hoistedAllEnemies)}.";
+                return $"{Verb(ctx, "Deal", "Deals")} {DamageAmount(outgoing, effect, ctx, buffed)} damage{Suffix(effect, ctx, hoistedAllEnemies)}.";
             }
             case "gain_block":
             {
@@ -148,7 +161,7 @@ public static class EffectDescriptionFormatter
                     ? effect.Amount
                     : BlockMath.ComputeOutgoing(effect.Amount, ctx.Source);
                 Record(effect.Amount, block, buffed, weakened);
-                return $"Gain {block} Block.";
+                return $"{Verb(ctx, "Gain", "Gains")} {block} Block.";
             }
             // "Gain" for anything you put on yourself, "Apply" for anything
             // you put on someone else. This used to special-case Strength by
@@ -157,27 +170,27 @@ public static class EffectDescriptionFormatter
             // "Apply 3 Metallicize" on a card that targets nobody but you.
             case "apply_status":
                 return effect.Scope == EffectScope.Self
-                    ? $"Gain {effect.Amount} {effect.Status}."
-                    : $"Apply {effect.Amount} {effect.Status}{Suffix(effect, ctx, hoistedAllEnemies)}.";
+                    ? $"{Verb(ctx, "Gain", "Gains")} {effect.Amount} {effect.Status}."
+                    : $"{Verb(ctx, "Apply", "Applies")} {effect.Amount} {effect.Status}{Suffix(effect, ctx, hoistedAllEnemies)}.";
             case "draw_cards":
-                return $"Draw {effect.Amount} card{(effect.Amount == 1 ? "" : "s")}.";
+                return $"{Verb(ctx, "Draw", "Draws")} {effect.Amount} card{(effect.Amount == 1 ? "" : "s")}.";
             case "heal":
-                return $"Heal {effect.Amount} HP.";
+                return $"{Verb(ctx, "Heal", "Heals")} {effect.Amount} HP.";
             case "gain_energy":
-                return $"Gain {effect.Amount} Energy.";
+                return $"{Verb(ctx, "Gain", "Gains")} {effect.Amount} Energy.";
             case "lose_hp":
-                return $"Lose {effect.Amount} HP.";
+                return $"{Verb(ctx, "Lose", "Loses")} {effect.Amount} HP.";
             case "discard_cards":
-                return $"Discard {effect.Amount} card{(effect.Amount == 1 ? "" : "s")} at random.";
+                return $"{Verb(ctx, "Discard", "Discards")} {effect.Amount} card{(effect.Amount == 1 ? "" : "s")} at random.";
             case "exhaust_hand":
-                return "Exhaust your hand.";
+                return ctx.Voice == DescribeVoice.Enemy ? "Exhausts its hand." : "Exhaust your hand.";
             // Was missing until a card used it: gain_gold shipped for a relic,
             // and relics describe themselves from relics.json rather than from
             // here, so the gap only showed up as a card with no rules text at
             // all - which is exactly the silent failure the default arm below
             // produces for an unknown action.
             case "gain_gold":
-                return $"Gain {effect.Amount} Gold.";
+                return $"{Verb(ctx, "Gain", "Gains")} {effect.Amount} Gold.";
             default:
                 return "";
         }
@@ -209,13 +222,28 @@ public static class EffectDescriptionFormatter
         return low == high ? low.ToString() : $"{low}-{high}";
     }
 
+    // The imperative form for a card the player is about to play, the
+    // third-person form for an enemy's telegraph. Only the leading verb ever
+    // differs, which is why this is a two-argument helper at each arm rather
+    // than a parallel set of sentence templates.
+    private static string Verb(DescribeContext ctx, string imperative, string thirdPerson) =>
+        ctx.Voice == DescribeVoice.Enemy ? thirdPerson : imperative;
+
     // "to ALL enemies" is the whole point of this suffix: an AllEnemies card
     // has no other tell in its description. SingleEnemy stays bare (dragging
     // the card onto one enemy already says who it hits) and Self effects are
     // already phrased as "Gain"/"Heal"/"Lose". Suppressed when DescribeDetailed
     // has already said it once as a prefix.
-    private static string Suffix(EffectSpec effect, DescribeContext ctx, bool hoistedAllEnemies) =>
-        !hoistedAllEnemies && TargetsAllEnemies(effect, ctx) ? " to ALL enemies" : "";
+    //
+    // In the enemy's voice the same Target scope means the player, and an
+    // intent has no drag gesture to say so the way a card's targeting does, so
+    // it names the recipient outright.
+    private static string Suffix(EffectSpec effect, DescribeContext ctx, bool hoistedAllEnemies)
+    {
+        if (!hoistedAllEnemies && TargetsAllEnemies(effect, ctx)) return " to ALL enemies";
+        if (ctx.Voice == DescribeVoice.Enemy && effect.Scope == EffectScope.Target) return " to you";
+        return "";
+    }
 
     private static void Record(int baseAmount, int shown, List<int> buffed, List<int> weakened)
     {

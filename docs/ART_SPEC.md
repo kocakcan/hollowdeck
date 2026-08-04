@@ -165,7 +165,7 @@ glyph rendered away from it resamples and grows uneven stems.
 | Face | Job | Design em | Legal sizes |
 | --- | --- | --- | --- |
 | **Silkscreen Bold** | Display — titles, buttons, card/enemy names, HP, energy, damage numbers | 8px | 8, 16, 24, 32 |
-| **Tiny5** | Body — card rules text, descriptions, general UI | 8px | 16 everywhere (8 is unreadable, 24+ too big for a card) |
+| **Tiny5** | Body — card rules text, descriptions, general UI | 8px | 16 everywhere, 24 for hover tooltips (8 is unreadable; 24 is too big for a card, but a tooltip is not in a 152x88 box) |
 
 Both faces share an 8px em, so the legal set is one list: **exact multiples of 8, no exceptions
 and no fallback band.** Silkscreen has no lowercase and is very wide — right for short strings,
