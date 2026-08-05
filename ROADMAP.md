@@ -487,36 +487,37 @@ Demoted, not dropped. Still genuinely open:
   relics", against 84 and 27) is corrected, and its point *values* are deliberately untouched: how
   hard a category should be is a design call, zero is always wrong.
 
-- **Close the drag/targeting test gap** — risk 5, the project's own stated highest-risk area, and the
-  thinnest coverage in the repo. `CombatTargetingSmokeTest` never instantiates a `CardView`: its
-  target-lock checks drive `EnemyView.SetTargetLocked` directly, and its other two groups are layout
-  assertions. **Every combat test in the suite calls `CombatManager.TryPlayCard` directly**, which is
-  precisely the layer *below* the one that carries the risk. `TryPlayFromHand`,
-  `FindEnemyViewUnderMouse`, `SnapHome`, `_leavingHand` and `UpdateTargetHighlight` appear in zero
-  tests.
+- ✅ **Close the drag/targeting test gap** — risk 5, the project's own stated highest-risk area, and
+  previously the thinnest coverage in the repo. `CombatTargetingSmokeTest` never instantiated a
+  `CardView`: its target-lock checks drove `EnemyView.SetTargetLocked` directly and its other two
+  groups were layout assertions, while **every combat test in the suite called
+  `CombatManager.TryPlayCard` directly** — precisely the layer *below* the one carrying the risk.
+  `TryPlayFromHand`, `FindEnemyViewUnderMouse`, `SnapHome`, `_leavingHand` and
+  `UpdateTargetHighlight` appeared in zero tests.
 
-  Nine checks are assertable in the existing `_Ready`/PASS-FAIL style with no new machinery —
-  `TryPlayFromHand` and `_GuiInput` are both public, and reflection into privates is already an
-  accepted idiom (`HandLayoutSmokeTest`). Highest value first:
-  1. **The rejected-drop round trip.** `TryPlayFromHand(null)` on a `SingleEnemy` card must return
-     false *and* leave the node re-parented under `HandArea` at its home position. Nothing checks the
-     reparent is undone; a card orphaned under `CurrentScene` is invisible to `RefreshHand` forever.
-  2. **The reparent-before-resolve invariant** — a successful play must leave the node under
-     `CurrentScene` with `_leavingHand` set. That is what the comment at `CardView.cs:668` exists to
-     protect, and the bug it prevents (a played card animating as *discarded*) is silent.
-  3. **`FindEnemyViewUnderMouse` skips dead enemies** — a corpse winning the hit test is a bug that
-     already shipped once and is currently prevented only by a comment.
-  4. **`_ExitTree` clears the glow**, or a freed card leaves a permanent lock on an enemy nobody is
-     aiming at.
-  5. **`CancelTargeting` restores a clean board** — potion still in `RunState.Potions`, hint hidden,
-     no enemy left locked (`RefreshStateUi`'s clear-on-exit has no test).
-  6. **The mouse `AwaitingTarget` path** — `EnemyView.OnPressed` is untested; `KeyboardSmokeTest`
-     covers only the keyboard half.
-  7. **`TryPlayCard`'s three rejection gates as a table**, asserting the hand is *unchanged* in all
-     three (no energy spent, card still in hand). Only the null-target case is incidentally covered.
-  8. **`UpdateTargetHighlight` is a no-op for non-`SingleEnemy` cards.**
-  9. **`RefreshDescriptionForTarget` actually changes the text** against a Vulnerable enemy — the
-     "drag over a target and see the real number" promise, and pure string comparison.
+  All nine listed checks landed, 64 → 112 in the same suite, no new machinery: `TryPlayFromHand` is
+  public, `EnemyView.OnPressed` is reachable by emitting `Button.Pressed` (which is what a click
+  does), and reflection into privates was already an accepted idiom (`HandLayoutSmokeTest`).
+
+  Two things worth keeping, both found by writing the tests rather than by planning them:
+
+  - **A headless Godot pins the mouse at `(0, 0)` and ignores `Viewport.WarpMouse` *and*
+    `Input.WarpMouse`.** So the two checks that hang off `GetGlobalMousePosition()` cannot move the
+    cursor to the enemies; they build `EnemyView`s standalone and place them over the origin
+    instead. That turned out to be the better test anyway: going around `CombatScreen` puts the
+    order of `EnemyView.Instances` under the test's control, and the corpse has to be *first* in
+    that list for the skip-dead-enemies check to mean anything — which is exactly the shape of the
+    bug that shipped once.
+  - **The rejected-drop round trip is the one that would have hurt.** `TryPlayFromHand` reparents
+    out of the hand area *before* asking whether the play is legal, so a refused play has to undo
+    it. Deleting that undo leaves the card under `CurrentScene`, where `RefreshHand` — which only
+    tears down what is still parented under `HandArea` — can never see it again, while it stays in
+    `Piles.Hand`. The player is left holding a card they cannot see or play for the rest of the
+    fight, with no error anywhere.
+
+  Every new check was verified to fail: deleting the reparent-undo and the `IsDead` guard in
+  `FindEnemyViewUnderMouse` turns exactly four checks red, each naming the consequence rather than
+  the symptom.
 
 - **Play a packaged build end to end.** The last unchecked item on the phase bar in `CLAUDE.md`.
   `tools/build-export.sh` proves a build boots and quits clean; nobody has played a run inside one.
@@ -603,7 +604,7 @@ Demoted, not dropped. Still genuinely open:
   *Outstanding:* the rebinding **UI** itself, now that there's a layer under it. Gamepad support is
   also much cheaper than it was. Resolution/windowed-size options are still missing.
 - ✅ **CI.** `.github/workflows/ci.yml` runs the whole sweep on every push to `main` and every PR:
-  17 suites, 770 checks, plus `artgen validate` over 164 assets. Godot is pinned to the same
+  every suite, plus `artgen validate` over the asset tree. Godot is pinned to the same
   4.7.1-stable mono build the csproj SDK and `project.godot` declare, and cached.
 
   Two things were worth getting right. **Importing assets first** — `.godot/` is gitignored, so a
@@ -618,9 +619,9 @@ Demoted, not dropped. Still genuinely open:
   silently skipped or platform-dependent), then deliberately broken with an un-regenerated icon
   edit to confirm it actually goes red and names the offending file.
 
-  *Outstanding:* coverage is the deeper gap — drag/targeting, the project's own stated
-  highest-risk area, still has only the target-lock glow asserted. CI makes that gap cheaper to
-  close, it does not close it.
+  This bullet used to end by naming coverage as the deeper gap, with drag/targeting — the project's
+  own stated highest-risk area — carrying only the target-lock glow. That gap is closed (see the
+  drag/targeting bullet in Phase 6); the sweep is 19 suites and 974 checks now.
 - ✅ **Packaged export.** `export_presets.cfg` for Windows Desktop / macOS / Linux,
   `tools/build-export.sh` as the one-command entry point, and a CI job that exports Linux and boots
   the result.

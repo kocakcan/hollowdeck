@@ -285,7 +285,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 |---|---|---|
 | `EffectSmokeTest` | pile + effect resolution, generated card/potion description text, rarity coverage, `CardPool` weighting, Power routing, every card's `+` actually changing something | `scripts/effects/`, `PileManager`, `CardPool`, `cards.json` |
 | `CombatSmokeTest` | `CombatScreen.tscn` boots and wires up | `CombatScreen`, `CombatManager` |
-| `CombatTargetingSmokeTest` | enemy target-lock glow | `EnemyView`, `CardView` drag/targeting |
+| `CombatTargetingSmokeTest` | the drag/targeting layer (risk 5): target-lock glow, HUD never painting over an enemy, the intent tooltip staying off the hand, and the `CardView` drag path itself — the rejected-drop round trip, the reparent-before-resolve invariant, `TryPlayCard`'s three rejection gates leaving the hand *unchanged*, `_ExitTree` clearing the glow, the corpse-skipping hit test, potion cancel/click, live description vs a Vulnerable target | `EnemyView`, `CardView` drag/targeting, `CombatManager` targeting sub-state |
 | `RelicSmokeTest` | relic hooks fire through combat | `scripts/relics/`, relic hooks, `relics.json` |
 | `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic, every intent's telegraph against its effects, the derived label shapes, turn-start grants on both sides (`Metallicize` for an enemy, `Fervor`/`Foresight` for the player) | intent pickers, statuses, elite rewards, `EnemyView.FormatIntent`, `BeginPlayerTurn`, `enemies.json` |
 | `HandLayoutSmokeTest` | hand fan spacing at 11+ cards, every card's text fits its box | `RefreshHand`, `HandFanLayout`, `CardView` text |
@@ -317,6 +317,15 @@ warning with a backtrace (its deliberate corrupt-save case, proving the loader f
 defaults), and `ScreenSmokeTest`, `Phase4ContentSmokeTest` and `KeyboardSmokeTest` each print one
 `Parent node is busy adding/removing children` engine error from a test clicking a button that
 changes scene.
+
+**A headless Godot pins the mouse at `(0, 0)` and ignores both `Viewport.WarpMouse` and
+`Input.WarpMouse`** — measured, not assumed. So anything hit-tested against
+`GetGlobalMousePosition()` (`CardView.FindEnemyViewUnderMouse` is the one that matters) cannot be
+tested by moving the cursor to the target; move the *target* over the origin instead. Building the
+`EnemyView`s standalone rather than through `CombatScreen` also puts `EnemyView.Instances` order
+under the test's control, which is the whole point of the corpse-skipping check — the corpse has to
+be first in that list to be worth asserting about. See
+`CombatTargetingSmokeTest.TestHitTestSkipsCorpsesAndIgnoresUntargetedCards`.
 
 A suite whose last act changes scene must capture `GetTree()` into a local *before* it, and do
 nothing asynchronous afterwards: `ChangeSceneToFile` replaces the tree's current scene, which is
