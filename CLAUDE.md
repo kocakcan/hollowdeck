@@ -172,9 +172,11 @@ tiles, palette-clamped by `artgen clamp`, mapped act by act in `CREDITS.md`. Add
 a row in `enemies.json`, a reference from exactly one act's pool (acts may not share enemies), and
 a 32x32 PNG; the first two are asserted by `ActSmokeTest`, the third by `PixelSpecSmokeTest`.
 
-`ROADMAP.md` tracks what's genuinely still open (packaged export, the rest of the way to 80–120
-cards, more enemies per act, a balance pass over the three-act curve). Don't treat this section as
-a to-do list.
+`ROADMAP.md` tracks what's genuinely still open. Everything the four items that used to be listed
+here named — packaged export, the card and enemy passes, the balance retune — has shipped; what's
+open now is the *vocabulary* those counts are built out of (card keywords, per-effect targeting,
+enemy behaviours beyond picking a move, relic tiers, an ascension ladder). Don't treat this section
+as a to-do list.
 
 ## Key files
 
