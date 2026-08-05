@@ -14,6 +14,12 @@
 # StyleReferenceScreen) are deliberately NOT run here: they need a real
 # renderer, produce no pass/fail, and exist to be looked at. Use
 # scenes/debug/ScreenShot.tscn for that (see the verify-screen skill).
+#
+# BalanceReport is skipped for the second half of that reason alone - it is
+# headless, but it prints a curve for a human to read rather than passing or
+# failing anything, and this script swallows a suite's stdout to show only its
+# summary line. Run it with tools/balance-report.sh. The assertions that belong
+# in a sweep are BalanceSmokeTest, which is picked up normally.
 
 set -uo pipefail
 

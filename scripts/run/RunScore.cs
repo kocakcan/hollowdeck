@@ -8,14 +8,35 @@ namespace Hollowdeck.Run;
 // (https://slaythespire.wiki.gg/wiki/Score). Only categories Hollowdeck
 // actually has a mechanic for are implemented - there's no ascension level,
 // no curse cards, no run timer and no Heart fight, so Ascension/Curses!/
-// Speedster/Heartbreaker have nothing to read. Thresholds were scaled to
-// Hollowdeck's much smaller numbers (50 max HP, ~45g per fight, a 30-card
-// pool, 22 relics) - the StS value each was scaled from is noted per-category
-// below. They were set when a run was a single act; a full three-act run now
-// banks three bosses' worth of points and climbs further up the unlock track,
-// so they want a pass alongside the act balance pass (see ROADMAP.md).
+// Speedster/Heartbreaker have nothing to read. Thresholds are scaled to
+// Hollowdeck's much smaller numbers (50 max HP, ~44g per fight, an 84-card
+// pool, 27 relics) - the StS value each was scaled from is noted per-category
+// below.
+//
+// The threshold categories are now set against measurement rather than
+// estimate: tools/balance-report.sh walks 500 seeded three-act maps and
+// reports, per category, the best a player *routing for that category* can
+// reach and the share of seeds where that clears the bar. Re-run it after
+// touching acts.json or the shop prices - a threshold nobody can reach is not
+// a hard category, it is dead points, and this file shipped two of them.
 public static class RunScore
 {
+    // Where the numbers below came from, so the next pass starts from the
+    // measurement rather than re-deriving it:
+    //
+    //   category         reachable in   note
+    //   Money Money           100%      gold tiers are comfortable at every rung
+    //   Raining Money         100%
+    //   I Like Gold           100%      typical best-path purse is ~1040g
+    //   I Like Shiny          100%      typical best path collects 15 relics
+    //   Librarian              98%
+    //   Encyclopedian          23%      was 50 cards, reachable in 0% of seeds
+    //   Mystery Machine        83%      was 5 event rooms, reachable in 42%
+    //
+    // Those percentages assume the whole purse goes to one category and every
+    // detour is taken, so a real run sits well under them. They are a ceiling,
+    // not a forecast.
+
     public const int PointsPerFloor = 5;
     public const int PointsPerEnemy = 2;
     public const int PointsPerElite = 10;
@@ -23,8 +44,9 @@ public static class RunScore
     public const int PointsPerChampion = 25;
     public const int PointsPerPerfectBoss = 50;
 
-    // StS: 99 damage in one attack. Hollowdeck's biggest printed hit is Last
-    // Stand's 20, so 30 is the equivalent "you built something silly" bar.
+    // StS: 99 damage in one attack. Hollowdeck's biggest printed hit is
+    // Cataclysm's 22, so 30 is the equivalent "you built something silly" bar -
+    // it has to come from Strength or Vulnerable on top of a printed number.
     public const int OverkillDamage = 30;
     public const int OverkillPoints = 25;
 
@@ -33,7 +55,9 @@ public static class RunScore
     public const int ComboCards = 10;
     public const int ComboPoints = 25;
 
-    // StS: 1,000 / 2,000 / 3,000 gold. Hollowdeck pays ~45g per fight.
+    // StS: 1,000 / 2,000 / 3,000 gold. Hollowdeck pays ~44g per fight, and a
+    // best-effort path banks ~1040 across three acts, so all three rungs are
+    // comfortable - they measure whether the player *spent* rather than earned.
     private static readonly (int Gold, int Points, string Label)[] GoldTiers =
     {
         (750, 75, "I Like Gold"),
@@ -41,14 +65,21 @@ public static class RunScore
         (250, 25, "Money Money"),
     };
 
-    // StS: 25 relics. Hollowdeck only has 22 in total.
+    // StS: 25 relics. Hollowdeck has 27 in total, and a best-effort path
+    // collects around 15, so 8 stays a comfortable bar.
     public const int ShinyRelics = 8;
     public const int ShinyPoints = 50;
 
-    // StS: 35 / 50 cards - kept as-is, deck sizes are comparable.
+    // StS: 35 / 50 cards. Deck sizes looked comparable and are not: a
+    // Hollowdeck run is ~21 fights (one card each) plus what ~1000 gold buys
+    // at 50g a card, so the ceiling with every detour taken and the whole
+    // purse spent on cards is 47, median 41. Encyclopedian at 50 was therefore
+    // unreachable on *every* one of 500 seeds - not a hard category, dead
+    // points. 43 puts it at the top quartile of deck-building runs and leaves
+    // Librarian where it was.
     private static readonly (int Size, int Points, string Label)[] DeckSizeTiers =
     {
-        (50, 50, "Encyclopedian"),
+        (43, 50, "Encyclopedian"),
         (35, 25, "Librarian"),
     };
 
@@ -61,8 +92,13 @@ public static class RunScore
     public const int PauperPoints = 100;
 
     // StS: 15 unknown rooms across three acts. Hollowdeck generates only a
-    // handful of Event nodes per act.
-    public const int MysteryRooms = 5;
+    // handful of Event nodes per act - a uniformly-routed run visits 1.6, and
+    // even a player taking every event the map offers has a median ceiling of
+    // 4. At 5 the category was a lottery on the map roll rather than a choice:
+    // only 42% of seeds could produce it at all, so on the majority of maps no
+    // amount of routing earned it. 3 is reachable on 83% of maps and still
+    // demands most of the detours, which is what the category is about.
+    public const int MysteryRooms = 3;
     public const int MysteryPoints = 25;
 
     public record Entry(string Label, int Points);
