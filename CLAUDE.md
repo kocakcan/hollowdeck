@@ -214,6 +214,11 @@ a to-do list.
 - `export_presets.cfg` + `tools/build-export.sh` — the three export presets and the one command that
   builds and then *boots* them. The cfg is committed; nothing secret lives in it, because Godot
   routes codesign and notarization credentials to `.godot/export_credentials.cfg`, already gitignored
+- `scripts/debug/BalanceModel.cs` + `tools/balance-report.sh` — the balance analyser and the command
+  that prints it. Static analysis off the content databases, not a combat simulator: the enemy turn
+  is wall-clock paced (0.35s per enemy action), so driving real fights cannot cover enough of them
+  inside the suite watchdog to say anything about a curve. `BalanceReport` prints, `BalanceSmokeTest`
+  asserts, and both read thresholds back out of `RunScore` rather than keeping a second copy
 - `scenes/CombatScreen.tscn` — card drag/hover/targeting
 - `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic
   status block, framed panel, art plinth), attached from `_Ready` like `ScreenBackground` and
@@ -250,7 +255,7 @@ There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Rea
 failure.
 
 ```bash
-tools/run-smoke-tests.sh                 # all 18; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh                 # all 19; builds first, nonzero exit on any failure
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 
@@ -296,6 +301,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon- *and sprite*-to-definition coverage, `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
 | `KeyboardSmokeTest` | `hd_*` InputMap coverage and no duplicate keycodes, which control each screen focuses on load, the card picker's grid navigation (down a column, out to Cancel, back in), combat's card/potion keys, potion aiming, Continue at combat end | `project.godot` `[input]`, `ScreenKeyboardNav`, `CardPicker`, any screen's focus wiring, `CombatScreen._UnhandledInput` |
 | `VictorySmokeTest` | the final act's boss win routing to `RunEndScreen` rather than another reward, and that screen reading VICTORY | `CombatScreen.OnContinuePressed`, `RunState.IsFinalAct`/`AdvanceAct`, `RunEndScreen` |
+| `BalanceSmokeTest` | the difficulty curve rising act over act, every enrage phase out-hitting its own normal phase, every `RunScore` threshold being reachable by some seed, upgrade amounts matching the documented formula | `enemies.json`, `acts.json`, `RunScore` thresholds, `CardUpgrade`, `MapGenerator` weights |
 
 When in doubt run everything — the full sweep takes well under a minute. Restructuring a
 `.tscn` will break tests that assert on `GetNode` paths, on purpose — that's the alarm working;

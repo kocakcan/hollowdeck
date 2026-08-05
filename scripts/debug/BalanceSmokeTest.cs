@@ -1,0 +1,250 @@
+using System.Collections.Generic;
+using System.Linq;
+using Godot;
+using Hollowdeck.Data;
+using Hollowdeck.Run;
+
+namespace Hollowdeck.Debug;
+
+// The pass/fail half of the balance tooling. BalanceReport prints the whole
+// curve for a human to read; this asserts the parts of it that are invariants
+// rather than tuning, so a content edit that breaks one fails a build instead
+// of waiting to be noticed in a playthrough.
+//
+// What is deliberately NOT asserted: the anomalies the report exists to show.
+// Elites hitting softer per turn than normal encounters, and the flat boss
+// enrage curve, are real problems - but pinning them either lands the suite
+// red on a known-open item or forces a bound so loose it could never fail,
+// and an assertion that cannot fail is worse than no assertion. Those get
+// reported and retuned; these get asserted.
+//
+// No scene changes and no persistence, so this needs neither RunSaveGuard nor
+// HardCutGuard.
+public partial class BalanceSmokeTest : Node
+{
+    // Enough seeds for the reachability sample to be stable run to run, few
+    // enough to stay far inside the 90s suite watchdog (the whole sweep here
+    // is graph walks and arithmetic - no combat, no frames).
+    private const int Seeds = 200;
+
+    private int _pass;
+    private int _fail;
+
+    public override void _Ready()
+    {
+        CardDatabase.LoadAll();
+        EnemyDatabase.LoadAll();
+        ActDatabase.LoadAll();
+        RelicDatabase.LoadAll();
+        PotionDatabase.LoadAll();
+
+        TestEveryEnemyCanFight();
+        TestActCurveRises();
+        TestEnrageIsAnEscalation();
+        TestBossesOutweighTheirAct();
+        TestScoreThresholdsAreReachable();
+        TestUpgradeGrantsAreWhatTheDocsClaim();
+
+        GD.Print($"BalanceSmokeTest: {_pass} passed, {_fail} failed");
+        GetTree().Quit(_fail == 0 ? 0 : 1);
+    }
+
+    // An enemy that never deals damage, or an encounter group that sums to no
+    // HP, is an authoring slip that no other suite would see: ActSmokeTest
+    // checks the ids resolve, Phase4ContentSmokeTest checks the telegraph
+    // matches the effects. Neither notices a moveset that cannot threaten
+    // anyone.
+    private void TestEveryEnemyCanFight()
+    {
+        var toothless = EnemyDatabase.All
+            .Where(d => BalanceModel.Profile(d) is { FlatDpt: <= 0, EnrageFlatDpt: <= 0 })
+            .Select(d => d.Id)
+            .ToList();
+        Check("every_enemy_deals_damage", toothless.Count == 0, $"never attack: {Join(toothless)}");
+
+        var broken = new List<string>();
+        foreach (var act in ActDatabase.All)
+        {
+            foreach (var group in act.NormalEncounters.Concat(act.EliteEncounters))
+            {
+                var e = BalanceModel.Encounter(group);
+                if (e.TotalHp <= 0 || e.FlatDpt <= 0) broken.Add($"{act.Id}:{e.Label}");
+            }
+        }
+        Check("every_encounter_has_hp_and_damage", broken.Count == 0, Join(broken));
+    }
+
+    // The whole point of three acts. Both halves have to rise: HP alone makes
+    // a longer fight, damage alone makes a swingier one.
+    private void TestActCurveRises()
+    {
+        var acts = BalanceModel.AllActs();
+
+        for (int i = 1; i < acts.Count; i++)
+        {
+            var prev = acts[i - 1];
+            var act = acts[i];
+
+            Check($"act{i + 1}_normal_hp_above_act{i}",
+                act.MeanNormalHp > prev.MeanNormalHp,
+                $"{act.MeanNormalHp:F0} vs {prev.MeanNormalHp:F0}");
+            Check($"act{i + 1}_normal_dpt_above_act{i}",
+                act.MeanNormalDpt > prev.MeanNormalDpt,
+                $"{act.MeanNormalDpt:F1} vs {prev.MeanNormalDpt:F1}");
+            Check($"act{i + 1}_elite_hp_above_act{i}",
+                act.MeanEliteHp > prev.MeanEliteHp,
+                $"{act.MeanEliteHp:F0} vs {prev.MeanEliteHp:F0}");
+            Check($"act{i + 1}_elite_dpt_above_act{i}",
+                act.MeanEliteDpt > prev.MeanEliteDpt,
+                $"{act.MeanEliteDpt:F1} vs {prev.MeanEliteDpt:F1}");
+        }
+    }
+
+    // An enrage phase that does not hit harder than the phase before it is a
+    // content bug wearing a mechanic's name: the player watches the boss drop
+    // below the threshold, braces, and nothing happens. This is the one thing
+    // PhaseThresholdIntentPicker cannot check for itself - it swaps move lists
+    // without any opinion about what is in them.
+    private void TestEnrageIsAnEscalation()
+    {
+        var enraging = EnemyDatabase.All
+            .Select(BalanceModel.Profile)
+            .Where(p => p.HasEnrage)
+            .ToList();
+
+        Check("enrage_phases_exist", enraging.Count > 0, "no enemy has an enrage phase");
+
+        var weak = enraging.Where(p => p.EnrageFlatDpt <= p.FlatDpt).ToList();
+        Check("every_enrage_hits_harder_than_its_normal_phase", weak.Count == 0,
+            Join(weak.Select(p => $"{p.Id} {p.FlatDpt:F1} -> {p.EnrageFlatDpt:F1}")));
+
+        // The other half of the same trap: a phase_threshold enemy authored
+        // with no EnrageMoves silently never changes behaviour at all.
+        var empty = EnemyDatabase.All
+            .Where(d => d.AiType == "phase_threshold" && d.EnrageMoves.Count == 0)
+            .Select(d => d.Id)
+            .ToList();
+        Check("no_phase_threshold_enemy_lacks_enrage_moves", empty.Count == 0, Join(empty));
+    }
+
+    // A boss the act's own elites out-stat is not a climax. Compared against
+    // the toughest elite group rather than the mean, because the player meets
+    // one specific elite, not an average of them.
+    private void TestBossesOutweighTheirAct()
+    {
+        foreach (var act in BalanceModel.AllActs())
+        {
+            int hardestElite = act.Elites.Max(e => e.TotalHp);
+            var weakest = act.Bosses.OrderBy(b => b.MaxHp).First();
+
+            Check($"{act.Act.Id}_boss_hp_above_hardest_elite",
+                weakest.MaxHp > hardestElite,
+                $"{weakest.Id} {weakest.MaxHp} vs elite group {hardestElite}");
+
+            Check($"{act.Act.Id}_elites_tougher_than_normals",
+                act.MeanEliteHp > act.MeanNormalHp,
+                $"{act.MeanEliteHp:F0} vs {act.MeanNormalHp:F0}");
+        }
+    }
+
+    // The general form of the Mystery Machine bug. A threshold no seed can
+    // reach is not a hard category, it is points that silently never award -
+    // and nothing in the game says so, because RunScore just omits the row.
+    //
+    // The bar is deliberately "some seed", not "most seeds": how *hard* a
+    // category should be is a design call, but zero is always wrong. The
+    // report prints the share of seeds for tuning it.
+    private void TestScoreThresholdsAreReachable()
+    {
+        var reach = BalanceModel.Reachable(Seeds);
+        var deckTiers = BalanceModel.DeckSizeThresholds();
+        var goldTiers = BalanceModel.GoldThresholds();
+
+        // Every threshold is read out of RunScore rather than repeated here.
+        // A copy would let this suite go on passing against numbers the game
+        // no longer uses, which is the exact failure the file is about.
+        Check("score_tier_tables_are_readable", deckTiers.Count == 2 && goldTiers.Count == 3,
+            $"deck tiers {deckTiers.Count}, gold tiers {goldTiers.Count}");
+
+        var categories = new List<(string Label, int Needs, BalanceModel.Metric Metric)>
+        {
+            ("i_like_shiny", RunScore.ShinyRelics, reach.Relics),
+            ("mystery_machine", RunScore.MysteryRooms, reach.EventRooms),
+        };
+        categories.AddRange(goldTiers.Select((t, i) => ($"gold_tier_{i}", t, reach.Gold)));
+        categories.AddRange(deckTiers.Select((t, i) => ($"deck_tier_{i}", t, reach.DeckSize)));
+
+        foreach (var (label, needs, metric) in categories)
+        {
+            Check($"score_{label}_is_reachable", metric.Best >= needs,
+                $"needs {needs}, best over {Seeds} seeds is {metric.Best}");
+        }
+    }
+
+    // Pins the two upgrade deltas CardUpgrade's comment describes, by id and
+    // by amount. The drift this catches is exactly the one that comment used
+    // to carry: Apply's Mathf.Max(amount + 1, amount * 1.4) floor means a
+    // grant of 2 upgrades to 3, so the docs said +2 while the data produced
+    // +3 for two full content passes and nothing noticed.
+    private void TestUpgradeGrantsAreWhatTheDocsClaim()
+    {
+        CheckGrant("deep_focus", "Foresight", 2, 3);
+        CheckGrant("bloodpact", "Fervor", 1, 2);
+
+        // And the general rule the two are instances of, so a third card on a
+        // per-turn grant is covered without being named here.
+        var wrong = new List<string>();
+        foreach (var card in CardDatabase.All)
+        {
+            var upgraded = CardUpgrade.Apply(card);
+            for (int i = 0; i < card.Effects.Count; i++)
+            {
+                var before = card.Effects[i];
+                var after = upgraded.Effects[i];
+                if (before.Amount == after.Amount) continue;
+
+                int expected = Mathf.Max(before.Amount + 1, Mathf.RoundToInt(before.Amount * 1.4f));
+                if (after.Amount != expected) wrong.Add($"{card.Id} {before.Action} {after.Amount}!={expected}");
+            }
+        }
+        Check("every_scaled_amount_follows_the_documented_formula", wrong.Count == 0, Join(wrong));
+    }
+
+    private void CheckGrant(string cardId, string status, int baseAmount, int upgradedAmount)
+    {
+        var card = CardDatabase.Get(cardId);
+        var spec = card.Effects.FirstOrDefault(e => e.Status == status && e.Scope == EffectScope.Self);
+        if (spec is null)
+        {
+            Check($"{cardId}_grants_{status}", false, $"{cardId} has no self-scoped {status} effect");
+            return;
+        }
+
+        var upgraded = CardUpgrade.Apply(card).Effects
+            .First(e => e.Status == status && e.Scope == EffectScope.Self);
+
+        Check($"{cardId}_grants_{status}_{baseAmount}", spec.Amount == baseAmount, $"got {spec.Amount}");
+        Check($"{cardId}_upgraded_grants_{status}_{upgradedAmount}",
+            upgraded.Amount == upgradedAmount, $"got {upgraded.Amount}");
+    }
+
+    private static string Join(IEnumerable<string> items)
+    {
+        var list = items.ToList();
+        return list.Count == 0 ? "none" : string.Join(", ", list);
+    }
+
+    private void Check(string name, bool condition, string detail)
+    {
+        if (condition)
+        {
+            _pass++;
+            GD.Print($"PASS {name}");
+        }
+        else
+        {
+            _fail++;
+            GD.Print($"FAIL {name}: {detail}");
+        }
+    }
+}

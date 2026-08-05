@@ -410,49 +410,82 @@ Demoted, not dropped. Still genuinely open:
   `EffectSmokeTest.TestEveryCardUpgradeChangesSomething` now fails any card whose `+` moves no
   number, which is the general form of the failure `CardUpgrade.ShouldScale` had only warned about
   in a comment.
-- **Balance the three-act curve.** Authored and smoke-tested but never actually played. The numbers
-  below were measured off the data rather than estimated, so this bullet is now a worklist rather
-  than a worry.
+- ✅ **Balance tooling.** The bullet below used to open by saying there was none, and every figure
+  in it had been computed by hand in a session nobody could reproduce. There is now
+  `tools/balance-report.sh`, and the numbers are read off the content databases.
 
-  **The core tension, quantified.** Encounter HP scales **1.48x then 1.44x** per act (66 → 98 → 141
-  average for a normal group) and incoming damage **1.6x then 1.3x** (8.6 → 13.9 → 18.1 per turn),
-  while the player's defensive side scales only **1.16x per act** (50 max HP, +8 and a 30% heal per
-  act cleared → 50 → 58 → 66). The entire difference has to be covered by deck power, drawn from
-  **~16.5 three-card rewards** on an average winning path — the "~20" this bullet used to claim is
-  the optimistic end, reached only by picking a fight at every branch. A starter-rate deck does ~18
-  damage a turn; an act III normal encounter is 141 HP at 18.1 DPT against 66 max HP. Throughput has
-  to roughly triple.
+  Three pieces. `scripts/debug/BalanceModel.cs` is the analyser — pure, no `Node`, no scene tree —
+  computing per-enemy DPT, encounter and act curves, player throughput, and what a path through a
+  generated map actually contains. `BalanceReport` prints it and is deliberately *not* named
+  `*SmokeTest`, so the sweep's glob skips it the way it already skips the three visual scenes; a
+  report has no pass/fail. `BalanceSmokeTest` is the pass/fail half, 32 checks, in the sweep.
 
-  **Four anomalies to look at first**, in order of how odd they are:
-  - **Elites hit softer per turn than normal fights, in all three acts** (7.9 vs 8.6, 10.5 vs 13.9,
-    13.5 vs 18.1 group DPT). Elites are mostly singletons while normal encounters stack 2–3 enemies,
-    so an elite is currently a *longer* fight rather than a harder one. Widest outlier inside a
-    single pool: act I's `rot_hound/rot_hound/ward_acolyte` at 16.1 DPT against `possessed_armor`'s
-    3.0.
-  - **Boss enrage DPT is flat across the whole game** (14.0 → 14.8 → 14.3) while max HP rises 50 → 66,
-    which makes act III's enrage phase *relatively weaker* than act I's. Boss DPT act I→II is 1.10x
-    against 1.47x more HP.
-  - **`Deep Focus+` draws 8 cards a turn, not 7.** `CardUpgrade.Apply` is `max(amount + 1, round(amount
-    * 1.4))`, and at amount 2 the `+1` floor beats the multiplier — so the data produces Foresight 3
-    where this document and the code comment both say +2. `Bloodpact+` is 5 energy every turn for one
-    cost-3 card. Both are still the largest upgrade deltas in the pool by a distance. (The comment in
-    `CardUpgrade.ShouldScale` also justifies them as "both cost-3 Rares"; `Deep Focus` is cost 2.)
-  - **`RunScore`'s Mystery Machine wants 5 event rooms; an average run visits 1.6.** Effectively
-    unreachable. The whole score table was authored for one-act runs — a winning three-act run now
-    banks ~400–600, so the 5500-point unlock track completes in ~10–14 wins. `RunScore.cs`'s header
-    comment already asks for this pass and its stated premise ("a 30-card pool, 22 relics") is stale
-    against 84 and 27.
+  **It is a static analyser, not a simulator**, and that was the load-bearing decision. The obvious
+  design — a greedy auto-player driving N real runs, which is what this bullet used to ask for —
+  cannot work here: `CombatManager` paces the enemy turn on wall-clock timers (0.35s per enemy
+  action), so the 90s suite watchdog caps a sweep at a couple of hundred enemy actions. That is not
+  enough fights to say anything about a curve, and the alternative was making production combat
+  timings configurable for a test's convenience. Reading the numbers off `enemies.json`/`acts.json`
+  is instant, exact, and reproduces the hand-computed figures well enough to validate itself
+  against them.
 
-  Also still true: 74 of the 84 cards are unlocked from the first run, so the unlock track gates a
-  tenth of the pool rather than a fifth.
+  Two things the analyser has to get right and does, because approximating either would quietly
+  wreck the output: multi-hit damage comes from counting `deal_damage` specs rather than reading
+  `intent.DisplayAmount` (which is damage *per hit*), and `weighted_random`'s move distribution is
+  the stationary distribution of `WeightedRandomIntentPicker`'s anti-repeat rule rather than the
+  raw weights — that picker excludes the last move played for 3+-move enemies, which makes it a
+  Markov chain. That correction alone moves elite DPT by about 2%.
 
-  **There is no balance tooling of any kind** — no simulator, no curve printer, no auto-player;
-  every number above was computed by hand outside the repo. The cheap way in is that the pieces are
-  already headless-drivable: every `*SmokeTest.cs` constructs `PlayerCombatant`/enemies directly, and
-  `MapGenerator.Generate(Random, ActDefinition)` is a pure function. A `BalanceSmokeTest.tscn` in the
-  existing style, running N seeded runs with a greedy auto-player and printing HP-remaining and
-  turns-per-fight per act, would reuse the harness rather than being new infrastructure — and would
-  turn "act III is the open question" into a number.
+  **Three of the four "anomalies" below survived contact with measurement. Two figures did not**,
+  and both had been quoted as evidence:
+  - The act I spread was cited as `rot_hound/rot_hound/ward_acolyte` at 16.1 DPT against
+    `possessed_armor`'s 3.0, a 5.4x gap. That group is not in act I's normal pool at all, and the
+    3.0 was an unweighted mean where every other figure used weights. The real spread is **3.4x**
+    (`slime x3` at 12.6 against `ward_acolyte` at 3.7), and it is ~3.4x in all three acts.
+  - A starter deck does **16.2** damage a turn, not ~18 — measured by dealing real hands out of
+    `PileManager` and spending energy greedily, rather than assumed.
+
+- **Balance the three-act curve.** Authored and smoke-tested but never actually played. Everything
+  below is `tools/balance-report.sh` output; re-run it rather than trusting this snapshot.
+
+  **The core tension, quantified.** Encounter HP scales **1.49x then 1.44x** per act (66 → 98 → 141
+  average for a normal group) and incoming damage **1.61x then 1.30x** (8.6 → 13.9 → 18.1 per turn),
+  while the player's defensive side scales only ~**1.15x per act** (50 → 58 → 66). Deck power has to
+  cover the remaining **1.59x**, drawn from **16.6 three-card rewards** on an average path. At
+  starter throughput an act I group takes 4.0 turns to clear and kills the player in 5.8; by act III
+  that is 8.7 against 3.7 — the fight goes from winnable-by-default to lost-by-default, and closing
+  it is what the deck is for.
+
+  **What still wants fixing**, in order:
+  - **Elites hit softer per turn than normal fights, in all three acts** (7.7 vs 8.6, 10.2 vs 13.9,
+    13.4 vs 18.1 group DPT) — confirmed, and worse in acts II and III than the hand figures said.
+    Elites are mostly singletons while normal encounters stack 2–3 enemies, so an elite is a
+    *longer* fight rather than a harder one, and its extra HP makes that worse rather than better.
+  - **Boss enrage is an escalation over its own normal phase for all six bosses** (1.11x–1.89x) —
+    `BalanceSmokeTest` now asserts that, so it cannot silently stop being true. What is flat is the
+    *absolute* number: 14.0 → 12.0/17.7 → 14.0/14.7 while max HP rises 50 → 66, so act III's Hollow
+    Throne (1.11x, the weakest escalation in the game) reads as less dangerous than act I's Hollow
+    King. The act III bosses are the ones to raise.
+  - **`Deep Focus+` draws 8 cards a turn, not 7**, and `Bloodpact+` is 5 energy every turn.
+    `CardUpgrade.Apply`'s `max(amount + 1, round(amount * 1.4))` floor beats the multiplier below
+    amount 3, so a grant of 2 upgrades to 3. The comment claiming otherwise (and calling `Deep Focus`
+    a cost-3 Rare, which it is not) is fixed and the amounts are pinned by a test; **whether they
+    should be this large is still open**, and they remain the largest deltas in the pool by a
+    distance.
+  - **The unlock track.** A winning three-act run banks ~400–600 against a 5500-point track, so it
+    completes in ~10–14 wins. Also still true: 74 of the 84 cards are unlocked from the first run,
+    so the track gates a tenth of the pool rather than a fifth.
+
+  ✅ **`RunScore`'s unreachable categories**, which is where measuring changed the answer. The worry
+  was Mystery Machine at 5 event rooms against an average of 1.6 — real, but it turned out to be
+  *reachable on 42% of maps* by a player routing for it, i.e. a lottery on the map roll rather than
+  dead points. The genuinely dead category was one nobody had flagged: **Encyclopedian's 50-card deck
+  was unreachable on every one of 500 seeds** (ceiling 47, median 41, counting fight rewards *and*
+  everything ~1000 gold buys at 50g a card). Both are now set from the measurement — Mystery Machine
+  3 (83% of maps), Encyclopedian 43 (23%) — and `BalanceSmokeTest` fails any threshold no seed can
+  reach, which is the general form of the bug. `RunScore.cs`'s stale premise ("a 30-card pool, 22
+  relics", against 84 and 27) is corrected, and its point *values* are deliberately untouched: how
+  hard a category should be is a design call, zero is always wrong.
 
 - **Close the drag/targeting test gap** — risk 5, the project's own stated highest-risk area, and the
   thinnest coverage in the repo. `CombatTargetingSmokeTest` never instantiates a `CardView`: its

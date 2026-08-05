@@ -81,10 +81,23 @@ public static class CardUpgrade
         {
             EffectScope.Target => effect.Status is "Vulnerable" or "Weak" or "Poison" or "Frail",
             // Fervor and Foresight scale for the same reason and are the far
-            // end of it: +1 becomes +2 Energy or +2 cards every turn, which is
-            // the single largest upgrade delta in the pool. That is deliberate
-            // - both sit on cost-3 Rares that spend a whole turn to land - but
-            // it is the first thing the balance pass should look at.
+            // end of it, because they are the two resources a turn *assigns*:
+            // a bigger grant is more energy or more cards every turn for the
+            // rest of the fight.
+            //
+            // Watch the floor in ScaleEffect when reading these amounts off
+            // the data. Mathf.Max(amount + 1, amount * 1.4) means the +1 wins
+            // below amount 3, so a grant of 2 upgrades to 3, not to the 2.8
+            // the multiplier suggests - Deep Focus (cost 2, Foresight 2) is
+            // Foresight 3 upgraded, i.e. eight cards a turn rather than seven.
+            // Bloodpact (cost 3, Fervor 1) upgrades to Fervor 2, five energy a
+            // turn. Both are still the largest deltas in the pool by a
+            // distance and both are Rare, but only one of them is cost 3 - the
+            // "both cost-3 Rares" this comment used to claim was wrong, and it
+            // is the kind of wrong that reads as a justification.
+            // BalanceSmokeTest pins the actual amounts so the claim and the
+            // data cannot part company again; whether they *should* be this
+            // large is the open retune in ROADMAP.md, not a bug.
             EffectScope.Self => effect.Status is "Strength" or "Dexterity"
                 or "Metallicize" or "Ritual" or "Regen" or "Fervor" or "Foresight",
             _ => false,
