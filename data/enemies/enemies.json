@@ -51,17 +51,10 @@
   {
     "id": "bog_troll",
     "name": "Bog Troll",
-    "maxHp": 78,
+    "maxHp": 90,
     "aiType": "sequential",
-    "loopFromIndex": 0,
+    "loopFromIndex": 1,
     "moves": [
-      {
-        "moveId": "slam",
-        "intent": { "type": "Attack", "displayAmount": 9 },
-        "effects": [
-          { "action": "deal_damage", "amount": 9, "scope": "Target" }
-        ]
-      },
       {
         "moveId": "hardened_hide",
         "intent": { "type": "Defend", "displayAmount": 10 },
@@ -70,10 +63,17 @@
         ]
       },
       {
-        "moveId": "heavy_slam",
-        "intent": { "type": "Attack", "displayAmount": 13 },
+        "moveId": "slam",
+        "intent": { "type": "Attack", "displayAmount": 12 },
         "effects": [
-          { "action": "deal_damage", "amount": 13, "scope": "Target" }
+          { "action": "deal_damage", "amount": 12, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "heavy_slam",
+        "intent": { "type": "Attack", "displayAmount": 18 },
+        "effects": [
+          { "action": "deal_damage", "amount": 18, "scope": "Target" }
         ]
       }
     ]
@@ -81,15 +81,15 @@
   {
     "id": "possessed_armor",
     "name": "Possessed Armor",
-    "maxHp": 84,
+    "maxHp": 113,
     "aiType": "weighted_random",
     "loopFromIndex": 0,
     "moves": [
       {
         "moveId": "iron_bash",
-        "intent": { "type": "Attack", "displayAmount": 9 },
+        "intent": { "type": "Attack", "displayAmount": 15 },
         "effects": [
-          { "action": "deal_damage", "amount": 9, "scope": "Target" },
+          { "action": "deal_damage", "amount": 15, "scope": "Target" },
           { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
         ],
         "weight": 50
@@ -122,9 +122,9 @@
     "moves": [
       {
         "moveId": "shadow_lash",
-        "intent": { "type": "Attack", "displayAmount": 10 },
+        "intent": { "type": "Attack", "displayAmount": 8 },
         "effects": [
-          { "action": "deal_damage", "amount": 10, "scope": "Target" },
+          { "action": "deal_damage", "amount": 8, "scope": "Target" },
           { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
         ]
       },
@@ -137,33 +137,33 @@
       },
       {
         "moveId": "crushing_grip",
-        "intent": { "type": "Attack", "displayAmount": 14 },
+        "intent": { "type": "Attack", "displayAmount": 12 },
         "effects": [
-          { "action": "deal_damage", "amount": 14, "scope": "Target" }
+          { "action": "deal_damage", "amount": 12, "scope": "Target" }
         ]
       }
     ],
     "enrageMoves": [
       {
         "moveId": "furious_onslaught",
-        "intent": { "type": "Attack", "displayAmount": 18 },
+        "intent": { "type": "Attack", "displayAmount": 15 },
         "effects": [
-          { "action": "deal_damage", "amount": 18, "scope": "Target" }
+          { "action": "deal_damage", "amount": 15, "scope": "Target" }
         ]
       },
       {
         "moveId": "toxic_miasma",
-        "intent": { "type": "Attack", "displayAmount": 8 },
+        "intent": { "type": "Attack", "displayAmount": 7 },
         "effects": [
-          { "action": "deal_damage", "amount": 8, "scope": "Target" },
+          { "action": "deal_damage", "amount": 7, "scope": "Target" },
           { "action": "apply_status", "status": "Poison", "amount": 3, "scope": "Target" }
         ]
       },
       {
         "moveId": "crushing_grip_ii",
-        "intent": { "type": "Attack", "displayAmount": 16 },
+        "intent": { "type": "Attack", "displayAmount": 14 },
         "effects": [
-          { "action": "deal_damage", "amount": 16, "scope": "Target" }
+          { "action": "deal_damage", "amount": 14, "scope": "Target" }
         ]
       }
     ]
@@ -372,7 +372,7 @@
   {
     "id": "drowned_matron",
     "name": "The Drowned Matron",
-    "maxHp": 90,
+    "maxHp": 108,
     "aiType": "phase_threshold",
     "loopFromIndex": 0,
     "enrageHpPercent": 50,
@@ -386,9 +386,9 @@
       },
       {
         "moveId": "tide_slam",
-        "intent": { "type": "Attack", "displayAmount": 11 },
+        "intent": { "type": "Attack", "displayAmount": 16 },
         "effects": [
-          { "action": "deal_damage", "amount": 11, "scope": "Target" }
+          { "action": "deal_damage", "amount": 16, "scope": "Target" }
         ]
       },
       {
@@ -402,16 +402,16 @@
     "enrageMoves": [
       {
         "moveId": "drowning_grip",
-        "intent": { "type": "Attack", "displayAmount": 14 },
+        "intent": { "type": "Attack", "displayAmount": 20 },
         "effects": [
-          { "action": "deal_damage", "amount": 14, "scope": "Target" }
+          { "action": "deal_damage", "amount": 20, "scope": "Target" }
         ]
       },
       {
         "moveId": "sorrow_wave",
-        "intent": { "type": "Attack", "displayAmount": 8 },
+        "intent": { "type": "Attack", "displayAmount": 12 },
         "effects": [
-          { "action": "deal_damage", "amount": 8, "scope": "Target" },
+          { "action": "deal_damage", "amount": 12, "scope": "Target" },
           { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
         ]
       },
@@ -532,9 +532,9 @@
   {
     "id": "molten_sentinel",
     "name": "Molten Sentinel",
-    "maxHp": 122,
+    "maxHp": 146,
     "aiType": "sequential",
-    "loopFromIndex": 0,
+    "loopFromIndex": 1,
     "moves": [
       {
         "moveId": "molten_guard",
@@ -545,16 +545,16 @@
       },
       {
         "moveId": "forge_hammer",
-        "intent": { "type": "Attack", "displayAmount": 15 },
+        "intent": { "type": "Attack", "displayAmount": 20 },
         "effects": [
-          { "action": "deal_damage", "amount": 15, "scope": "Target" }
+          { "action": "deal_damage", "amount": 20, "scope": "Target" }
         ]
       },
       {
         "moveId": "eruption",
-        "intent": { "type": "Attack", "displayAmount": 11 },
+        "intent": { "type": "Attack", "displayAmount": 15 },
         "effects": [
-          { "action": "deal_damage", "amount": 11, "scope": "Target" },
+          { "action": "deal_damage", "amount": 15, "scope": "Target" },
           { "action": "apply_status", "status": "Poison", "amount": 3, "scope": "Target" }
         ]
       }
@@ -563,23 +563,23 @@
   {
     "id": "pyre_warden",
     "name": "Pyre Warden",
-    "maxHp": 112,
+    "maxHp": 140,
     "aiType": "weighted_random",
     "loopFromIndex": 0,
     "moves": [
       {
         "moveId": "pyre_lash",
-        "intent": { "type": "Attack", "displayAmount": 13 },
+        "intent": { "type": "Attack", "displayAmount": 21 },
         "effects": [
-          { "action": "deal_damage", "amount": 13, "scope": "Target" }
+          { "action": "deal_damage", "amount": 21, "scope": "Target" }
         ],
         "weight": 40
       },
       {
         "moveId": "immolate",
-        "intent": { "type": "Attack", "displayAmount": 9 },
+        "intent": { "type": "Attack", "displayAmount": 14 },
         "effects": [
-          { "action": "deal_damage", "amount": 9, "scope": "Target" },
+          { "action": "deal_damage", "amount": 14, "scope": "Target" },
           { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
         ],
         "weight": 35
@@ -597,16 +597,16 @@
   {
     "id": "emberlord_vashk",
     "name": "Emberlord Vashk",
-    "maxHp": 215,
+    "maxHp": 237,
     "aiType": "phase_threshold",
     "loopFromIndex": 0,
     "enrageHpPercent": 50,
     "moves": [
       {
         "moveId": "flame_arc",
-        "intent": { "type": "Attack", "displayAmount": 14 },
+        "intent": { "type": "Attack", "displayAmount": 20 },
         "effects": [
-          { "action": "deal_damage", "amount": 14, "scope": "Target" }
+          { "action": "deal_damage", "amount": 20, "scope": "Target" }
         ]
       },
       {
@@ -618,9 +618,9 @@
       },
       {
         "moveId": "cinder_burst",
-        "intent": { "type": "Attack", "displayAmount": 11 },
+        "intent": { "type": "Attack", "displayAmount": 15 },
         "effects": [
-          { "action": "deal_damage", "amount": 11, "scope": "Target" },
+          { "action": "deal_damage", "amount": 15, "scope": "Target" },
           { "action": "apply_status", "status": "Poison", "amount": 3, "scope": "Target" }
         ]
       }
@@ -628,16 +628,16 @@
     "enrageMoves": [
       {
         "moveId": "firestorm",
-        "intent": { "type": "Attack", "displayAmount": 21 },
+        "intent": { "type": "Attack", "displayAmount": 29 },
         "effects": [
-          { "action": "deal_damage", "amount": 21, "scope": "Target" }
+          { "action": "deal_damage", "amount": 29, "scope": "Target" }
         ]
       },
       {
         "moveId": "molten_grasp",
-        "intent": { "type": "Attack", "displayAmount": 15 },
+        "intent": { "type": "Attack", "displayAmount": 21 },
         "effects": [
-          { "action": "deal_damage", "amount": 15, "scope": "Target" },
+          { "action": "deal_damage", "amount": 21, "scope": "Target" },
           { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
         ]
       },
@@ -653,16 +653,16 @@
   {
     "id": "the_slag_maw",
     "name": "The Slag Maw",
-    "maxHp": 222,
+    "maxHp": 233,
     "aiType": "phase_threshold",
     "loopFromIndex": 0,
     "enrageHpPercent": 45,
     "moves": [
       {
         "moveId": "swallow",
-        "intent": { "type": "Attack", "displayAmount": 16 },
+        "intent": { "type": "Attack", "displayAmount": 19 },
         "effects": [
-          { "action": "deal_damage", "amount": 16, "scope": "Target" }
+          { "action": "deal_damage", "amount": 19, "scope": "Target" }
         ]
       },
       {
@@ -674,9 +674,9 @@
       },
       {
         "moveId": "spit_slag",
-        "intent": { "type": "Attack", "displayAmount": 12 },
+        "intent": { "type": "Attack", "displayAmount": 14 },
         "effects": [
-          { "action": "deal_damage", "amount": 12, "scope": "Target" },
+          { "action": "deal_damage", "amount": 14, "scope": "Target" },
           { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
         ]
       }
@@ -684,24 +684,24 @@
     "enrageMoves": [
       {
         "moveId": "molten_flood",
-        "intent": { "type": "Attack", "displayAmount": 22 },
+        "intent": { "type": "Attack", "displayAmount": 26 },
         "effects": [
-          { "action": "deal_damage", "amount": 22, "scope": "Target" }
+          { "action": "deal_damage", "amount": 26, "scope": "Target" }
         ]
       },
       {
         "moveId": "corrosive_tide",
-        "intent": { "type": "Attack", "displayAmount": 13 },
+        "intent": { "type": "Attack", "displayAmount": 16 },
         "effects": [
-          { "action": "deal_damage", "amount": 13, "scope": "Target" },
+          { "action": "deal_damage", "amount": 16, "scope": "Target" },
           { "action": "apply_status", "status": "Poison", "amount": 5, "scope": "Target" }
         ]
       },
       {
         "moveId": "gorge",
-        "intent": { "type": "Attack", "displayAmount": 18 },
+        "intent": { "type": "Attack", "displayAmount": 22 },
         "effects": [
-          { "action": "deal_damage", "amount": 18, "scope": "Target" }
+          { "action": "deal_damage", "amount": 22, "scope": "Target" }
         ]
       }
     ]
@@ -799,23 +799,15 @@
   {
     "id": "emberforge_smith",
     "name": "The Emberforge Smith",
-    "maxHp": 118,
+    "maxHp": 142,
     "aiType": "sequential",
-    "loopFromIndex": 1,
+    "loopFromIndex": 2,
     "moves": [
       {
         "moveId": "stoke_the_forge",
         "intent": { "type": "Buff", "displayAmount": 1 },
         "effects": [
           { "action": "apply_status", "status": "Ritual", "amount": 1, "scope": "Self" }
-        ]
-      },
-      {
-        "moveId": "anvil_chorus",
-        "intent": { "type": "Attack", "displayAmount": 6 },
-        "effects": [
-          { "action": "deal_damage", "amount": 6, "scope": "Target" },
-          { "action": "deal_damage", "amount": 6, "scope": "Target" }
         ]
       },
       {
@@ -826,10 +818,18 @@
         ]
       },
       {
-        "moveId": "white_heat",
-        "intent": { "type": "Attack", "displayAmount": 13 },
+        "moveId": "anvil_chorus",
+        "intent": { "type": "Attack", "displayAmount": 8 },
         "effects": [
-          { "action": "deal_damage", "amount": 13, "scope": "Target" },
+          { "action": "deal_damage", "amount": 8, "scope": "Target" },
+          { "action": "deal_damage", "amount": 8, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "white_heat",
+        "intent": { "type": "Attack", "displayAmount": 18 },
+        "effects": [
+          { "action": "deal_damage", "amount": 18, "scope": "Target" },
           { "action": "apply_status", "status": "Weak", "amount": 1, "scope": "Target" }
         ]
       }
@@ -952,17 +952,10 @@
   {
     "id": "crown_reaver",
     "name": "Crown Reaver",
-    "maxHp": 162,
+    "maxHp": 211,
     "aiType": "sequential",
-    "loopFromIndex": 0,
+    "loopFromIndex": 1,
     "moves": [
-      {
-        "moveId": "reave",
-        "intent": { "type": "Attack", "displayAmount": 19 },
-        "effects": [
-          { "action": "deal_damage", "amount": 19, "scope": "Target" }
-        ]
-      },
       {
         "moveId": "crown_guard",
         "intent": { "type": "Defend", "displayAmount": 18 },
@@ -971,10 +964,17 @@
         ]
       },
       {
-        "moveId": "sunder",
-        "intent": { "type": "Attack", "displayAmount": 14 },
+        "moveId": "reave",
+        "intent": { "type": "Attack", "displayAmount": 27 },
         "effects": [
-          { "action": "deal_damage", "amount": 14, "scope": "Target" },
+          { "action": "deal_damage", "amount": 27, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "sunder",
+        "intent": { "type": "Attack", "displayAmount": 20 },
+        "effects": [
+          { "action": "deal_damage", "amount": 20, "scope": "Target" },
           { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
         ]
       }
@@ -983,32 +983,32 @@
   {
     "id": "silent_judge",
     "name": "The Silent Judge",
-    "maxHp": 152,
+    "maxHp": 205,
     "aiType": "weighted_random",
     "loopFromIndex": 0,
     "moves": [
       {
         "moveId": "verdict",
-        "intent": { "type": "Attack", "displayAmount": 18 },
+        "intent": { "type": "Attack", "displayAmount": 27 },
         "effects": [
-          { "action": "deal_damage", "amount": 18, "scope": "Target" }
+          { "action": "deal_damage", "amount": 27, "scope": "Target" }
         ],
         "weight": 40
       },
       {
         "moveId": "silence",
-        "intent": { "type": "Attack", "displayAmount": 12 },
+        "intent": { "type": "Attack", "displayAmount": 18 },
         "effects": [
-          { "action": "deal_damage", "amount": 12, "scope": "Target" },
+          { "action": "deal_damage", "amount": 18, "scope": "Target" },
           { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
         ],
         "weight": 30
       },
       {
         "moveId": "condemn",
-        "intent": { "type": "Attack", "displayAmount": 10 },
+        "intent": { "type": "Attack", "displayAmount": 15 },
         "effects": [
-          { "action": "deal_damage", "amount": 10, "scope": "Target" },
+          { "action": "deal_damage", "amount": 15, "scope": "Target" },
           { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
         ],
         "weight": 30
@@ -1018,16 +1018,16 @@
   {
     "id": "the_hollow_throne",
     "name": "The Hollow Throne",
-    "maxHp": 290,
+    "maxHp": 334,
     "aiType": "phase_threshold",
     "loopFromIndex": 0,
     "enrageHpPercent": 50,
     "moves": [
       {
         "moveId": "throne_edict",
-        "intent": { "type": "Attack", "displayAmount": 18 },
+        "intent": { "type": "Attack", "displayAmount": 20 },
         "effects": [
-          { "action": "deal_damage", "amount": 18, "scope": "Target" },
+          { "action": "deal_damage", "amount": 20, "scope": "Target" },
           { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "Target" }
         ]
       },
@@ -1040,26 +1040,9 @@
       },
       {
         "moveId": "sceptre_fall",
-        "intent": { "type": "Attack", "displayAmount": 20 },
+        "intent": { "type": "Attack", "displayAmount": 22 },
         "effects": [
-          { "action": "deal_damage", "amount": 20, "scope": "Target" }
-        ]
-      }
-    ],
-    "enrageMoves": [
-      {
-        "moveId": "hollow_judgment",
-        "intent": { "type": "Attack", "displayAmount": 26 },
-        "effects": [
-          { "action": "deal_damage", "amount": 26, "scope": "Target" }
-        ]
-      },
-      {
-        "moveId": "unmaking",
-        "intent": { "type": "Attack", "displayAmount": 16 },
-        "effects": [
-          { "action": "deal_damage", "amount": 16, "scope": "Target" },
-          { "action": "apply_status", "status": "Poison", "amount": 5, "scope": "Target" }
+          { "action": "deal_damage", "amount": 22, "scope": "Target" }
         ]
       },
       {
@@ -1069,21 +1052,38 @@
           { "action": "apply_status", "status": "Strength", "amount": 5, "scope": "Self" }
         ]
       }
+    ],
+    "enrageMoves": [
+      {
+        "moveId": "hollow_judgment",
+        "intent": { "type": "Attack", "displayAmount": 29 },
+        "effects": [
+          { "action": "deal_damage", "amount": 29, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "unmaking",
+        "intent": { "type": "Attack", "displayAmount": 18 },
+        "effects": [
+          { "action": "deal_damage", "amount": 18, "scope": "Target" },
+          { "action": "apply_status", "status": "Poison", "amount": 5, "scope": "Target" }
+        ]
+      }
     ]
   },
   {
     "id": "nameless_regent",
     "name": "The Nameless Regent",
-    "maxHp": 284,
+    "maxHp": 327,
     "aiType": "phase_threshold",
     "loopFromIndex": 0,
     "enrageHpPercent": 40,
     "moves": [
       {
         "moveId": "regents_toll",
-        "intent": { "type": "Attack", "displayAmount": 19 },
+        "intent": { "type": "Attack", "displayAmount": 22 },
         "effects": [
-          { "action": "deal_damage", "amount": 19, "scope": "Target" }
+          { "action": "deal_damage", "amount": 22, "scope": "Target" }
         ]
       },
       {
@@ -1095,27 +1095,10 @@
       },
       {
         "moveId": "unname",
-        "intent": { "type": "Attack", "displayAmount": 14 },
+        "intent": { "type": "Attack", "displayAmount": 16 },
         "effects": [
-          { "action": "deal_damage", "amount": 14, "scope": "Target" },
+          { "action": "deal_damage", "amount": 16, "scope": "Target" },
           { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
-        ]
-      }
-    ],
-    "enrageMoves": [
-      {
-        "moveId": "oblivion",
-        "intent": { "type": "Attack", "displayAmount": 27 },
-        "effects": [
-          { "action": "deal_damage", "amount": 27, "scope": "Target" }
-        ]
-      },
-      {
-        "moveId": "withering_gaze",
-        "intent": { "type": "Attack", "displayAmount": 17 },
-        "effects": [
-          { "action": "deal_damage", "amount": 17, "scope": "Target" },
-          { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
         ]
       },
       {
@@ -1123,6 +1106,23 @@
         "intent": { "type": "Buff", "displayAmount": 5 },
         "effects": [
           { "action": "apply_status", "status": "Strength", "amount": 5, "scope": "Self" }
+        ]
+      }
+    ],
+    "enrageMoves": [
+      {
+        "moveId": "oblivion",
+        "intent": { "type": "Attack", "displayAmount": 31 },
+        "effects": [
+          { "action": "deal_damage", "amount": 31, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "withering_gaze",
+        "intent": { "type": "Attack", "displayAmount": 20 },
+        "effects": [
+          { "action": "deal_damage", "amount": 20, "scope": "Target" },
+          { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
         ]
       }
     ]
@@ -1220,23 +1220,24 @@
   {
     "id": "sable_inquisitor",
     "name": "The Sable Inquisitor",
-    "maxHp": 158,
+    "maxHp": 229,
     "aiType": "phase_threshold",
     "loopFromIndex": 0,
     "enrageHpPercent": 40,
     "moves": [
       {
         "moveId": "inquest",
-        "intent": { "type": "Debuff", "displayAmount": 2 },
+        "intent": { "type": "Attack", "displayAmount": 21 },
         "effects": [
+          { "action": "deal_damage", "amount": 21, "scope": "Target" },
           { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
         ]
       },
       {
         "moveId": "sable_edge",
-        "intent": { "type": "Attack", "displayAmount": 18 },
+        "intent": { "type": "Attack", "displayAmount": 23 },
         "effects": [
-          { "action": "deal_damage", "amount": 18, "scope": "Target" }
+          { "action": "deal_damage", "amount": 23, "scope": "Target" }
         ]
       },
       {
@@ -1250,10 +1251,10 @@
     "enrageMoves": [
       {
         "moveId": "condemnation",
-        "intent": { "type": "Attack", "displayAmount": 9 },
+        "intent": { "type": "Attack", "displayAmount": 12 },
         "effects": [
-          { "action": "deal_damage", "amount": 9, "scope": "Target" },
-          { "action": "deal_damage", "amount": 9, "scope": "Target" }
+          { "action": "deal_damage", "amount": 12, "scope": "Target" },
+          { "action": "deal_damage", "amount": 12, "scope": "Target" }
         ]
       },
       {
@@ -1265,9 +1266,9 @@
       },
       {
         "moveId": "final_writ",
-        "intent": { "type": "Attack", "displayAmount": 21 },
+        "intent": { "type": "Attack", "displayAmount": 27 },
         "effects": [
-          { "action": "deal_damage", "amount": 21, "scope": "Target" }
+          { "action": "deal_damage", "amount": 27, "scope": "Target" }
         ]
       }
     ]

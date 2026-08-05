@@ -43,7 +43,7 @@ public partial class BalanceReport : Node
                  + $"{Seeds} sampled runs. Damage figures are per turn.");
 
         PrintActCurve(acts, playerHp, throughput);
-        PrintEliteComparison(acts);
+        PrintEncounterBands(acts);
         PrintBosses(acts);
         PrintOutliers(acts);
         PrintRamps();
@@ -84,18 +84,37 @@ public partial class BalanceReport : Node
         GD.Print("  point: the gap between them is what deck power has to cover.");
     }
 
-    private void PrintEliteComparison(List<BalanceModel.ActProfile> acts)
+    // Elite and boss nodes look identical on the map, so what they cost has to
+    // be predictable. This is the table the retune was driven off: before it,
+    // one act's elite pool ranged from 0.58x to 2.55x the cost of an average
+    // normal fight, and the player had no way to tell which they were picking.
+    private void PrintEncounterBands(List<BalanceModel.ActProfile> acts)
     {
-        Header("ELITES vs NORMALS - an elite should be harder, not merely longer");
-        GD.Print("  act                 normal HP    DPT     elite HP    DPT    DPT ratio");
+        Header("WHAT AN ENCOUNTER COSTS - damage absorbed, against an average normal fight");
+        GD.Print("  Elites should land in 1.0-1.9x, bosses in 2.2-3.2x. Ratios are within an act:");
+        GD.Print("  the reference throughput does not grow act over act but a real deck does.");
 
         foreach (var a in acts)
         {
-            double ratio = a.MeanEliteDpt / Math.Max(a.MeanNormalDpt, 0.01);
-            GD.Print($"  {a.Act.Name,-19}{a.MeanNormalHp,9:F0}{a.MeanNormalDpt,7:F1}"
-                     + $"{a.MeanEliteHp,12:F0}{a.MeanEliteDpt,7:F1}{ratio,13:F2}x"
-                     + (ratio < 1 ? "   <-- softer than a normal fight" : ""));
+            GD.Print("");
+            GD.Print($"  {a.Act.Name} - an average normal fight costs {a.MeanNormalCost:F0}");
+
+            foreach (var e in a.Elites.OrderBy(e => a.CostRatio(e)))
+            {
+                Band("elite", e.Cost, a.CostRatio(e), 1.0, 1.9, e.Label, e.TotalHp);
+            }
+            foreach (var b in a.BossEncounters.OrderBy(e => a.CostRatio(e)))
+            {
+                Band("boss ", b.Cost, a.CostRatio(b), 2.2, 3.2, b.Label, b.TotalHp);
+            }
         }
+    }
+
+    private void Band(string kind, double cost, double ratio, double lo, double hi, string label, int hp)
+    {
+        bool ok = ratio >= lo && ratio <= hi;
+        GD.Print($"    {kind} {cost,6:F0} ({ratio,4:F2}x) hp={hp,4}  {label}"
+                 + (ok ? "" : ratio < lo ? "   <-- too cheap for its node type" : "   <-- spikier than its node type"));
     }
 
     private void PrintBosses(List<BalanceModel.ActProfile> acts)
