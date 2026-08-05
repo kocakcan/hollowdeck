@@ -42,6 +42,7 @@ public partial class BalanceSmokeTest : Node
         TestActCurveRises();
         TestEnrageIsAnEscalation();
         TestBossesOutweighTheirAct();
+        TestEncounterCostsStayInTheirBand();
         TestScoreThresholdsAreReachable();
         TestUpgradeGrantsAreWhatTheDocsClaim();
 
@@ -146,6 +147,57 @@ public partial class BalanceSmokeTest : Node
                 $"{act.MeanEliteHp:F0} vs {act.MeanNormalHp:F0}");
         }
     }
+
+    // The node types have to mean something. An Elite node and a Combat node
+    // look identical on the map apart from the icon, so what they cost the
+    // player is the only thing distinguishing them - and before the retune one
+    // act's elite pool ranged from 0.58x to 2.55x the cost of an average
+    // normal fight, which is not a difficulty tier, it is a coin flip.
+    //
+    // Bands rather than exact values, because these are tuning decisions and
+    // the point is to catch a *drift out of the tier*, not to freeze numbers.
+    // Cost is compared within an act only - see BalanceModel.EncounterCost.
+    private void TestEncounterCostsStayInTheirBand()
+    {
+        const double eliteLow = 1.0, eliteHigh = 1.9;
+        const double bossLow = 2.2, bossHigh = 3.2;
+
+        foreach (var act in BalanceModel.AllActs())
+        {
+            Check($"{act.Act.Id}_normal_fights_cost_something", act.MeanNormalCost > 0,
+                "an average normal fight deals no damage at all");
+
+            foreach (var elite in act.Elites)
+            {
+                double r = act.CostRatio(elite);
+                Check($"{act.Act.Id}_elite_in_band_{Slug(elite.Label)}",
+                    r >= eliteLow && r <= eliteHigh,
+                    $"{elite.Label} costs {r:F2}x an average normal fight, outside {eliteLow}-{eliteHigh}x");
+            }
+
+            foreach (var boss in act.BossEncounters)
+            {
+                double r = act.CostRatio(boss);
+                Check($"{act.Act.Id}_boss_in_band_{Slug(boss.Label)}",
+                    r >= bossLow && r <= bossHigh,
+                    $"{boss.Label} costs {r:F2}x an average normal fight, outside {bossLow}-{bossHigh}x");
+            }
+
+            // The tier ordering itself, which the bands imply but do not state:
+            // no elite may be cheaper than the average normal fight it sits
+            // beside, and no boss cheaper than the act's costliest elite.
+            var dearestElite = act.Elites.Max(e => e.Cost);
+            Check($"{act.Act.Id}_every_boss_outweighs_every_elite",
+                act.BossEncounters.All(b => b.Cost > dearestElite),
+                $"costliest elite is {dearestElite:F0}, cheapest boss "
+                + $"{act.BossEncounters.Min(b => b.Cost):F0}");
+        }
+    }
+
+    // A stable, filename-safe check name, so a renamed encounter shows up as a
+    // renamed check rather than silently matching an old one.
+    private static string Slug(string label) =>
+        label.Replace(" + ", "_and_").Replace(" ", "_").ToLowerInvariant();
 
     // The general form of the Mystery Machine bug. A threshold no seed can
     // reach is not a hard category, it is points that silently never award -

@@ -456,16 +456,52 @@ Demoted, not dropped. Still genuinely open:
   that is 8.7 against 3.7 — the fight goes from winnable-by-default to lost-by-default, and closing
   it is what the deck is for.
 
+  ✅ **The encounter retune.** The bullet asked for two things — elites that hit softer than normal
+  fights, and a flat boss enrage curve. Measuring properly found the same symptoms with a different
+  and more useful cause, and fixing the cause fixed both.
+
+  **The elite pool was not soft, it was incoherent.** In every act, three of the four elite groups
+  were singletons and the fourth stacked 2–3 enemies, so within one act's pool an Elite node cost
+  anywhere from **0.58x to 2.55x** the damage of an average normal fight. Elite nodes are identical
+  on the map, so the player had no way to tell a pushover from the hardest fight in the act. The
+  cause is structural rather than numeric: a singleton acts once a turn against a group's two or
+  three, and no amount of raising its numbers fixes a cadence problem — the auto-tuner asked for
+  x2.6–x2.9 damage multipliers, which would have meant single hits over half the player's max HP.
+
+  So the fix was mostly structural, and the numbers followed:
+  - **The defensive move became an opening stance rather than a recurring rest.** Four sequential
+    elites had a Defend move inside their loop, costing them a third of their turns; reordering the
+    moves and moving `loopFromIndex` past it keeps the move, keeps the telegraph, and stops it
+    recurring. That is the mechanism `emberforge_smith` already used, applied to the rest.
+  - `sable_inquisitor`'s `inquest` became an attack that also applies Vulnerable — the shape
+    `ward_acolyte`/`hex`, `crown_reaver`/`sunder` and `silent_judge`/`condemn` already use — instead
+    of a damageless turn on an elite that only attacked once every three.
+  - The three over-tuned groups lost their third enemy or were rebuilt as a matched pair.
+  - Moderate HP and damage raises on the nine elite-only enemies, kept under the constraint that no
+    single move exceeds ~45% of that act's player max HP.
+
+  **The boss curve had the same shape, and the same fix.** Act I's bosses take their Buff turn in
+  their *normal* set and enrage into an all-attack phase; act III's did the reverse, spending one
+  enrage turn in three on `dominion`/`ascend`, which is why the climax of the game was its safest
+  fight (1.12x an average act-III fight, against act I's 3.59x). Moving those two moves into the
+  normal set — deleting nothing — mirrors act I exactly and carries the Strength ramp *into* the
+  spike instead of spending the spike on it.
+
+  Result, from `tools/balance-report.sh`: elites now span **1.13x–1.85x** and bosses **2.44x–3.16x**,
+  against 0.58–2.55x and 1.12–3.59x before. Enrage escalation now *rises* across the game
+  (1.8x → 1.9x → 2.7x over the boss's own normal phase) rather than sagging in act III.
+  `BalanceSmokeTest` asserts both bands plus the tier ordering (no boss cheaper than the act's
+  costliest elite), so a content edit that breaks a tier fails a build.
+
+  **The analyser had to be fixed first, and that changed the answer twice.** Damage per turn ignores
+  Poison — authored on six enemies, and `corrosive_tide`'s Poison 5 is 15 damage against the 13 the
+  move telegraphs — ignores that an enemy applying Vulnerable amplifies its *own* later hits, and
+  ignores Strength accumulating through an enrage phase. `BalanceModel.EncounterCost` now walks the
+  fight turn by turn and accounts for all three. On the old measure `sable_inquisitor` looked like
+  0.30x and `drowned_matron` 0.54x; both were nearly twice that. Tuning against the old numbers would
+  have overshot badly on exactly the enemies whose threat is a status rather than a hit.
+
   **What still wants fixing**, in order:
-  - **Elites hit softer per turn than normal fights, in all three acts** (7.7 vs 8.6, 10.2 vs 13.9,
-    13.4 vs 18.1 group DPT) — confirmed, and worse in acts II and III than the hand figures said.
-    Elites are mostly singletons while normal encounters stack 2–3 enemies, so an elite is a
-    *longer* fight rather than a harder one, and its extra HP makes that worse rather than better.
-  - **Boss enrage is an escalation over its own normal phase for all six bosses** (1.11x–1.89x) —
-    `BalanceSmokeTest` now asserts that, so it cannot silently stop being true. What is flat is the
-    *absolute* number: 14.0 → 12.0/17.7 → 14.0/14.7 while max HP rises 50 → 66, so act III's Hollow
-    Throne (1.11x, the weakest escalation in the game) reads as less dangerous than act I's Hollow
-    King. The act III bosses are the ones to raise.
   - **`Deep Focus+` draws 8 cards a turn, not 7**, and `Bloodpact+` is 5 energy every turn.
     `CardUpgrade.Apply`'s `max(amount + 1, round(amount * 1.4))` floor beats the multiplier below
     amount 3, so a grant of 2 upgrades to 3. The comment claiming otherwise (and calling `Deep Focus`

@@ -29,7 +29,7 @@
       ["bog_troll"],
       ["possessed_armor"],
       ["drowned_matron"],
-      ["rot_hound", "rot_hound", "ward_acolyte"]
+      ["rot_hound", "rot_hound"]
     ],
     "bossIds": ["hollow_king", "gaol_warden"],
     "normalGoldBase": 20,
@@ -68,7 +68,7 @@
       ["molten_sentinel"],
       ["pyre_warden"],
       ["emberforge_smith"],
-      ["pyre_warden", "ember_wisp"]
+      ["ember_wisp", "ember_wisp"]
     ],
     "bossIds": ["emberlord_vashk", "the_slag_maw"],
     "normalGoldBase": 28,
@@ -107,7 +107,7 @@
       ["crown_reaver"],
       ["silent_judge"],
       ["sable_inquisitor"],
-      ["crown_reaver", "hollow_shade"]
+      ["hollow_shade", "hollow_shade"]
     ],
     "bossIds": ["the_hollow_throne", "nameless_regent"],
     "normalGoldBase": 34,

@@ -90,6 +90,11 @@ public static class BalanceModel
             .Where(e => e.Action == "apply_status" && e.Scope == EffectScope.Self && e.Status == status)
             .Sum(e => e.Amount);
 
+    private static int TargetStatusGain(EnemyMove move, string status) =>
+        move.Effects
+            .Where(e => e.Action == "apply_status" && e.Scope == EffectScope.Target && e.Status == status)
+            .Sum(e => e.Amount);
+
     // The steady-state distribution over moves, i.e. what the enemy does on an
     // average turn once the opening sequence is behind it. Mirrors the pickers
     // in scripts/combat/ rather than approximating them:
@@ -195,12 +200,130 @@ public static class BalanceModel
         return damage;
     }
 
+    // ------------------------------------------------- what a fight costs you
+
+    // Damage per turn is the wrong headline number on its own, and believing
+    // it caused two wrong conclusions before this existed. It ignores Poison,
+    // which is authored on six enemies and deals N + (N-1) + ... + 1 over its
+    // life - `corrosive_tide`'s Poison 5 is 15 damage, more than the 13 the
+    // move telegraphs. It ignores that an enemy applying Vulnerable amplifies
+    // its *own* later hits by 1.5x. And it ignores Strength accumulating
+    // through an enrage phase, which is most of what an act-1 boss does.
+    //
+    // So the metric that decides fights is the total damage a group lands over
+    // a fight of realistic length, and that is what this computes: a
+    // turn-by-turn walk of the enemy side only. Still static analysis - no
+    // engine, no player, no frames - just an honest accounting of the rules in
+    // DamageMath and CombatManager.ApplyPoisonTick.
+    //
+    // Fight length comes from the group's HP against a reference throughput,
+    // so a tankier group is a longer fight and absorbs more turns of damage.
+    // Compare costs *within* an act: across acts the player's real throughput
+    // has grown and this reference has not, which inflates later fights.
+    public static double EncounterCost(IReadOnlyList<string> ids, double throughput)
+    {
+        if (ids.Count == 0 || throughput <= 0) return 0;
+
+        var defs = ids.Select(EnemyDatabase.Get).ToList();
+        int turns = Math.Max(1, (int)Math.Ceiling(defs.Sum(d => d.MaxHp) / throughput));
+
+        var strength = new double[defs.Count];
+        var ritual = new double[defs.Count];
+        var enraged = new bool[defs.Count];
+        var hp = defs.Select(d => (double)d.MaxHp).ToArray();
+
+        // Player-side state the enemies themselves create.
+        double vulnerable = 0, poison = 0, total = 0;
+        double sharedThroughput = throughput / defs.Count;
+
+        for (int turn = 1; turn <= turns; turn++)
+        {
+            // Poison bypasses Block and decays as it ticks - see
+            // CombatManager.ApplyPoisonTick.
+            if (poison > 0)
+            {
+                total += poison;
+                poison = Math.Max(0, poison - 1);
+            }
+
+            for (int i = 0; i < defs.Count; i++)
+            {
+                var def = defs[i];
+                hp[i] -= sharedThroughput;
+
+                if (!enraged[i] && def.EnrageHpPercent > 0 && def.EnrageMoves.Count > 0
+                    && hp[i] * 100 <= def.MaxHp * def.EnrageHpPercent)
+                {
+                    enraged[i] = true;
+                }
+
+                // Ritual re-grants Strength at the start of every turn, the
+                // way CombatManager.ApplyTurnStartGrants does.
+                strength[i] += ritual[i];
+
+                foreach (var (move, p) in Cadence(def, turn, enraged[i]))
+                {
+                    double raw = MoveDamage(move) + MoveHits(move) * strength[i];
+                    if (vulnerable > 0) raw *= DamageMath.VulnerableMultiplier;
+                    total += p * raw;
+
+                    strength[i] += p * SelfStatusGain(move, "Strength");
+                    ritual[i] += p * SelfStatusGain(move, "Ritual");
+                    poison += p * TargetStatusGain(move, "Poison");
+                    vulnerable += p * TargetStatusGain(move, "Vulnerable");
+                }
+            }
+
+            vulnerable = Math.Max(0, vulnerable - 1);
+        }
+
+        return total;
+    }
+
+    // What the enemy is expected to do on a given turn. Mirrors the three
+    // pickers in scripts/combat/ rather than approximating them - including
+    // that a sequential enemy plays its opening moves once and only then
+    // wraps to LoopFromIndex, which a steady-state mean cannot express.
+    private static IReadOnlyList<(EnemyMove Move, double P)> Cadence(
+        EnemyDefinition def, int turn, bool enraged)
+    {
+        var moves = enraged ? def.EnrageMoves : def.Moves;
+        if (moves.Count == 0) return Array.Empty<(EnemyMove, double)>();
+
+        // PhaseThresholdIntentPicker resets its index on transition and wraps
+        // to 0, ignoring LoopFromIndex.
+        if (enraged || def.AiType == "phase_threshold")
+        {
+            return new[] { (moves[(turn - 1) % moves.Count], 1.0) };
+        }
+
+        if (def.AiType == "weighted_random")
+        {
+            return moves.Count <= 2 ? Weighted(moves) : AntiRepeatStationary(moves);
+        }
+
+        int index = turn - 1;
+        if (index < moves.Count) return new[] { (moves[index], 1.0) };
+
+        int loopFrom = Math.Clamp(def.LoopFromIndex, 0, moves.Count - 1);
+        int span = moves.Count - loopFrom;
+        return new[] { (moves[loopFrom + (index - moves.Count) % span], 1.0) };
+    }
+
     // ------------------------------------------------------------- encounters
+
+    // The throughput every encounter cost is measured against. A fixed
+    // reference rather than a per-act guess: nothing in the repo can measure
+    // what an act-3 deck actually does, and inventing a number per act would
+    // put an unmeasured assumption underneath every comparison. Costs are
+    // therefore comparable *within* an act and not across one.
+    public const double ReferenceThroughput = 16.2;
 
     public sealed record EncounterProfile(
         IReadOnlyList<string> Ids,
         int TotalHp,
-        double FlatDpt)
+        double FlatDpt,
+        double Cost)
     {
         public string Label => string.Join(" + ", Ids);
     }
@@ -212,7 +335,8 @@ public static class BalanceModel
         return new EncounterProfile(
             list,
             defs.Sum(d => d.MaxHp),
-            defs.Sum(FlatDpt));
+            defs.Sum(FlatDpt),
+            EncounterCost(list, ReferenceThroughput));
     }
 
     // ------------------------------------------------------------------- acts
@@ -221,19 +345,28 @@ public static class BalanceModel
         ActDefinition Act,
         IReadOnlyList<EncounterProfile> Normals,
         IReadOnlyList<EncounterProfile> Elites,
-        IReadOnlyList<EnemyProfile> Bosses)
+        IReadOnlyList<EnemyProfile> Bosses,
+        IReadOnlyList<EncounterProfile> BossEncounters)
     {
         public double MeanNormalHp => Mean(Normals.Select(e => (double)e.TotalHp));
         public double MeanNormalDpt => Mean(Normals.Select(e => e.FlatDpt));
         public double MeanEliteHp => Mean(Elites.Select(e => (double)e.TotalHp));
         public double MeanEliteDpt => Mean(Elites.Select(e => e.FlatDpt));
+
+        // The yardstick every other encounter in the act is measured against:
+        // what an average normal fight takes out of you.
+        public double MeanNormalCost => Mean(Normals.Select(e => e.Cost));
+
+        public double CostRatio(EncounterProfile e) =>
+            MeanNormalCost <= 0 ? 0 : e.Cost / MeanNormalCost;
     }
 
     public static ActProfile Profile(ActDefinition act) => new(
         act,
         act.NormalEncounters.Select(Encounter).ToList(),
         act.EliteEncounters.Select(Encounter).ToList(),
-        act.BossIds.Select(Profile).ToList());
+        act.BossIds.Select(Profile).ToList(),
+        act.BossIds.Select(b => Encounter(new[] { b })).ToList());
 
     public static List<ActProfile> AllActs() => ActDatabase.All.Select(Profile).ToList();
 
