@@ -220,7 +220,11 @@ public partial class EffectSmokeTest : Node
         var noContext = EffectDescriptionFormatter.Describe(strike.Effects);
         Check("description_base_damage_with_no_player_context", noContext.Contains("Deal 6 damage"),
             $"text='{noContext}'");
-        Check("description_shows_vulnerable_preview", noContext.Contains("~9 vs Vulnerable"),
+        // Inverted deliberately. This used to assert the "(~9 vs Vulnerable)"
+        // parenthetical was appended; the hint is gone (it was a hypothetical
+        // the player could not act on, and it vanished the moment the card was
+        // aimed), and the check stays as the thing that catches it coming back.
+        Check("description_carries_no_hypothetical_vulnerable_hint", !noContext.Contains("vs Vulnerable"),
             $"text='{noContext}'");
 
         var strongPlayer = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 50 };
@@ -273,12 +277,14 @@ public partial class EffectSmokeTest : Node
         // single prefix instead of being repeated - the phrasing that let
         // Thunderclap fit its description box at one on-grid font size.
         Check("description_all_enemies_hoists_shared_suffix",
-            clapText == "ALL enemies: Deal 4 damage. Apply 1 Vulnerable. (~6 vs Vulnerable)",
+            clapText == "ALL enemies: Deal 4 damage. Apply 1 Vulnerable.",
             $"text='{clapText}'");
     }
 
-    // Damage against the enemy actually being targeted, rather than the
-    // hypothetical "(~N vs Vulnerable)" parenthetical.
+    // Damage against the enemy actually being targeted, rather than the base
+    // number an un-aimed card shows. This is the whole of what the player is
+    // told about Vulnerable now that the hypothetical hint is gone, so it is
+    // the check that matters.
     private void TestLiveTargetDamage()
     {
         var strike = CardDatabase.Get("strike");
@@ -302,12 +308,15 @@ public partial class EffectSmokeTest : Node
         Check("description_mixed_targets_show_a_range", mixed == "Deal 8-12 damage to ALL enemies.",
             $"text='{mixed}'");
 
-        // One hint for the whole card, not one per deal_damage effect -
-        // Twin Strike has two.
+        // A multi-hit card un-aimed is its two base hits collapsed into one
+        // sentence and nothing else. The exact string is what pins that: this
+        // card carried the vs-Vulnerable parenthetical longer than any other
+        // (two deal_damage specs, one hint), so it is the one that would show a
+        // reintroduction first.
         var twinStrike = CardDatabase.Get("twin_strike");
         var twinText = EffectDescriptionFormatter.Describe(twinStrike.Effects);
-        Check("description_vulnerable_hint_appears_once",
-            twinText == "Deal 4 damage twice. (~12 vs Vulnerable)", $"text='{twinText}'");
+        Check("description_unaimed_multi_hit_is_base_numbers_only",
+            twinText == "Deal 4 damage twice.", $"text='{twinText}'");
     }
 
     // Rarity is a real content field now, not decoration. Every card declaring
@@ -637,10 +646,9 @@ public partial class EffectSmokeTest : Node
     private void TestEnemyVoiceDescriptions()
     {
         // Both sides get a known target, which is what EnemyView does for real
-        // (CombatManager.Instance.Player) and what suppresses the hypothetical
-        // "(~N vs Vulnerable)" hint an un-aimed card carries. Without it every
-        // expectation below would be testing that parenthetical rather than the
-        // verb, which is the thing this actually cares about.
+        // (CombatManager.Instance.Player) - the numbers below are therefore the
+        // ones that would actually land, not base amounts. The verb is what
+        // this cares about either way.
         var victim = new PlayerCombatant { Name = "Player", MaxHp = 50, CurrentHp = 50 };
         var targets = new List<Combatant> { victim };
 

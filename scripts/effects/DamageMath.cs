@@ -25,6 +25,4 @@ public static class DamageMath
     {
         return target.GetStatus(StatusType.Vulnerable) > 0 ? (int)(amount * VulnerableMultiplier) : amount;
     }
-
-    public static int PreviewVsVulnerable(int amount) => (int)(amount * VulnerableMultiplier);
 }

@@ -358,11 +358,11 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `DeckViewSmokeTest` | pile popups, pile counters, combat-end z-order | `PileViewPopup`, `DeckViewButtons`, `PileCounterBar` |
 | `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders, fits *and fills* the canvas | `MapGenerator`, `MapScreen`, `MapNode`, `acts.json` |
 | `EventSmokeTest` | event DB, outcome keys, the `add_card` outcome and its authoring audit, `EventScreen` | `scripts/events/`, `events.json` |
-| `ScreenSmokeTest` | Reward/Shop/Treasure/Rest load, populate and show their art; the shop's card-removal picker opening, hiding the shop beneath it, and cancelling for free | any non-combat screen, `ScreenChrome`, or its `.tscn` |
+| `ScreenSmokeTest` | Reward/Shop/Treasure/Rest load, populate and show their art; the shop's card-removal picker opening, hiding the shop beneath it, and cancelling for free; the keyword panel tracking hover and focus independently | any non-combat screen, `ScreenChrome`, `CardView`'s keyword tooltip, or its `.tscn` |
 | `ActSmokeTest` | acts load, act progression, per-act content is distinct | `acts.json`, `ActDefinition`, `RunState.AdvanceAct` |
 | `RunSaveSmokeTest` | in-run save/load round-trip, save v2/v3 tolerance | `RunSaveData`, `RunSaveManager`, `RunState` |
 | `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |
-| `AudioSmokeTest` | stream construction, bus setup, volume round-trip | `scripts/audio/`, `AudioManager`, `SettingsManager` |
+| `AudioSmokeTest` | stream construction, bus setup, volume round-trip, and a volume change leaving the window mode alone | `scripts/audio/`, `AudioManager`, `SettingsManager` |
 | `TransitionSmokeTest` | cross-screen fade: overlay geometry/layer, the Reduce Motion gate, covered-action firing once | `ScreenFade`, `RunManager.ChangeScreen` |
 | `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon- *and sprite*-to-definition coverage, `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
 | `KeyboardSmokeTest` | `hd_*` InputMap coverage and no duplicate keycodes, which control each screen focuses on load, the card picker's grid navigation (down a column, out to Cancel, back in), combat's card/potion keys, potion aiming, Continue at combat end | `project.godot` `[input]`, `ScreenKeyboardNav`, `CardPicker`, any screen's focus wiring, `CombatScreen._UnhandledInput` |

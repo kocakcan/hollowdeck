@@ -279,9 +279,9 @@ public partial class EnemyView : Button
         EffectDescriptionFormatter.Describe(move.Effects, new DescribeContext(
             Source: source,
             // The real player, not null: passing them resolves their live
-            // Vulnerable into the printed number instead of the hypothetical
-            // "(~N vs Vulnerable)" hint a card shows before it is aimed - the
-            // same reason LiveAttackAmount takes a target for the row label.
+            // Vulnerable into the printed number, rather than leaving the move
+            // on the base numbers an un-aimed card shows - the same reason
+            // LiveAttackAmount takes a target for the row label.
             Targets: target is null ? null : new[] { target },
             Voice: DescribeVoice.Enemy));
 
@@ -381,8 +381,8 @@ public partial class EnemyView : Button
     // the same DamageMath the real resolution and card previews use so an
     // Attack intent always shows what would actually land right now (the
     // enemy's own Strength/Weak, and the player's current Vulnerable - a
-    // real fact already in effect, not a hypothetical preview like a card's
-    // "(~N vs Vulnerable)" parenthetical).
+    // real fact already in effect, since an intent always knows who it is
+    // aimed at).
     // The label reads the whole move, not just the intent: how many hits it is
     // and which status it grants are facts about the effects, and deriving them
     // is what makes a telegraph structurally unable to lie. Only DisplayAmount

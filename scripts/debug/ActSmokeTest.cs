@@ -151,7 +151,7 @@ public partial class ActSmokeTest : Node
         RunState.CurrentNodeId = RunState.MapNodes.First(n => n.Floor == 0).Id;
         RunState.VisitedNodeIds.Add(RunState.CurrentNodeId);
 
-        RunState.AdvanceAct();
+        var cleared = RunState.AdvanceAct();
 
         Check("advance_act_moves_to_next_act", RunState.ActIndex == 1, $"actIndex={RunState.ActIndex}");
         Check("advance_act_keeps_deck", RunState.Deck.Count == deckBefore, $"deck={RunState.Deck.Count}");
@@ -173,9 +173,24 @@ public partial class ActSmokeTest : Node
         int expectedMax = 50 + firstAct.ClearMaxHpBonus;
         Check("advance_act_raises_max_hp", RunState.PlayerMaxHp == expectedMax,
             $"maxHp={RunState.PlayerMaxHp}, expected={expectedMax}");
-        Check("advance_act_heals_but_does_not_overheal",
-            RunState.PlayerCurrentHp > 20 && RunState.PlayerCurrentHp <= RunState.PlayerMaxHp,
-            $"hp={RunState.PlayerCurrentHp}/{RunState.PlayerMaxHp}");
+        // Derived from the act's own percentage rather than typed here, so this
+        // keeps holding if the dial moves - but pinned to an exact HP rather
+        // than a range, because "healed something, didn't overheal" passed at
+        // 30% and at 100% alike and so said nothing about either. The heal is
+        // computed off the *raised* max, which is what makes the current 100
+        // mean a genuinely full bar and not the old ceiling.
+        int expectedHp = Mathf.Min(expectedMax, 20 + firstAct.ClearHealPercent * expectedMax / 100);
+        Check("advance_act_heals_by_the_acts_percentage_of_the_new_max",
+            RunState.PlayerCurrentHp == expectedHp,
+            $"hp={RunState.PlayerCurrentHp}/{RunState.PlayerMaxHp}, expected={expectedHp} " +
+            $"({firstAct.ClearHealPercent}% of {expectedMax} from 20)");
+
+        // What the reward banner prints. It has to be the HP actually restored,
+        // not the nominal percentage, or the screen lies to a player who was
+        // already near full.
+        Check("act_clear_reports_the_hp_actually_restored",
+            cleared?.Healed == expectedHp - 20,
+            $"reported={cleared?.Healed}, restored={expectedHp - 20}");
     }
 
     private void TestFinalActDoesNotAdvance()

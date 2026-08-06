@@ -37,6 +37,7 @@ public partial class ScreenSmokeTest : Node
         var tree = GetTree();
 
         await TestKeywordTooltipOnANonInteractiveCard();
+        await TestKeywordTooltipFollowsHoverAndFocusIndependently();
         await TestRewardScreenOpensQuietly();
         TestRewardScreenActClearedBanner();
         TestRewardScreen();
@@ -105,6 +106,65 @@ public partial class ScreenSmokeTest : Node
             "a tooltip raised from the deck view would paint underneath it");
 
         view.QueueFree();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+    }
+
+    // The reported bug: on every choice screen, the leftmost card's keyword
+    // panel came up on the first hover and then never went away, so hovering a
+    // second card left two on screen. That card is the one ScreenKeyboardNav
+    // focuses on load, and hiding on mouse-exit was suppressed for a card that
+    // still had focus - a guard that is right for a panel *focus* raised and
+    // wrong for one hover raised, which one flag could not tell apart.
+    //
+    // Hover is driven by emitting the signals CardView subscribes to rather
+    // than by moving the cursor: a headless Godot pins the mouse at (0, 0) and
+    // ignores WarpMouse (see CombatTargetingSmokeTest), so there is no real
+    // hover to be had here.
+    private async System.Threading.Tasks.Task TestKeywordTooltipFollowsHoverAndFocusIndependently()
+    {
+        var tree = GetTree();
+        var view = GD.Load<PackedScene>("res://scenes/CardView.tscn").Instantiate<CardView>();
+        AddChild(view);
+        view.Interactive = false;
+        view.SetCardInstance(new CardInstance(CardDatabase.Get("bash")));
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        // The screen taking focus for the player, exactly as a choice screen
+        // does on load: the panel stays down, and the card still holds focus.
+        ScreenKeyboardNav.GrabFocusQuietly(view);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        view.EmitSignal(Control.SignalName.MouseEntered);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        int hovered = CountTooltips();
+
+        view.EmitSignal(Control.SignalName.MouseExited);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame); // QueueFree lands next frame
+        int afterHover = CountTooltips();
+
+        Check("hover_raises_the_panel_on_a_quietly_focused_card", hovered == 1,
+            $"tooltips while hovered={hovered}");
+        Check("unhovering_a_quietly_focused_card_takes_its_panel_down", afterHover == 0,
+            $"{afterHover} tooltip(s) left after the mouse left - the panel is stuck again");
+
+        // The other direction, which the fix must not break: a panel the player
+        // raised by focusing the card themselves survives the mouse crossing it
+        // and leaving. Release first, so the grab below is a fresh focus event.
+        view.ReleaseFocus();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        view.GrabFocus();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        view.EmitSignal(Control.SignalName.MouseEntered);
+        view.EmitSignal(Control.SignalName.MouseExited);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        Check("a_focus_raised_panel_survives_a_hover_round_trip", CountTooltips() == 1,
+            $"tooltips={CountTooltips()} - the mouse leaving closed a panel focus is still holding open");
+
+        view.QueueFree();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
     }
 
