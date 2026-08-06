@@ -64,6 +64,11 @@ public partial class RunSaveSmokeTest : Node
         RunState.Deck = new List<CardDefinition>
         {
             CardDatabase.Get("strike"), CardDatabase.Get("bash"), CardUpgrade.Apply(CardDatabase.Get("defend")),
+            // A Curse, because a run save is the only thing standing between a
+            // player and quitting out of one. It reaches the deck through
+            // add_card rather than a reward, so nothing else in the save path
+            // has ever seen a card the pools cannot produce.
+            CardDatabase.Get("pain"),
         };
         RunState.Relics = new List<RelicInstance> { new(RelicDatabase.Get(RelicDatabase.All.First().Id)) };
         RunState.Potions = new List<PotionInstance> { new(PotionDatabase.Get(PotionDatabase.All.First().Id)) };
@@ -96,7 +101,14 @@ public partial class RunSaveSmokeTest : Node
         Check("round_trip_gold", RunState.Gold == 42, $"gold={RunState.Gold}");
         Check("round_trip_max_hp", RunState.PlayerMaxHp == 60, $"maxHp={RunState.PlayerMaxHp}");
         Check("round_trip_current_hp", RunState.PlayerCurrentHp == 35, $"currentHp={RunState.PlayerCurrentHp}");
-        Check("round_trip_deck", RunState.Deck.Count == 3 && RunState.Deck.Any(c => c.Id == "strike") && RunState.Deck.Any(c => c.Id == "bash"),
+        Check("round_trip_deck", RunState.Deck.Count == 4 && RunState.Deck.Any(c => c.Id == "strike") && RunState.Deck.Any(c => c.Id == "bash"),
+            $"deck=[{string.Join(",", RunState.Deck.Select(c => c.Id))}]");
+        // Both halves: the id resolves, and the reconstructed definition is
+        // still unplayable. A Curse that reloads as a playable card would be a
+        // free deck-thin on every quit-and-resume.
+        var reloadedCurse = RunState.Deck.FirstOrDefault(c => c.Id == "pain");
+        Check("round_trip_curse_survives_and_stays_unplayable",
+            reloadedCurse is { IsPlayable: false },
             $"deck=[{string.Join(",", RunState.Deck.Select(c => c.Id))}]");
         // An upgraded card round-trips as "<baseId>+" (CardUpgrade's naming),
         // not its own CardDatabase entry - RunSaveManager has to resolve the
