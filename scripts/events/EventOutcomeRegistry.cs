@@ -23,6 +23,11 @@ public static class EventOutcomeRegistry
         ["heal"] = new HealOutcome(),
         ["lose_hp"] = new LoseHpOutcome(),
         ["gain_random_card"] = new GainRandomCardOutcome(),
+        // Same key name as the EffectRegistry action, and the same meaning.
+        // The two registries stay separate because an EffectContext requires a
+        // Combatant and a CombatManager, neither of which exists on an event
+        // screen - see this file's header.
+        ["add_card"] = new AddCardOutcome(),
         ["gain_relic"] = new GainRelicOutcome(),
         ["lose_relic"] = new LoseRelicOutcome(),
         ["none"] = new NoneOutcome(),

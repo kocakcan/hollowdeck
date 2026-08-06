@@ -13,6 +13,11 @@ public class EventOutcomeSpec
     // Consumed only by the "gamble" outcome, which picks one of these at
     // random and resolves it. Empty for every other outcome.
     public List<EventOutcomeSpec> Alternatives { get; set; } = new();
+
+    // Consumed only by "add_card". The spec is a flat union on purpose, the
+    // same way Alternatives is - one shape that every outcome deserializes
+    // into keeps new outcomes data-addressable without a schema per key.
+    public string CardId { get; set; } = "";
 }
 
 public class EventChoice

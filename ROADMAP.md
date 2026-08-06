@@ -4,33 +4,37 @@
 
 The run is complete and playable end to end: three acts of branching map, telegraphed-intent combat,
 relics, potions, events, a shop, mid-run save/resume, a score-driven unlock track, 13 screens on one
-pixel-art spec, 19 smoke suites, CI, and packaged exports for three platforms. Content stands at 84
-cards, 36 enemies, 27 relics, 12 potions, 15 events.
+pixel-art spec, 20 smoke suites, CI, and packaged exports for three platforms. Content stands at 95
+cards (91 offerable), 36 enemies, 27 relics, 12 potions, 15 events.
 
 **The gating problem is no longer presentation, and it is no longer content volume. It is
 mechanical vocabulary.** The previous roadmap correctly identified visual coherence as the ceiling
 and spent five phases removing it; the sixth then pushed content from 33 cards to 84 and from 24
 enemies to 36. What neither phase changed is the size of the vocabulary all of that is built out of,
-and the content has now saturated it — which is why the game reads as a competent deckbuilder rather
+and the content had saturated it — which is why the game read as a competent deckbuilder rather
 than as this genre.
+
+**Phase 7 has since closed the card half of that.** The four struck rows below are done; the live
+ones are what Phases 8 through 10 own.
 
 ### The diagnosis
 
 | Layer | Today | Consequence |
 | --- | --- | --- |
-| `CardDefinition` fields | 8, exactly one keyword (`Exhaust`) | No Retain, Innate, Ethereal, or X-cost |
-| `EffectScope` | `{ Target, Self }` | No per-effect AoE, no random targeting |
-| `EffectRegistry` actions | 10, every one of which moves an *existing* card or moves a number | **Nothing can put a card into a pile at runtime** |
-| `CardType` | `{ Attack, Skill, Power }` | No Curses, no Status cards, no deck pollution |
+| ~~`CardDefinition` fields~~ | ~~8, exactly one keyword (`Exhaust`)~~ | **Closed in Phase 7** — Retain, Innate, Ethereal and the `-1` X-cost sentinel |
+| ~~`EffectScope`~~ | ~~`{ Target, Self }`~~ | **Closed in Phase 7** — `AllEnemies` and `RandomEnemy` |
+| ~~`EffectRegistry` actions~~ | ~~10, every one of which moves an *existing* card or moves a number~~ | **Closed in Phase 7** — `add_card` is 11 |
+| ~~`CardType`~~ | ~~`{ Attack, Skill, Power }`~~ | **Closed in Phase 7** — `Status` and `Curse`, unplayable |
 | `StatusType` | 11 | No Artifact — so stacking debuffs is always correct |
 | Enemy AI types | 3, all "pick a move off a list" | No minions, no split, no escape, no on-death |
 | `RelicDefinition` | no tier field | A boss grants from the same pool 150 gold buys from |
 | `PotionDefinition` | no rarity field, no combat drop | The three-slot belt is nearly always empty |
 
-**The load-bearing row is the third.** Because no effect can add a card to a pile, Curses and Status
-cards are unauthorable, "add a copy of this to your discard" is unauthorable, and — the part that
-shows — **every event downside in the game has to be HP or gold**, which is why events read as
-trades rather than as risks. One missing primitive costs an entire design space.
+**The load-bearing row was the third**, and it is the one Phase 7 opened first. While no effect
+could add a card to a pile, Curses and Status cards were unauthorable, "add a copy of this to your
+discard" was unauthorable, and — the part that showed — **every event downside in the game had to be
+HP or gold**, which is why events read as trades rather than as risks. One missing primitive cost an
+entire design space; it is one `IEffect` and two `EffectSpec` fields.
 
 This is the same finding the Phase 6 enemy pass made ("every enemy in the game was the same three
 moves") and the card pass made ("33 cards out of 7 effect actions was already near-saturated"),
@@ -42,7 +46,7 @@ stopped. It is the third time, so it is the rule rather than the incident:
 
 Everything below is sequenced by that.
 
-## What shipped — Phases 0 through 6
+## What shipped — Phases 0 through 7
 
 Compressed. The decisions worth not relitigating, and nothing else; the full narrative is in git.
 
@@ -81,6 +85,24 @@ Compressed. The decisions worth not relitigating, and nothing else; the full nar
   `tools/balance-report.sh` existed. **Re-run it rather than trusting any snapshot, including the
   ones below.**
 
+- **The card vocabulary, and the four traps in it.** `add_card` is the primitive everything else
+  waited on. `Innate` is promoted from `StartCombat`, not the `PileManager` constructor, because
+  `StartCombat` shuffles again afterwards — and `DrawHand` pops from the *end* of the pile, so
+  "drawn first" means "moved last". `Retain` does not reduce the next draw, because
+  `BeginPlayerTurn` assigns a hand size rather than topping one up (the `Fervor`/`Foresight`
+  distinction again). `Ethereal` beats `Retain`, stated rather than emergent. And X-cost is a
+  **per-spec multiplier** (`EffectSpec.PerX` + `EffectContext.AmountFor`), *not* the repeat count an
+  earlier draft of this document implied: a repeat would fire relic hooks and damage numbers X times
+  and could not express `"Deal X damage. Gain 3 Block."` at all. The accepted cost is that
+  `"deal 6 damage X times"` is unauthorable.
+- **`IsPlayable` is derived from `CardType`, never authored.** A Curse marked playable is
+  unrepresentable rather than merely wrong. The exclusion that matters lives in `CardPool.Sample` —
+  the single place "what may be offered" is decided — and the one that is easy to miss is
+  `UpgradeRandomCardOutcome.Upgradable`, which the rest site's Smith and both upgrade events read;
+  without it the picker shows a column whose button does nothing.
+- **Card removal shipped with the Curses, not after them.** Adding a way to put dead cards in a deck
+  without a way to take them out is punishment rather than design.
+
 The curve as of today: encounter HP scales 1.49x then 1.44x per act, incoming damage 2.10x across
 the run, player max HP only 1.32x — so **deck power has to cover 1.59x**, drawn from a mean of 16.6
 three-card rewards. Elites span 1.13x–1.85x of an average normal fight and bosses 2.44x–3.16x, both
@@ -88,47 +110,27 @@ asserted as bands by `BalanceSmokeTest`.
 
 ---
 
-## Phase 7 — The card vocabulary
+## Phase 7 — The card vocabulary — **shipped**
 
-The keyword layer, and the one primitive everything downstream waits on.
+Landed as one branch, sequenced with X-cost last. `add_card` (11 effect actions), `CardType.Status`
+and `CardType.Curse` with a derived `IsPlayable`, the `Retain`/`Innate`/`Ethereal` keywords,
+`EffectScope.AllEnemies`/`RandomEnemy`, the `-1` X-cost sentinel with per-spec `PerX`, and card
+removal at the shop for 75g. Content: 84 → 95 cards (4 unplayable), 15 → 16 event outcome keys, and
+two events whose greediest choice now costs a card instead of only HP or gold.
 
-- **`add_card`, the missing primitive.** `EffectSpec` gains `CardId` and a destination `Pile`, so a
-  spec reads `{action: "add_card", cardId: "wound", amount: 2, pile: "Discard"}`. One new `IEffect`,
-  one registry line (10 → 11 actions). It unblocks Curses, Status cards, self-replicating cards, and
-  the entire cost half of event and relic design.
-- **`CardType` gains `Status` and `Curse`, and cards gain an unplayable state.** Each enforcement
-  site is small and already exists: a fourth gate in `CombatManager.TryPlayCard` beside the three it
-  has, an exclusion in `CardPool.Sample` so they can never be *offered*, a refusal in
-  `CardUpgrade.Apply`, and two more frame fills in `CardView` — claimed deliberately, the way Phase 1
-  claimed `UiTheme.Palette.PowerFill` rather than choosing it under deadline.
-- **Three keyword bools, three enforcement sites, all in `scripts/run/PileManager.cs`.** The cheapest
-  feel-per-line work in this document:
-  - `Retain` — `DiscardHand()` skips it. This is what makes ending a turn a *decision* rather than a
-    button.
-  - `Innate` — the opening draw pulls it first, which is what makes an opening hand designable.
-  - `Ethereal` — `DiscardHand()` exhausts it instead. The cost half of a card that overshoots.
-- **`EffectScope` gains `AllEnemies` and `RandomEnemy`.** AoE today exists only one level up, at
-  `CardTargetType` in `CombatManager.ResolveTargets`, so "deal 6 to your target, Weak to everything"
-  is unauthorable and a random multi-hit is impossible. `RandomEnemy` draws from `RngStreams.Combat`:
-  risk 2 asks for a stream per new *system*, and a card resolving is combat — noted here so it is not
-  relitigated at the call site.
-- **X-cost cards.** `Cost = -1` as the sentinel; `TryPlayCard` spends all remaining energy and passes
-  the amount down. **Sequence this last within the phase** — it is the only item with real blast
-  radius, because it needs `EffectContext` to carry an amount override and that touches every
-  `IEffect`.
-- **Card removal at the shop ships in this same phase, not a later one.** Adding Curses without a
-  purge is punishment rather than design, and deck-thinning is a core strategy of the genre that
-  currently exists as exactly one random event (`the_confessor`). This is wiring, not machinery:
-  `scripts/ui/CardPicker.cs` and the `remove_chosen_card` outcome both already exist, so `ShopScreen`
-  gains a priced service that opens the picker it already has.
-- **Deliberately deferred: runtime cost modification** ("costs 1 less this turn"). It requires
-  `CardInstance` to carry mutable per-instance state, which crosses the save boundary — risk 3, and
-  the one thing this codebase has been strict about since the first save format.
+The decisions worth not relitigating are folded into "What shipped" above and into `CLAUDE.md`'s
+Architecture section. Two deferrals stand:
 
-*Proven by:* `EffectSmokeTest` (rarity coverage now has to skip Curse/Status, and so does the
-every-upgrade-changes-something sweep), a new `PileManager` group for the three keywords,
-`HandLayoutSmokeTest` (an unplayable card still has to fit its box and fan correctly), `EventSmokeTest`
-for the new outcome shape.
+- **Runtime cost modification** ("costs 1 less this turn") still needs `CardInstance` to carry
+  mutable per-instance state, which crosses the save boundary — risk 3.
+- **An Ethereal card burning at end of turn does not animate as an exhaust.** `TryEndTurn` fires no
+  per-card event, so `CombatScreen` has no hook for the ember tween it already owns. Cosmetic, and
+  it belongs with Phase 11's feel work rather than here.
+
+*Proven by:* a new `CardKeywordSmokeTest` (19 → 20 suites), plus moved assertions in
+`EffectSmokeTest` (rarity coverage and the upgrade sweep now run over the offerable pool),
+`CombatTargetingSmokeTest` (three rejection gates → four), `Phase4ContentSmokeTest` (no enemy move
+may declare a card-only scope — the telegraph-honesty guard), `EventSmokeTest` and `ScreenSmokeTest`.
 
 ## Phase 8 — Enemies that do something other than damage
 
@@ -275,10 +277,10 @@ Deferred by choice, not dropped. Ordered by whether it blocks a player.
 
 ## Sequencing notes
 
-- **Phase 7 before Phase 9's `?` node.** Half of what makes an unknown room feel like a risk is that
-  it can cost you something other than HP, and until `add_card` exists it cannot.
+- ~~**Phase 7 before Phase 9's `?` node.**~~ Satisfied: `add_card` ships, so an unknown room can now
+  cost something other than HP. Phase 9's `?` node is unblocked.
 - **Phase 8 and Phase 11 can run in parallel** — one is the combat model, the other is UI widgets.
-- **Phase 10 after 7, 8 and 9.** A ladder of modifiers stacked on a thin mechanic set only multiplies
+- **Phase 10 after 8 and 9** (7 is done). A ladder of modifiers stacked on a thin mechanic set only multiplies
   numbers; the rungs are only interesting once there is something for them to change.
 - **Every count in this file is measured, not remembered**, and each phase updates `CLAUDE.md`'s
   "Current state" counts and its Verification table as it lands. Those counts are written as the

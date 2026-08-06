@@ -325,8 +325,8 @@ public partial class CombatTargetingSmokeTest : Node
         await EndFight(screen);
     }
 
-    // TryPlayCard's three rejection gates, asserted as a table and - the part
-    // that was missing - asserting the hand is *unchanged* in all three. Only
+    // TryPlayCard's four rejection gates, asserted as a table and - the part
+    // that was missing - asserting the hand is *unchanged* in all four. Only
     // the null-target case was incidentally covered anywhere, and "returns
     // false" is the cheap half of the contract; "changes nothing" is the half
     // a player notices.
@@ -353,6 +353,15 @@ public partial class CombatTargetingSmokeTest : Node
 
         // Gate 3: a SingleEnemy card with nothing under the cursor.
         AssertGateChangesNothing("null_target", combat, () => combat.TryPlayCard(card, null));
+
+        // Gate 4: an unplayable card. Checked through the drag path rather
+        // than only through CardKeywordSmokeTest's direct call, because this
+        // is the layer a player actually reaches it from - a Curse in hand is
+        // draggable, and the rejection has to snap it back like any other.
+        var curse = new CardInstance(CardDatabase.Get("pain"));
+        combat.Player.Piles.Hand.Add(curse);
+        AssertGateChangesNothing("unplayable", combat, () => combat.TryPlayCard(curse, enemy));
+        combat.Player.Piles.Hand.Remove(curse);
 
         await EndFight(screen);
     }

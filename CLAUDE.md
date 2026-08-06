@@ -40,14 +40,16 @@ layout and built-in tweening. Worth it here; would not be for a combat-only prot
 load-bearing decision. Acts/cards/relics/enemies/potions/events are authored as JSON under `data/`;
 each `CardDefinition` holds a list of `EffectSpec`s (e.g. `{action: "deal_damage", amount: 6,
 scope: "Target"}`) that key into `EffectRegistry`, a dictionary of `IEffect` implementations
-(`DealDamageEffect`, `ApplyStatusEffect`, `DrawCardsEffect`, ...). New cards are new data rows,
+(`DealDamageEffect`, `ApplyStatusEffect`, `DrawCardsEffect`, ...). `scope` is *per-effect*
+targeting one level below `CardTargetType` — `Target`/`Self`/`AllEnemies`/`RandomEnemy` — which is
+what lets one card hit its target and debuff the room. New cards are new data rows,
 not new classes — a one-class-per-card approach becomes unmaintainable at hundreds-of-cards
 scale. `IScriptedEffect` exists as an escape hatch for the rare card that doesn't decompose into
 existing effects.
 
 **A card carries two independent channels, and both are live.** `CardType`
-(`Attack`/`Skill`/`Power`) drives the frame fill; `Rarity` (`Common`/`Uncommon`/`Rare`) drives the
-border *and* how often the card is offered — `CardPool` weights every reward, shop and event draw
+(`Attack`/`Skill`/`Power`/`Status`/`Curse`) drives the frame fill; `Rarity`
+(`Common`/`Uncommon`/`Rare`) drives the border *and* how often the card is offered — `CardPool` weights every reward, shop and event draw
 60/37/3, so a Rare is an event rather than one row in a shuffled list. Playing a `Power` moves it
 to `PileManager.Powers`, which is neither Discard (it would cycle back) nor Exhaust (a cost the HUD
 renders as one).
@@ -78,11 +80,62 @@ keeping them apart is what stops a later edit reaching for the wrong multiplier.
 `Poison` sit on the target side; the five turn-start grants above make up the rest. Buffs
 (`Strength`, `Dexterity`, and the grants) never decay; debuffs (`Weak`, `Vulnerable`, `Frail`)
 wear off by 1 a turn at the two `DecayStatus` sites, and `Poison` decays as it ticks. A new status
-needs an icon in `tools/artgen/src/icons/misc.rs`, an arm in `StatusRow.Describe`, and — easy to
-forget, and silent when missed — an entry in `CardUpgrade.ShouldScale`, or upgrading a card that
-grants it produces an identical `+`. That last failure now has a sweep behind it rather than a
+needs an icon in `tools/artgen/src/icons/misc.rs`, an arm in `Keywords.Blurb` (**not**
+`StatusRow.Describe`, which does not exist — the prose moved to `scripts/ui/Keywords.cs` and this
+file said otherwise for two phases), and — easy to forget, and silent when missed — an entry in
+`CardUpgrade.ShouldScale`, or upgrading a card that grants it produces an identical `+`. That last failure now has a sweep behind it rather than a
 warning: `EffectSmokeTest.TestEveryCardUpgradeChangesSomething` fails any card whose `+` moves no
 number, which is how a missing entry announces itself.
+
+**The keyword layer is three bools and three enforcement sites, all in `PileManager`.** `Retain`
+survives `DiscardHand`, `Ethereal` is exhausted by it, `Innate` is promoted to where the opening
+draw finds it. Three things about them are expensive to rediscover:
+
+- **`Innate` is promoted from `StartCombat`, not from the `PileManager` constructor.** `StartCombat`
+  shuffles the draw pile itself, *after* the constructor already did, so any ordering established
+  earlier is destroyed a line later. And `DrawHand` pops from the **end** of `DrawPile`, so
+  "drawn first" means "moved last" — `PromoteInnate` appends.
+- **`Retain` does not reduce the next draw.** `BeginPlayerTurn` *assigns* a hand size rather than
+  topping one up, so a retained card makes turn two a six-card hand. Same assign-vs-accumulate
+  distinction `Fervor`/`Foresight` turn on, and changing `DrawHand` into a top-up would silently
+  change what `Foresight` means.
+- **`Ethereal` beats `Retain`.** Nothing authors both (`CardKeywordSmokeTest` refuses it), and the
+  winner is stated rather than left to branch order: a printed cost that another keyword on the same
+  card can cancel is not a cost.
+
+**`Status` and `Curse` are unplayable, and `IsPlayable` is derived from `CardType`** rather than
+authored as a sixth bool — one source of truth, so a Curse marked playable is unrepresentable. Five
+gates read it: a fourth rejection in `TryPlayCard`, an exclusion in `CardPool.Sample` (the single
+place "what may be offered" is decided, so a later grant site inherits it), a refusal in
+`CardUpgrade.Apply`, the same in `UpgradeRandomCardOutcome.Upgradable` (which the rest site's Smith
+and both upgrade events read — without it the picker shows a column whose button does nothing), and
+`CardView`, which dims the frame permanently and hides the cost badge entirely, because a `0` in
+that badge reads as "free to play".
+
+**Nothing could put a card into a pile at runtime until `add_card`.** That one missing primitive is
+why Curses were unauthorable and why every event downside in the game had to be HP or gold.
+`EffectSpec` carries `CardId` and a `CardPile` destination; `Draw` inserts at a random index out of
+`RngStreams.Combat` rather than on top, because "shuffle it into your draw pile" is the genre's
+meaning and the only one that makes a Curse a cost rather than one bad turn. `AddCardEffect`
+resolves piles through `ctx.Combat.Player` rather than casting `ctx.Source`, so an enemy move can
+use it too.
+
+**X-cost is a per-spec multiplier, not a repeat count.** `Cost = -1` is the sentinel (`IsXCost`;
+never compare against `-1` at a call site), `TryPlayCard` resolves the real cost into a local before
+the energy gate — passing `Definition.Cost` on to `ResolveCard` would *grant* two energy — and
+`EffectContext.AmountFor` is the one place `spec.Amount` becomes the amount that resolves. Every
+`IEffect` reads it, so none can invent its own fallback. Opt-in per spec (`EffectSpec.PerX`) because
+a blanket override cannot express `"Deal X damage. Gain 3 Block."`; the accepted cost is that
+`"deal 6 damage X times"` is not expressible, and a card wanting it needs a new primitive rather
+than a widening of this one. An X card at zero energy is refused outright — it would resolve for
+nothing and be gone.
+
+**`AllEnemies`/`RandomEnemy` are card-only scopes.** They resolve relative to the source
+(`CombatManager.Opposition`), so an enemy authoring one is coherent rather than a crash — but
+`EnemyView` derives a telegraph from these specs and can express neither a target chosen at
+resolution nor an amount that does not exist yet. `Phase4ContentSmokeTest` refuses any enemy move
+that declares them or `PerX`. That is an assertion rather than a comment because a drifted telegraph
+is the canonical bad bug in this genre.
 
 **Autoloads** (declared in `project.godot`, in this order — `AudioManager` must come before
 `SettingsManager` because the settings sliders address audio bus indices):
@@ -163,19 +216,22 @@ and cosmetic jitter can never desync a deterministic run.
 
 An earlier shard *shop* was removed — don't reintroduce shard-purchase language.
 
-Content stands at **84 cards** (34 Common / 34 Uncommon / 16 Rare, 10 of them Powers), **15
+Content stands at **95 cards** — 91 offerable (36 Common / 38 Uncommon / 17 Rare, 10 of them
+Powers) plus 4 unplayable (2 Status, 2 Curse) that can only arrive through `add_card` — **15
 events**, 27 relics, 12 potions, **36 enemies** (7 normals + 3 elites per act, plus 6 bosses), 3
-acts. Eleven statuses, ten effect actions, four intent types, fifteen event outcome keys.
+acts. Eleven statuses, eleven effect actions, four effect scopes, three card keywords, four intent
+types, sixteen event outcome keys.
 
 Enemy sprites are the one asset class that is **sourced rather than generated** — CC0 Dungeon Crawl
 tiles, palette-clamped by `artgen clamp`, mapped act by act in `CREDITS.md`. Adding an enemy means
 a row in `enemies.json`, a reference from exactly one act's pool (acts may not share enemies), and
 a 32x32 PNG; the first two are asserted by `ActSmokeTest`, the third by `PixelSpecSmokeTest`.
 
-`ROADMAP.md` tracks what's genuinely still open. Everything the four items that used to be listed
-here named — packaged export, the card and enemy passes, the balance retune — has shipped; what's
-open now is the *vocabulary* those counts are built out of (card keywords, per-effect targeting,
-enemy behaviours beyond picking a move, relic tiers, an ascension ladder). Don't treat this section
+`ROADMAP.md` tracks what's genuinely still open. Packaged export, the card and enemy passes, the
+balance retune and now the *card* half of the vocabulary — keywords, per-effect targeting, the
+`add_card` primitive, unplayable card types, X-cost — have all shipped. What's open is the rest of
+that vocabulary: enemy behaviours beyond picking a move, `Artifact` and three more statuses, relic
+tiers, potion rarity and combat drops, the `?` node, an ascension ladder. Don't treat this section
 as a to-do list.
 
 ## Key files
@@ -189,7 +245,8 @@ as a to-do list.
 - `scripts/run/MetaProgressionManager.cs` + `RunScore.cs` — score-driven unlock track, meta save
 - `scripts/run/RngStreams.cs` — the four seeded RNG streams
 - `scripts/run/CardPool.cs` — rarity-weighted sampling; the single place "which cards does the
-  player get offered" is decided (reward picks, shop stock, the random-card event outcome)
+  player get offered" is decided (reward picks, shop stock, the random-card event outcome), and
+  therefore the single place unplayable cards are excluded from being offered at all
 - `scripts/combat/CombatManager.cs` — turn loop, intent telegraphing, targeting sub-state
 - `scripts/effects/EffectRegistry.cs` + `IEffect.cs` — the composable effect system every
   card/relic/potion/enemy-move definition keys into
@@ -197,13 +254,14 @@ as a to-do list.
   relics off all 7, using the `target`/`condition`/`limit` vocabulary in
   `scripts/data/RelicTrigger.cs`. Subclassing `RelicBehavior` is the escape hatch and nothing
   currently uses it — `RelicRegistry` has one factory
-- `scripts/events/EventOutcomeRegistry.cs` — the 15 event outcome keys. Thirteen resolve
+- `scripts/events/EventOutcomeRegistry.cs` — the 16 event outcome keys. Fourteen resolve
   instantly; two (`remove_chosen_card`, `upgrade_chosen_card`) implement `ICardPickerOutcome` and
   come back from `Begin()` as *pending*, for `EventScreen` to open a card grid against. A picker
   must be the last spec in a choice and may not appear inside a `gamble` — both enforced by
   `EventSmokeTest`, not just documented
 - `scripts/ui/CardPicker.cs` — the "choose one of these cards" grid, shared by the rest site's
-  Smith and by the two event picker outcomes
+  Smith, the two event picker outcomes, and the shop's 75g card-removal service (which reuses
+  `RemoveChosenCardOutcome` rather than restating the deck floor)
 - `scripts/effects/BlockMath.cs` — Dexterity/Frail, the exact mirror of `DamageMath`'s
   Strength/Weak, split for the same no-drift reason
 - `scripts/map/MapGenerator.cs` — branching node DAG, per-act (floor count, encounter pools and
@@ -262,7 +320,7 @@ There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Rea
 failure.
 
 ```bash
-tools/run-smoke-tests.sh                 # all 19; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh                 # all 20; builds first, nonzero exit on any failure
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 
@@ -290,16 +348,17 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 
 | Test | Covers | Run when you touch |
 |---|---|---|
-| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text, rarity coverage, `CardPool` weighting, Power routing, every card's `+` actually changing something | `scripts/effects/`, `PileManager`, `CardPool`, `cards.json` |
+| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text, rarity coverage *over the offerable pool*, `CardPool` weighting and its unplayable exclusion, Power routing, every playable card's `+` actually changing something | `scripts/effects/`, `PileManager`, `CardPool`, `cards.json` |
+| `CardKeywordSmokeTest` | the Phase 7 vocabulary: Retain/Innate/Ethereal in `PileManager` (including Ethereal beating Retain, and no card declaring both), `add_card` into all three piles, the unplayable gate leaving the hand unchanged, `AllEnemies`/`RandomEnemy` through a real fight, X-cost spending everything and scaling only `PerX` specs | `PileManager` keywords, `AddCardEffect`, `CardType`, `EffectScope`, X-cost, `cards.json` |
 | `CombatSmokeTest` | `CombatScreen.tscn` boots and wires up | `CombatScreen`, `CombatManager` |
-| `CombatTargetingSmokeTest` | the drag/targeting layer (risk 5): target-lock glow, HUD never painting over an enemy, the intent tooltip staying off the hand, and the `CardView` drag path itself — the rejected-drop round trip, the reparent-before-resolve invariant, `TryPlayCard`'s three rejection gates leaving the hand *unchanged*, `_ExitTree` clearing the glow, the corpse-skipping hit test, potion cancel/click, live description vs a Vulnerable target | `EnemyView`, `CardView` drag/targeting, `CombatManager` targeting sub-state |
+| `CombatTargetingSmokeTest` | the drag/targeting layer (risk 5): target-lock glow, HUD never painting over an enemy, the intent tooltip staying off the hand, and the `CardView` drag path itself — the rejected-drop round trip, the reparent-before-resolve invariant, `TryPlayCard`'s four rejection gates leaving the hand *unchanged*, `_ExitTree` clearing the glow, the corpse-skipping hit test, potion cancel/click, live description vs a Vulnerable target | `EnemyView`, `CardView` drag/targeting, `CombatManager` targeting sub-state |
 | `RelicSmokeTest` | relic hooks fire through combat | `scripts/relics/`, relic hooks, `relics.json` |
-| `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic, every intent's telegraph against its effects, the derived label shapes, turn-start grants on both sides (`Metallicize` for an enemy, `Fervor`/`Foresight` for the player) | intent pickers, statuses, elite rewards, `EnemyView.FormatIntent`, `BeginPlayerTurn`, `enemies.json` |
+| `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic, every intent's telegraph against its effects, no enemy move using a card-only scope or `PerX`, the derived label shapes, turn-start grants on both sides (`Metallicize` for an enemy, `Fervor`/`Foresight` for the player) | intent pickers, statuses, elite rewards, `EnemyView.FormatIntent`, `BeginPlayerTurn`, `enemies.json` |
 | `HandLayoutSmokeTest` | hand fan spacing at 11+ cards, every card's text fits its box | `RefreshHand`, `HandFanLayout`, `CardView` text |
 | `DeckViewSmokeTest` | pile popups, pile counters, combat-end z-order | `PileViewPopup`, `DeckViewButtons`, `PileCounterBar` |
 | `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders, fits *and fills* the canvas | `MapGenerator`, `MapScreen`, `MapNode`, `acts.json` |
-| `EventSmokeTest` | event DB, outcome keys, `EventScreen` | `scripts/events/`, `events.json` |
-| `ScreenSmokeTest` | Reward/Shop/Treasure/Rest load, populate and show their art | any non-combat screen, `ScreenChrome`, or its `.tscn` |
+| `EventSmokeTest` | event DB, outcome keys, the `add_card` outcome and its authoring audit, `EventScreen` | `scripts/events/`, `events.json` |
+| `ScreenSmokeTest` | Reward/Shop/Treasure/Rest load, populate and show their art; the shop's card-removal picker opening, hiding the shop beneath it, and cancelling for free | any non-combat screen, `ScreenChrome`, or its `.tscn` |
 | `ActSmokeTest` | acts load, act progression, per-act content is distinct | `acts.json`, `ActDefinition`, `RunState.AdvanceAct` |
 | `RunSaveSmokeTest` | in-run save/load round-trip, save v2/v3 tolerance | `RunSaveData`, `RunSaveManager`, `RunState` |
 | `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |

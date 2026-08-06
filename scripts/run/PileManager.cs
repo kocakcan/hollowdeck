@@ -55,10 +55,87 @@ public class PileManager
         }
     }
 
+    // The three pile keywords all resolve here rather than at the call site in
+    // CombatManager.TryEndTurn, so there is one place to look and one place a
+    // fourth keyword would join.
+    //
+    // Ethereal beats Retain, stated rather than left to fall out of the branch
+    // order: nothing authors both today, and picking a winner explicitly is
+    // cheaper than discovering the answer from a bug report. A card that says
+    // "exhaust if you don't play it" must not be kept alive by a keyword that
+    // says "keep it".
+    //
+    // Iterated backwards because it removes as it goes.
     public void DiscardHand()
     {
-        Discard.AddRange(Hand);
-        Hand.Clear();
+        for (int i = Hand.Count - 1; i >= 0; i--)
+        {
+            var card = Hand[i];
+            if (card.Definition.Ethereal)
+            {
+                Hand.RemoveAt(i);
+                Exhaust.Add(card);
+            }
+            else if (card.Definition.Retain)
+            {
+                // Stays. BeginPlayerTurn then draws a full hand on top of it,
+                // so a retained card is a six-card hand - see CardDefinition.
+            }
+            else
+            {
+                Hand.RemoveAt(i);
+                Discard.Add(card);
+            }
+        }
+    }
+
+    // Moves every Innate card to where DrawHand will take it first. Called
+    // once from CombatManager.StartCombat, immediately after the opening
+    // shuffle and before the opening draw.
+    //
+    // DrawHand pops from the *end* of DrawPile, so "drawn first" means "last
+    // in the list" - which is the kind of inversion that reads as a bug six
+    // months later, hence the name and this comment rather than a bare
+    // AddRange at the call site.
+    //
+    // More Innate cards than the hand size needs no special case: the excess
+    // stays on top and arrives next turn. That is asserted rather than assumed
+    // (CardKeywordSmokeTest).
+    public void PromoteInnate()
+    {
+        var innate = DrawPile.Where(c => c.Definition.Innate).ToList();
+        if (innate.Count == 0) return;
+        DrawPile.RemoveAll(c => c.Definition.Innate);
+        DrawPile.AddRange(innate);
+    }
+
+    // The primitive everything in ROADMAP Phase 7 waited on: until this
+    // existed, nothing could put a card into a pile at runtime, so Curses,
+    // Status cards and every non-HP/non-gold event downside were unauthorable.
+    //
+    // Draw inserts at a random index rather than on top, because "shuffle it
+    // into your draw pile" is what the genre means and what makes a Curse a
+    // cost rather than a single bad turn. RngStreams.Combat is the right
+    // stream: a card resolving is combat, and risk 2 asks for a new stream per
+    // new *system*, not per new call site.
+    public void AddCard(CardDefinition definition, CardPile pile, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            var card = new CardInstance(definition);
+            switch (pile)
+            {
+                case CardPile.Hand:
+                    Hand.Add(card);
+                    break;
+                case CardPile.Draw:
+                    DrawPile.Insert(RngStreams.Combat.Next(DrawPile.Count + 1), card);
+                    break;
+                default:
+                    Discard.Add(card);
+                    break;
+            }
+        }
     }
 
     public void ExhaustCard(CardInstance card)

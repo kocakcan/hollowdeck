@@ -11,7 +11,7 @@ public class LoseHpEffect : IEffect
     {
         foreach (var target in ctx.Targets)
         {
-            target.CurrentHp -= System.Math.Min(target.CurrentHp, spec.Amount);
+            target.CurrentHp -= System.Math.Min(target.CurrentHp, ctx.AmountFor(spec));
         }
     }
 }

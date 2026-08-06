@@ -39,6 +39,7 @@ public partial class Phase4ContentSmokeTest : Node
         TestLoseHpEffect();
         TestEnragePickerSwitchesAtThreshold();
         TestEveryIntentTelegraphsWhatItResolves();
+        TestNoEnemyMoveUsesACardOnlyScope();
         TestIntentLabelsAreReadFromTheMove();
         TestEveryMoveDescribesItselfInTheEnemyVoice();
         await TestEnemyPowersPayOutEachTurn();
@@ -168,6 +169,43 @@ public partial class Phase4ContentSmokeTest : Node
         }
 
         Check("every_intent_telegraphs_what_it_resolves", problems.Count == 0, string.Join("; ", problems));
+    }
+
+    // The guard on the check above rather than a check of its own subject.
+    //
+    // Phase 7 gave EffectSpec two scopes the telegraph cannot express and one
+    // flag it cannot read. RandomEnemy is un-telegraphable by definition - the
+    // target is chosen at resolution, after the player has already committed a
+    // turn against the label. AllEnemies on an enemy move means its own side,
+    // which the enemy voice would print as "to you". And PerX has no amount
+    // until a card is played, which an enemy never does.
+    //
+    // All three resolve coherently if authored (see CombatManager.ScopedTargets
+    // and EffectContext.AmountFor), so nothing would crash - the move would
+    // just quietly do something other than what it announced. A drifted
+    // telegraph is the canonical bad bug in this genre, so this is an
+    // assertion rather than a comment in enemies.json.
+    private void TestNoEnemyMoveUsesACardOnlyScope()
+    {
+        var problems = new List<string>();
+        foreach (var def in EnemyDatabase.All)
+        {
+            foreach (var move in def.Moves.Concat(def.EnrageMoves))
+            {
+                foreach (var spec in move.Effects)
+                {
+                    if (spec.Scope is EffectScope.AllEnemies or EffectScope.RandomEnemy)
+                    {
+                        problems.Add($"{def.Id}/{move.MoveId}: scope {spec.Scope}");
+                    }
+                    if (spec.PerX) problems.Add($"{def.Id}/{move.MoveId}: perX");
+                }
+            }
+        }
+
+        Check("no_enemy_move_uses_a_card_only_scope", problems.Count == 0,
+            string.Join("; ", problems) + " - EnemyView cannot telegraph these, "
+            + "so the move would resolve as something other than its label");
     }
 
     // The label's *other* half is derived rather than authored - how many hits

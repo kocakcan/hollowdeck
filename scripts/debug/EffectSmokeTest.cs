@@ -89,7 +89,17 @@ public partial class EffectSmokeTest : Node
 
     private void TestPileShuffleAndDraw()
     {
-        var piles = new PileManager(CardDatabase.All);
+        // Deliberately NOT CardDatabase.All any more. Phase 7's keywords made
+        // that fixture a lie: a Retain card left in hand by DiscardHand and an
+        // Ethereal one routed to Exhaust both change these counts, and whether
+        // either was in the five drawn depended on the shuffle - so this test
+        // started failing intermittently for a reason that had nothing to do
+        // with draw, discard or reshuffle. A keyword-free deck is what this
+        // test was always measuring; CardKeywordSmokeTest owns the rest.
+        var plain = CardDatabase.All
+            .Where(c => !c.Retain && !c.Ethereal && !c.Innate)
+            .ToList();
+        var piles = new PileManager(plain);
         int total = piles.DrawPile.Count;
         piles.DrawHand(5);
         Check("draw_hand_moves_five", piles.Hand.Count == 5 && piles.DrawPile.Count == total - 5,
@@ -307,7 +317,13 @@ public partial class EffectSmokeTest : Node
     // Pauper category.
     private void TestEveryCardDeclaresARarity()
     {
-        var byRarity = CardDatabase.All.GroupBy(c => c.Rarity)
+        // The *offerable* pool, not the whole database. Curses and Status
+        // cards carry a Rarity because the field has no null, but it is inert
+        // on them - CardPool never offers one - so counting them here would
+        // inflate the denominator below and let the Rare ceiling keep passing
+        // for a reason that has nothing to do with how many Rares there are.
+        var offerable = CardDatabase.All.Where(c => c.IsPlayable).ToList();
+        var byRarity = offerable.GroupBy(c => c.Rarity)
             .ToDictionary(g => g.Key, g => g.Count());
 
         // Every tier populated: a weighting table that can roll a tier with no
@@ -322,8 +338,21 @@ public partial class EffectSmokeTest : Node
         // grow - but a ceiling, because a pool that drifts to a third Rares
         // makes both the weighting and the Pauper category meaningless.
         int rare = byRarity.GetValueOrDefault(Rarity.Rare);
-        Check("rares_are_at_most_a_quarter_of_the_pool", rare * 4 <= CardDatabase.All.Count,
-            $"{rare} rare of {CardDatabase.All.Count}");
+        Check("rares_are_at_most_a_quarter_of_the_pool", rare * 4 <= offerable.Count,
+            $"{rare} rare of {offerable.Count}");
+
+        // Both unplayable types are authored, and neither can ever be handed
+        // to the player as a reward. The second half is the assertion that
+        // matters: CardPool.Sample is the only gate, and it is one Where().
+        foreach (var type in new[] { CardType.Status, CardType.Curse })
+        {
+            Check($"pool_has_{type.ToString().ToLowerInvariant()}_cards",
+                CardDatabase.All.Any(c => c.Type == type), $"none authored at {type}");
+        }
+
+        var offered = CardPool.Sample(CardDatabase.All, CardDatabase.All.Count, new System.Random(7));
+        Check("no_unplayable_card_is_ever_offered", offered.All(c => c.IsPlayable),
+            string.Join(", ", offered.Where(c => !c.IsPlayable).Select(c => c.Id)));
 
         // The starting deck can never contain a Rare, or Pauper is unearnable
         // by construction and silently dead.
@@ -364,9 +393,13 @@ public partial class EffectSmokeTest : Node
             string.Join(", ", single.Select(c => c.Id)));
 
         // Asking for more than exists returns the pool, not an infinite loop.
+        // "The pool" is the offerable half: Sample filters unplayable cards
+        // out before it groups, so the ceiling is 91-of-95 rather than 95, and
+        // the gap between those two numbers is the exclusion working.
+        int offerableCount = CardDatabase.All.Count(c => c.IsPlayable);
         var everything = CardPool.Sample(CardDatabase.All, CardDatabase.All.Count + 5, rng);
-        Check("card_pool_caps_at_pool_size", everything.Count == CardDatabase.All.Count,
-            $"got {everything.Count} of {CardDatabase.All.Count}");
+        Check("card_pool_caps_at_offerable_pool_size", everything.Count == offerableCount,
+            $"got {everything.Count} of {offerableCount}");
     }
 
     // A Power leaves the fight when played: not to Discard (it would cycle
@@ -545,7 +578,11 @@ public partial class EffectSmokeTest : Node
     private void TestEveryCardUpgradeChangesSomething()
     {
         var unchanged = new List<string>();
-        foreach (var card in CardDatabase.All)
+        // Unplayable cards are skipped rather than exempted by name:
+        // CardUpgrade.Apply refuses them outright (there is no Wound+), so
+        // every one of them would fail this by construction and the failure
+        // would say nothing.
+        foreach (var card in CardDatabase.All.Where(c => c.IsPlayable))
         {
             var upgraded = CardUpgrade.Apply(card);
             bool moved = card.Effects

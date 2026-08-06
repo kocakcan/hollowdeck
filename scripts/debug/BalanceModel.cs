@@ -422,7 +422,18 @@ public static class BalanceModel
             while (true)
             {
                 var best = piles.Hand
-                    .Where(c => c.Definition.Cost <= energy)
+                    // Both guards are load-bearing rather than defensive.
+                    // An unplayable card would be "played" for zero damage,
+                    // which makes the yardstick blind to deck pollution -
+                    // the exact thing Curses exist to do. And an X card's
+                    // Cost is the -1 sentinel, so it passes the affordability
+                    // test at any energy and then *adds* one on the subtract
+                    // below, so `energy` climbs and the greedy loop empties
+                    // the whole hand every turn - silently inflating the
+                    // reference throughput every act band is measured against.
+                    // This model deliberately does not simulate X.
+                    .Where(c => c.Definition.IsPlayable && !c.Definition.IsXCost
+                        && c.Definition.Cost <= energy)
                     .OrderByDescending(c => CardDamage(c.Definition, player, target))
                     .ThenByDescending(c => c.Definition.Effects.Any(e => e.Status == "Vulnerable"))
                     .FirstOrDefault();

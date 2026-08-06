@@ -198,6 +198,8 @@ public static class ChromeStyles
             {
                 CardType.Attack => UiTheme.Palette.AttackFill,
                 CardType.Power => UiTheme.Palette.PowerFill,
+                CardType.Status => UiTheme.Palette.StatusFill,
+                CardType.Curse => UiTheme.Palette.CurseFill,
                 _ => UiTheme.Palette.SkillFill,
             },
             BorderColor = borderColor,

@@ -19,6 +19,7 @@ public static class EffectRegistry
         ["discard_cards"] = new DiscardCardsEffect(),
         ["exhaust_hand"] = new ExhaustHandEffect(),
         ["gain_gold"] = new GainGoldEffect(),
+        ["add_card"] = new AddCardEffect(),
     };
 
     // Single dispatch point for gameplay SFX - every card/potion/enemy-move
@@ -38,6 +39,9 @@ public static class EffectRegistry
         // near-identical shuffles.
         ["discard_cards"] = "card_draw",
         ["exhaust_hand"] = "card_draw",
+        // Same argument: add_card moves a card into a pile, which is what
+        // card_draw already sounds like.
+        ["add_card"] = "card_draw",
     };
 
     public static void Execute(EffectContext ctx, EffectSpec spec)

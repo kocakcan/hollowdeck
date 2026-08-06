@@ -105,6 +105,17 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "cards", name: "cataclysm", draw: cataclysm },
         Icon { category: "cards", name: "last_rite", draw: last_rite },
         Icon { category: "cards", name: "reap", draw: reap },
+        Icon { category: "cards", name: "sunder", draw: sunder },
+        Icon { category: "cards", name: "scattershot", draw: scattershot },
+        Icon { category: "cards", name: "blood_price", draw: blood_price },
+        Icon { category: "cards", name: "overload", draw: overload },
+        Icon { category: "cards", name: "hold_fast", draw: hold_fast },
+        Icon { category: "cards", name: "first_light", draw: first_light },
+        Icon { category: "cards", name: "mirage", draw: mirage },
+        Icon { category: "cards", name: "wound", draw: wound },
+        Icon { category: "cards", name: "dazed", draw: dazed },
+        Icon { category: "cards", name: "pain", draw: pain },
+        Icon { category: "cards", name: "writhe", draw: writhe },
     ]
 }
 
@@ -1587,6 +1598,164 @@ fn reap() -> Canvas {
     canvas.line(7, 8, 3, 14, BLADE_EDGE);
     canvas.line(3, 14, 12, 11, BLADE_EDGE);
     droplet(&mut canvas, 9, 20, 3, R3, R5);
+    finish(&mut canvas);
+    canvas
+}
+
+// -- phase 7: the card vocabulary ------------------------------------------
+//
+// Four of these are unplayable (Status and Curse), and they are the first
+// icons in the set that must read as *bad* at a glance in a fanned hand. They
+// share a rule the playable half does not: no weapon, no gold, and the ramp
+// stays below its midpoint, so a dead card is legible as clutter before its
+// frame colour or its rules text is read.
+
+/// Splitting one enemy while the crack runs through the rest — the blade is
+/// the single target, the fractures are the AllEnemies-scoped Vulnerable.
+fn sunder() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (7, 27), (24, 5), 2.0, BLADE, BLADE_EDGE);
+    crack(&mut canvas, &[(24, 6), (28, 11), (25, 15), (30, 20)], G3);
+    crack(&mut canvas, &[(8, 26), (4, 21), (8, 17), (3, 12)], G3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Three darts leaving on three different lines. The fan is the whole idea —
+/// drawn as an even spread rather than a burst, because the card fires three
+/// separate RandomEnemy hits and not one shotgun blast.
+fn scattershot() -> Canvas {
+    let mut canvas = new_icon();
+    arrow(&mut canvas, (3, 26), (27, 6), 2, 6, BLADE);
+    arrow(&mut canvas, (3, 26), (29, 16), 2, 6, N5);
+    arrow(&mut canvas, (3, 26), (23, 29), 2, 6, N5);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A dagger paid for in blood. The droplet is the Wound it shuffles into the
+/// discard pile, which is why it hangs below the blade rather than sitting on
+/// the edge the way Reap's does — it is what the card leaves behind, not what
+/// it takes.
+fn blood_price() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (10, 22), (23, 6), 1.5, BLADE, BLADE_EDGE);
+    canvas.thick_line(8, 25, 12, 20, 3, GRIP);
+    droplet(&mut canvas, 15, 27, 4, R3, R5);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Everything at once. The blade is ordinary; the three sparkles climbing it
+/// are the X — more energy, more of the same hit — and gold is the only place
+/// the unplayable half of this batch is not allowed to go, which is what keeps
+/// the two groups apart at a glance.
+fn overload() -> Canvas {
+    let mut canvas = new_icon();
+    blade(&mut canvas, (16, 29), (16, 4), 2.0, BLADE, BLADE_EDGE);
+    sparkle(&mut canvas, 7, 22, 4, G4);
+    sparkle(&mut canvas, 25, 16, 4, G4);
+    sparkle(&mut canvas, 9, 9, 3, G5);
+    finish_heavy(&mut canvas);
+    canvas
+}
+
+/// The shield the other shield cards quote, clamped shut. The two bars are
+/// Retain: the card is held rather than raised, which is the difference
+/// between this and Shrug It Off.
+fn hold_fast() -> Canvas {
+    let mut canvas = new_icon();
+    shield(&mut canvas, 16, 5, 22, 24, SHIELD_FACE, SHIELD_RIM);
+    canvas.rect(4, 12, 25, 3, N6);
+    canvas.rect(4, 19, 25, 3, N6);
+    canvas.rect(4, 12, 3, 10, N4);
+    canvas.rect(26, 12, 3, 10, N4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Sunrise over a horizon: the card is already in your opening hand, so the
+/// mark is the start of the fight rather than anything you do in it.
+fn first_light() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.disc(16, 22, 8, G3);
+    canvas.disc(16, 22, 5, G4);
+    // The horizon crops the disc into a rising half rather than a whole sun.
+    canvas.erase_rect(0, 23, 32, 9);
+    canvas.rect(2, 23, 28, 2, N5);
+    for x in [4, 10, 16, 22, 28] {
+        canvas.vline(x, 4, 6, G4);
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+/// Two offset rings and nothing solid inside them — the card is real for one
+/// turn and then it is not. Ethereal's colour everywhere else is the exhaust
+/// orange; here the shape carries it instead, because a filled orange orb
+/// would read as a potion.
+fn mirage() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.ring(14, 15, 10, 2, E1);
+    canvas.ring(18, 17, 10, 2, E3);
+    canvas.hline(8, 26, 16, E2);
+    canvas.hline(11, 29, 11, E1);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Three gashes. The most literal icon in the set on purpose: a Wound is not a
+/// mechanic the player has to learn, it is a card that does nothing, and the
+/// art should cost no thought at all.
+fn wound() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.thick_line(7, 4, 13, 28, 3, R3);
+    canvas.thick_line(15, 3, 20, 29, 3, R2);
+    canvas.thick_line(23, 5, 27, 27, 3, R3);
+    canvas.line(8, 6, 13, 26, R4);
+    canvas.line(24, 7, 27, 25, R4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The spiral Battle Trance uses, drained of its red and its gold core. Same
+/// shape, no payoff — which is the joke, and also the fastest way to say
+/// "this one does nothing" to a player who already knows the other card.
+fn dazed() -> Canvas {
+    let mut canvas = new_icon();
+    spiral(&mut canvas, 16, 16, 14, N4);
+    spiral(&mut canvas, 16, 16, 10, N5);
+    sparkle(&mut canvas, 6, 6, 3, N6);
+    sparkle(&mut canvas, 26, 25, 3, N6);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A barbed blot. Curses get the purple ramp's floor rather than the red one:
+/// red is damage, and a Curse never deals any — it just sits there.
+fn pain() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.poly(
+        &[(16, 2), (21, 12), (30, 16), (21, 20), (16, 30), (11, 20), (2, 16), (11, 12)],
+        P2,
+    );
+    canvas.disc(16, 16, 5, P1);
+    canvas.disc(16, 16, 2, R3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// A knot that will not come undone. Innate, so it is the first thing in your
+/// hand every fight — drawn tight and centred rather than sprawling, because
+/// the card's whole cost is that it is always *there*.
+fn writhe() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.ring(12, 13, 8, 3, P2);
+    canvas.ring(20, 19, 8, 3, P3);
+    canvas.ring(16, 16, 3, 2, P1);
+    // Barbs, so the knot reads as hostile rather than decorative.
+    canvas.line(4, 6, 8, 10, P4);
+    canvas.line(28, 26, 24, 22, P4);
     finish(&mut canvas);
     canvas
 }

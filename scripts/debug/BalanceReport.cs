@@ -39,7 +39,14 @@ public partial class BalanceReport : Node
         var reach = BalanceModel.Reachable(Seeds);
 
         Header("HOLLOWDECK BALANCE REPORT");
-        GD.Print($"{acts.Count} acts, {EnemyDatabase.All.Count} enemies, {CardDatabase.All.Count} cards, "
+        // Offerable, not the raw database count. Curses and Status cards are
+        // rows in cards.json but CardPool never offers one, so counting them
+        // here would overstate how much a run can actually draw from - and the
+        // first number in a balance report is the last place to be loose.
+        int offerable = CardDatabase.All.Count(c => c.IsPlayable);
+        int unplayable = CardDatabase.All.Count - offerable;
+        GD.Print($"{acts.Count} acts, {EnemyDatabase.All.Count} enemies, "
+                 + $"{offerable} offerable cards (+{unplayable} unplayable), "
                  + $"{Seeds} sampled runs. Damage figures are per turn.");
 
         PrintActCurve(acts, playerHp, throughput);

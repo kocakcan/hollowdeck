@@ -37,9 +37,13 @@ public static class Keywords
     // exists - Blurb's default arm is what would then need writing, and
     // EffectSmokeTest.TestEveryStatusHasAKeywordBlurb is what says so.
     //
-    // Block and Exhaust are the two non-status words the generated text uses
-    // that a player still has to be taught. Neither is a StatusType: Block is
-    // a field on Combatant, and Exhaust is a card destination.
+    // Six non-status words the generated text uses that a player still has to
+    // be taught. None is a StatusType: Block is a field on Combatant, Exhaust
+    // is a card destination, and the last four are card keywords - facts about
+    // the card printed by CardDefinition.KeywordLine rather than anything held
+    // by a combatant. They are hand-listed for exactly that reason: there is no
+    // enum to walk, so a seventh needs a line here and the smoke test for the
+    // *status* half cannot catch its absence.
     public static readonly IReadOnlyList<Entry> All =
         Enum.GetValues<StatusType>()
             .Select(s => new Entry(s.ToString(), Color(s), Blurb(s)))
@@ -47,6 +51,17 @@ public static class Keywords
                 "Reduces incoming damage this turn. Clears at the start of your turn."))
             .Append(new Entry("Exhaust", UiTheme.Palette.ExhaustAccent,
                 "The card is removed from your deck for the rest of this combat."))
+            .Append(new Entry("Retain", UiTheme.Palette.StatusBuff,
+                "Stays in your hand when you end your turn instead of being discarded."))
+            .Append(new Entry("Innate", UiTheme.Palette.StatusBuff,
+                "Starts in your opening hand every combat."))
+            // Ethereal is coloured as an exhaust rather than as a debuff,
+            // because that is what it does and the word Exhaust is not in its
+            // own blurb to say so.
+            .Append(new Entry("Ethereal", UiTheme.Palette.ExhaustAccent,
+                "If it is still in your hand when the turn ends, it is exhausted instead of discarded."))
+            .Append(new Entry("Unplayable", UiTheme.Palette.StatusDebuff,
+                "Cannot be played. It clogs your hand until the turn ends."))
             // Longest first so a keyword that is a prefix of another can never
             // shadow it in the alternation - regex alternation takes the first
             // branch that matches at a position, not the longest.

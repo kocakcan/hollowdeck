@@ -14,6 +14,6 @@ public class DrawCardsEffect : IEffect
             return;
         }
 
-        player.Piles.DrawHand(spec.Amount);
+        player.Piles.DrawHand(ctx.AmountFor(spec));
     }
 }

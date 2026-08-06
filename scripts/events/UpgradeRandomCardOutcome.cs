@@ -23,6 +23,12 @@ public class UpgradeRandomCardOutcome : IEventOutcome
         return null;
     }
 
+    // Shared by this outcome, upgrade_chosen_card, and the rest site's Smith
+    // picker - which is why the unplayable exclusion lives here rather than at
+    // any of the three. CardUpgrade.Apply refuses a Curse or a Status card, so
+    // offering one would put a card in the grid whose Upgrade button does
+    // nothing: a silent no-op wearing a button.
     public static IEnumerable<int> Upgradable() =>
-        Enumerable.Range(0, RunState.Deck.Count).Where(i => !CardUpgrade.IsUpgraded(RunState.Deck[i]));
+        Enumerable.Range(0, RunState.Deck.Count)
+            .Where(i => RunState.Deck[i].IsPlayable && !CardUpgrade.IsUpgraded(RunState.Deck[i]));
 }

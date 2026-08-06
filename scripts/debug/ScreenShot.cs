@@ -75,6 +75,12 @@ public partial class ScreenShot : Node
         // wrap into the cards.
         ["rewardactclear"] = new("res://scenes/RewardScreen.tscn", SeedActClearedReward),
         ["shop"] = new("res://scenes/ShopScreen.tscn", SeedShop),
+        // The shop's card-removal picker, which like the rest site's Smith and
+        // the event grid is unreachable without the click. Seeded with a
+        // deck deliberately wider than one row, since the thing worth looking
+        // at is whether the grid wraps inside its ScrollContainer rather than
+        // pushing the Cancel button off the bottom of the screen.
+        ["shopremove"] = new("res://scenes/ShopScreen.tscn", SeedShopRemoval, OpenShopRemoval),
         ["map"] = new("res://scenes/MapScreen.tscn", SeedMap),
         // One map + one boss fight per later act: each act has its own title,
         // backdrop tint, boss sprites and floor count, and none of that is
@@ -94,6 +100,10 @@ public partial class ScreenShot : Node
         // its enemies attack: a multi-hit count, a non-Strength buff, and a
         // Debuff intent.
         ["combatintents"] = new("res://scenes/CombatScreen.tscn", SeedIntentCombat, ShowNewIntents),
+        // The Phase 7 card vocabulary in a hand: both unplayable frames, the
+        // three keyword sentences, and an X-cost badge. No AfterReady - these
+        // have to read correctly *before* anything is played.
+        ["combatvocab"] = new("res://scenes/CombatScreen.tscn", SeedVocabularyCombat),
         // The pile popup is spawned on demand by DeckViewButtons rather than
         // being a screen of its own, so it needs a host screen plus the click
         // that opens it. Deck is deliberately larger than one row of the grid,
@@ -249,6 +259,32 @@ public partial class ScreenShot : Node
         };
     }
 
+    // Every card the Phase 7 vocabulary added, in one hand. The four frames
+    // this shot exists for cannot be asserted: a Curse and a Status card have
+    // their own fills and no cost badge, an X card's badge reads "X" rather
+    // than a number, and all four of the new keyword sentences have to fit the
+    // same 200x160 description box as everything else. HandLayoutSmokeTest
+    // catches truncation; only a shot catches "the fill is too close to Skill
+    // to tell apart at a glance".
+    private static void SeedVocabularyCombat()
+    {
+        CombatContext.EnemyDefinitionIds = new List<string> { "cultist", "slime" };
+        CombatContext.IsElite = false;
+        CombatContext.IsBoss = false;
+        CombatContext.GoldReward = 30;
+        // Exactly BaseHandSize cards, so the opening draw is the whole deck and
+        // the shot cannot depend on the shuffle. Sunder and Blood Price are
+        // left out: their new vocabulary is in the generated *text*, which
+        // HandLayoutSmokeTest already gates, whereas these five are the ones
+        // whose frames a test cannot see.
+        RunState.Deck = new List<CardDefinition>
+        {
+            CardDatabase.Get("wound"), CardDatabase.Get("pain"),
+            CardDatabase.Get("overload"), CardDatabase.Get("hold_fast"),
+            CardDatabase.Get("mirage"),
+        };
+    }
+
     private static void SeedDeckPopup()
     {
         SeedMap();
@@ -388,6 +424,24 @@ public partial class ScreenShot : Node
     // (150g) so the shot also exercises the affordability greying - the exact
     // state that was misread as a bug.
     private static void SeedShop() => RunState.Gold = 129;
+
+    private static void SeedShopRemoval()
+    {
+        SeedShop();
+        // A believable mid-run deck with the two things a player would
+        // actually be here to remove: the starters they have outgrown and the
+        // Curse an event handed them.
+        RunState.Deck = new List<CardDefinition>
+        {
+            CardDatabase.Get("strike"), CardDatabase.Get("strike"),
+            CardDatabase.Get("strike"), CardDatabase.Get("defend"),
+            CardDatabase.Get("defend"), CardDatabase.Get("bash"),
+            CardDatabase.Get("pain"), CardDatabase.Get("wound"),
+        };
+    }
+
+    private static void OpenShopRemoval(Node screen) =>
+        screen.GetNode<Button>("RemoveCardButton").EmitSignal(BaseButton.SignalName.Pressed);
 
     private static void SeedMap()
     {

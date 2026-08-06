@@ -28,7 +28,7 @@ public class DiscardCardsEffect : IEffect
         // gets discarded is a draw-order decision and belongs on the same
         // stream as the shuffle, so it can't shift what the shop stocks.
         var hand = player.Piles.Hand;
-        for (int i = 0; i < spec.Amount && hand.Count > 0; i++)
+        for (int i = 0; i < ctx.AmountFor(spec) && hand.Count > 0; i++)
         {
             int index = RngStreams.Combat.Next(hand.Count);
             player.Piles.Discard.Add(hand[index]);
