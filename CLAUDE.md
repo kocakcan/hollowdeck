@@ -81,8 +81,8 @@ keeping them apart is what stops a later edit reaching for the wrong multiplier.
 (`Strength`, `Dexterity`, and the grants) never decay; debuffs (`Weak`, `Vulnerable`, `Frail`)
 wear off by 1 a turn at the two `DecayStatus` sites, and `Poison` decays as it ticks. A new status
 needs an icon in `tools/artgen/src/icons/misc.rs`, an arm in `Keywords.Blurb` (**not**
-`StatusRow.Describe`, which does not exist — the prose moved to `scripts/ui/Keywords.cs` and this
-file said otherwise for two phases), and — easy to forget, and silent when missed — an entry in
+`StatusRow.Describe` — `StatusRow.cs` exists and is the obvious place to reach, but the prose lives
+in `scripts/ui/Keywords.cs`), and — easy to forget, and silent when missed — an entry in
 `CardUpgrade.ShouldScale`, or upgrading a card that grants it produces an identical `+`. That last failure now has a sweep behind it rather than a
 warning: `EffectSmokeTest.TestEveryCardUpgradeChangesSomething` fails any card whose `+` moves no
 number, which is how a missing entry announces itself.
@@ -222,10 +222,42 @@ events**, 27 relics, 12 potions, **36 enemies** (7 normals + 3 elites per act, p
 acts. Eleven statuses, eleven effect actions, four effect scopes, three card keywords, four intent
 types, sixteen event outcome keys.
 
-Enemy sprites are the one asset class that is **sourced rather than generated** — CC0 Dungeon Crawl
-tiles, palette-clamped by `artgen clamp`, mapped act by act in `CREDITS.md`. Adding an enemy means
-a row in `enemies.json`, a reference from exactly one act's pool (acts may not share enemies), and
-a 32x32 PNG; the first two are asserted by `ActSmokeTest`, the third by `PixelSpecSmokeTest`.
+Those per-act counts are *enemy ids*, not encounter slots: each act's `eliteEncounters` also fields
+one of its own **normals** as an escort — `rot_hound` (act 1), `ember_wisp` (act 2), `hollow_shade`
+(act 3) — so a normal appearing in an elite group is intended, not a mis-authored row. Sharing
+*across* acts is the thing that is forbidden, and that is the half `ActSmokeTest` asserts.
+
+**Icons are generated; sprites are sourced. Nothing in `assets/` is drawn by hand, and nothing is
+an SVG.** All **172** icons — 95 cards, 27 relics, 15 events, 12 potions, 11 status, 8 map, 4
+intents — are original work emitted by `tools/artgen`, one Rust `fn` per icon composing shapes onto
+a 32x32 grid out of the single 43-colour ramp in `docs/ART_SPEC.md` §5. They therefore need **no
+attribution**: the game-icons.net SVG set was retired in Phase 3 when the project committed to pixel
+art as one medium (the generator replaced all 78 of them, and the set has grown since), and
+`CREDITS.md` keeps that in a *Retired* section precisely so it doesn't get re-added. Don't
+reintroduce SVG source art — `docs/ART_SPEC.md` fails an SVG anywhere under `assets/`, and vector
+downscaled onto a 32x32 grid is mush rather than a sprite.
+
+Enemy and player sprites are the one exception, **sourced rather than generated** — CC0 Dungeon
+Crawl tiles, palette-clamped by `artgen clamp`, mapped act by act in `CREDITS.md`. Adding an enemy
+means a row in `enemies.json`, a reference from exactly one act's pool, and a 32x32 PNG; the first
+two are asserted by `ActSmokeTest`, the third by `PixelSpecSmokeTest`.
+
+Adding an *icon* is a `fn` plus its registry line in `tools/artgen/src/icons/`, then `generate`,
+then commit the PNGs **and the `.png.import` sidecars** — see the newly-added-PNG stall in
+Verification, which is the same workflow and the usual way this bites. `PixelSpecSmokeTest` fails
+both directions (a definition with no icon, an icon with no definition), and CI re-runs `generate`
+to catch committed art drifting from its source. The one command, for all three subcommands:
+
+```bash
+cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
+#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 172
+#   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
+#   validate           what run-smoke-tests.sh calls; nonzero exit on failure
+```
+
+There is **no `artgen` on `PATH`** and no `tools/artgen` wrapper — the binary under
+`tools/artgen/target/` is a gitignored build artifact, so always invoke it through `cargo run` as
+above.
 
 `ROADMAP.md` tracks what's genuinely still open. Packaged export, the card and enemy passes, the
 balance retune and now the *card* half of the vocabulary — keywords, per-effect targeting, the
@@ -233,6 +265,19 @@ balance retune and now the *card* half of the vocabulary — keywords, per-effec
 that vocabulary: enemy behaviours beyond picking a move, `Artifact` and three more statuses, relic
 tiers, potion rarity and combat drops, the `?` node, an ascension ladder. Don't treat this section
 as a to-do list.
+
+Two open items are worth knowing *before* you touch the code they sit in, rather than when the
+roadmap is next read:
+
+- **Status tooltips are mouse-only**, a live parity break against this file's own "fully playable
+  without a mouse". `StatusRow` sets stock Godot `TooltipText`, while `CardView` and `EnemyView`
+  already route through the keyboard-aware `scripts/ui/HoverTooltip.cs`. Route `StatusRow` through
+  the same widget rather than adding a second tooltip path.
+- **Non-16:9 windows lay out wrong.** `window/stretch/aspect="expand"` grows the canvas past 1152
+  units, but `ScreenChrome` centres a fixed 1152-wide panel and `MapScreen.cs` lays out against a
+  literal `1152f`. Identical at *any* 16:9 size, so it is invisible on this machine's display and
+  appears the first time anyone maximises on a 16:10 laptop — assume any new screen-layout code
+  inherits the bug unless it derives width from the viewport.
 
 ## Key files
 
@@ -311,7 +356,11 @@ as a to-do list.
   `tools/artgen/target/`.
 - **`dotnet build` before running or testing anything** — C# is compiled ahead of time, so
   otherwise you exercise the previous binary.
-- Godot is not on `PATH` on this machine; use the full path to the Mono build, or `$GODOT`.
+- **Godot is not on `PATH` on this machine.** The Mono build is at
+  `/Applications/Godot_mono.app/Contents/MacOS/Godot`. `tools/run-smoke-tests.sh`,
+  `tools/balance-report.sh` and `tools/build-export.sh` all default `$GODOT` to exactly that, so
+  they need no setup — `GODOT=/path/to/godot` is only for a machine where it lives elsewhere.
+  Invoke the full path directly when running a scene by hand.
 
 ## Verification
 
@@ -324,10 +373,10 @@ tools/run-smoke-tests.sh                 # all 20; builds first, nonzero exit on
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 
-The script also runs `tools/artgen validate` before the engine suites — the `docs/ART_SPEC.md`
-asset rules (grid, ramp, hard alpha, no SVG) checked against the raw PNG bytes, which the C# side
-can't do because `GD.Load` returns an imported texture. It's skipped with a warning if `cargo`
-isn't installed.
+The script also runs artgen's `validate` before the engine suites (see the Art section for the
+`cargo run` form — there is no `artgen` on `PATH`) — the `docs/ART_SPEC.md` asset rules (grid, ramp,
+hard alpha, no SVG) checked against the raw PNG bytes, which the C# side can't do because `GD.Load`
+returns an imported texture. It's skipped with a warning if `cargo` isn't installed.
 
 Each suite runs under a 90-second watchdog (override with `SUITE_TIMEOUT`). A test that throws
 inside `_Ready` — a `GetNode` against a path a restructured `.tscn` no longer has is the usual way
@@ -341,7 +390,7 @@ dropping any asset into `assets/`, and commit the sidecars it writes.
 
 `.github/workflows/ci.yml` runs this same script on every push to `main` and every PR. It imports
 assets first (`.godot/` is gitignored, so a fresh checkout resolves no resources at all) and then
-re-runs `artgen generate` to check the committed art still matches its source. A red CI on
+re-runs artgen's `generate` to check the committed art still matches its source. A red CI on
 "Generated art is up to date" means an icon `fn` was edited without re-running the generator.
 
 Run these after touching anything under `scripts/` or any `.tscn`, before reporting work done.
@@ -377,6 +426,12 @@ For anything visual — a `.tscn`, layout, colours, card/relic rendering, or a b
 "looks dimmed"/"overlaps"/"cut off" — use the `verify-screen` skill to render the real screen and
 look at the PNG. Never `--headless` for screenshots: the dummy renderer returns an empty
 viewport texture.
+
+Before opening or merging a PR, the `hollowdeck-review` agent (`.claude/agents/`) reviews the
+branch diff against `main`. It is aimed at what the suites structurally cannot catch and what this
+codebase actually produces — **silent no-ops at the data/code seam** (a new key never registered, a
+new status never added to `ShouldScale`), broken ordering invariants, duplicated content, and
+assertions that cannot fail. A green sweep is not evidence against any of those.
 
 Expected output that is **not** a regression: `MetaProgressionSmokeTest` prints a JSON parse
 warning with a backtrace (its deliberate corrupt-save case, proving the loader falls back to
