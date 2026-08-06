@@ -29,6 +29,7 @@ public partial class AudioSmokeTest : Node
         TestSfxPoolPlaybackDoesNotThrow();
         TestUnknownCueDoesNotThrow();
         TestSettingsVolumeRoundTrip();
+        TestVolumeChangesLeaveTheWindowAlone();
 
         GD.Print($"AudioSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -174,6 +175,42 @@ public partial class AudioSmokeTest : Node
 
         // Restore real settings from disk so this test doesn't leave the
         // singleton pointed at scratch data for whatever runs after it.
+        settings.LoadFrom("user://settings.json");
+    }
+
+    // The reported bug: dragging a volume slider dropped the game out of
+    // fullscreen. Every setter called one Apply() that did the audio buses
+    // *and* re-asserted the saved window mode, so a player who had gone
+    // fullscreen through the OS - never touching the toggle, so the flag said
+    // "windowed" - got thrown back into a window by changing the volume.
+    //
+    // Asserted by counting ApplyWindow calls rather than by reading the window
+    // mode back: a headless DisplayServer reports Windowed no matter what it is
+    // told, so comparing modes here would be a check that cannot fail.
+    private void TestVolumeChangesLeaveTheWindowAlone()
+    {
+        var settings = SettingsManager.Instance;
+        settings.LoadFrom("user://settings.json");
+
+        // Whatever the window is already doing. SetFullscreen below is called
+        // with it, so the check exercises ApplyWindow without actually moving
+        // a developer's window if this suite is ever run windowed.
+        bool current = settings.Fullscreen;
+
+        int before = SettingsManager.WindowModeApplications;
+        settings.SetMasterVolume(0.5f, ScratchPath);
+        settings.SetMusicVolume(0.5f, ScratchPath);
+        settings.SetSfxVolume(0.5f, ScratchPath);
+        int afterVolumes = SettingsManager.WindowModeApplications;
+
+        settings.SetFullscreen(current, ScratchPath);
+        int afterFullscreen = SettingsManager.WindowModeApplications;
+
+        Check("volume_changes_do_not_touch_the_window_mode", afterVolumes == before,
+            $"{afterVolumes - before} window-mode apply(s) from three volume changes - Apply() is fused again");
+        Check("the_fullscreen_setting_still_applies_the_window_mode", afterFullscreen == afterVolumes + 1,
+            $"SetFullscreen produced {afterFullscreen - afterVolumes} apply(s), expected 1");
+
         settings.LoadFrom("user://settings.json");
     }
 }

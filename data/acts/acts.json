@@ -37,7 +37,7 @@
     "eliteGold": 45,
     "bossGold": 60,
     "clearMaxHpBonus": 8,
-    "clearHealPercent": 30
+    "clearHealPercent": 100
   },
   {
     "id": "act_2",
@@ -76,7 +76,7 @@
     "eliteGold": 60,
     "bossGold": 80,
     "clearMaxHpBonus": 8,
-    "clearHealPercent": 30
+    "clearHealPercent": 100
   },
   {
     "id": "act_3",

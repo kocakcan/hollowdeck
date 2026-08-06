@@ -46,8 +46,10 @@ public class ActDefinition
 
     // Applied by RunState.AdvanceAct when this act is cleared. A run that has
     // to survive three acts on the 50 HP one act was tuned for would be
-    // hopeless, so clearing an act raises the ceiling and heals some of the
-    // damage - kept in data because it's the main dial for pacing a longer run.
+    // hopeless, so clearing an act raises the ceiling and heals - currently to
+    // full, the genre's default for a boss kill. Kept as a percentage in data
+    // rather than a hard-coded full heal because it is the main dial for pacing
+    // a longer run, and the rung an ascension ladder would turn back down.
     public int ClearMaxHpBonus { get; set; }
     public int ClearHealPercent { get; set; }
 }

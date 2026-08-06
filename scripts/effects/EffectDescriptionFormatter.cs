@@ -18,7 +18,8 @@ namespace Hollowdeck.Effects;
 //
 // Targets is who would actually be hit right now: the one enemy a card is
 // being dragged onto, or every living enemy for an AllEnemies card. Supplying
-// it turns the hypothetical "(~9 vs Vulnerable)" hint into the real number.
+// it is what turns a card's base "Deal 6 damage" into the 9 that will really
+// land on a Vulnerable enemy; without it the text stays on base numbers.
 public readonly record struct DescribeContext(
     Combatant? Source = null,
     CardTargetType TargetType = CardTargetType.None,
@@ -112,26 +113,16 @@ public static class EffectDescriptionFormatter
             i += repeats;
         }
 
-        // The vs-Vulnerable hint is appended once for the whole card rather
-        // than once per deal_damage effect - Twin Strike (two 4-damage hits)
-        // otherwise printed the parenthetical twice, doubling the longest
-        // line in a description box that's only 152x88. Skipped entirely
-        // when Targets is known, since then the printed numbers are already
-        // the real post-Vulnerable ones and the hint would contradict them.
-        int hint = VulnerablePreviewTotal(effects, ctx);
-        if (hint > 0) parts.Add($"(~{hint} vs Vulnerable)");
-
+        // An un-aimed card ends here, on its base numbers. It used to append a
+        // hypothetical "(~N vs Vulnerable)" as well, which was the longest line
+        // in a 152x88 description box and told the player nothing they could
+        // act on: it showed up on cards with no damage worth the space (Sweeping
+        // Blow's block line ran under it), on screens with no combat behind them
+        // at all, and it went away the instant the card was actually aimed -
+        // because from then on the printed numbers *are* the post-Vulnerable
+        // ones. Live targeting is the honest version of the same information,
+        // and it is the one that survived.
         return new DescribedEffects(string.Join(" ", parts), buffed, weakened);
-    }
-
-    private static int VulnerablePreviewTotal(List<EffectSpec> effects, DescribeContext ctx)
-    {
-        if (ctx.Targets is { Count: > 0 }) return 0;
-        return effects
-            // PerX is excluded because there is no amount yet to preview - the
-            // hint would have to invent a value for X.
-            .Where(e => e.Action == "deal_damage" && IsOutward(e.Scope) && !e.PerX)
-            .Sum(e => DamageMath.PreviewVsVulnerable(Outgoing(e.Amount, ctx.Source)));
     }
 
     private static int Outgoing(int baseAmount, Combatant? source) =>

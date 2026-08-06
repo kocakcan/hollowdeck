@@ -30,38 +30,54 @@ public partial class SettingsManager : Node
     public bool Fullscreen => _data.Fullscreen;
     public bool ReduceMotion => _data.ReduceMotion;
 
+    // What the window is doing *right now*, which is not the same question as
+    // what _data.Fullscreen remembers: the player can go fullscreen with the OS
+    // (the macOS green button, Cmd+Ctrl+F) without ever touching the toggle.
+    // SettingsScreen seeds its checkbox from this, so the control states the
+    // truth and switching it off works from either route.
+    public bool WindowIsFullscreen =>
+        DisplayServer.WindowGetMode() is DisplayServer.WindowMode.Fullscreen
+            or DisplayServer.WindowMode.ExclusiveFullscreen;
+
+    // Bumped by ApplyWindow, read by AudioSmokeTest. A headless DisplayServer
+    // reports Windowed whatever it is told, so "the window mode did not change"
+    // is a check that cannot fail there; counting the calls is the same
+    // assertion in a form that can.
+    internal static int WindowModeApplications;
+
     public override void _Ready()
     {
         Instance = this;
         LoadFrom(SavePath);
-        Apply();
+        ApplyAudio();
+        ApplyWindow();
     }
 
     public void SetMasterVolume(float linear, string? path = null)
     {
         _data.MasterVolume = Math.Clamp(linear, 0f, 1f);
-        Apply();
+        ApplyAudio();
         SaveTo(path ?? SavePath);
     }
 
     public void SetMusicVolume(float linear, string? path = null)
     {
         _data.MusicVolume = Math.Clamp(linear, 0f, 1f);
-        Apply();
+        ApplyAudio();
         SaveTo(path ?? SavePath);
     }
 
     public void SetSfxVolume(float linear, string? path = null)
     {
         _data.SfxVolume = Math.Clamp(linear, 0f, 1f);
-        Apply();
+        ApplyAudio();
         SaveTo(path ?? SavePath);
     }
 
     public void SetFullscreen(bool fullscreen, string? path = null)
     {
         _data.Fullscreen = fullscreen;
-        Apply();
+        ApplyWindow();
         SaveTo(path ?? SavePath);
     }
 
@@ -71,12 +87,21 @@ public partial class SettingsManager : Node
         SaveTo(path ?? SavePath);
     }
 
-    private void Apply()
+    // Two applies, not one, and the split is the whole point: these used to be
+    // a single Apply() that every setter called, so nudging a volume slider
+    // re-asserted the *saved* window mode. A player who had gone fullscreen
+    // through the OS had never set that flag, so changing the volume threw them
+    // back into a window. A setting only touches the subsystem it names.
+    private void ApplyAudio()
     {
         ApplyBusVolume("Master", _data.MasterVolume);
         ApplyBusVolume("Music", _data.MusicVolume);
         ApplyBusVolume("SFX", _data.SfxVolume);
+    }
 
+    private void ApplyWindow()
+    {
+        WindowModeApplications++;
         DisplayServer.WindowSetMode(_data.Fullscreen
             ? DisplayServer.WindowMode.Fullscreen
             : DisplayServer.WindowMode.Windowed);

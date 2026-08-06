@@ -20,8 +20,13 @@ public partial class SettingsScreen : Control
         sfxVolumeSlider.Value = SettingsManager.Instance.SfxVolume;
         sfxVolumeSlider.ValueChanged += v => SettingsManager.Instance.SetSfxVolume((float)v);
 
+        // Seeded from the live window mode rather than the saved flag: the OS
+        // can put the game fullscreen without this setting ever being touched
+        // (macOS green button), and a checkbox reading "off" on a fullscreen
+        // game needs two clicks to turn it off. Assigned before Toggled is
+        // subscribed, so seeding fires nothing.
         var fullscreenToggle = GetNode<CheckButton>("CenterContainer/VBoxContainer/FullscreenToggle");
-        fullscreenToggle.ButtonPressed = SettingsManager.Instance.Fullscreen;
+        fullscreenToggle.ButtonPressed = SettingsManager.Instance.WindowIsFullscreen;
         fullscreenToggle.Toggled += pressed => SettingsManager.Instance.SetFullscreen(pressed);
 
         var reduceMotionToggle = GetNode<CheckButton>("CenterContainer/VBoxContainer/ReduceMotionToggle");

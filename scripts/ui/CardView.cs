@@ -120,6 +120,17 @@ public partial class CardView : Panel
     private List<Keywords.Entry> _activeKeywords = new();
     private HoverTooltip? _keywordTooltip;
 
+    // The two independent reasons the panel is up, tracked apart because
+    // either can end while the other holds. A single "is it showing" flag
+    // could not, and the workaround for that - hiding on mouse-exit only when
+    // the card did not also have focus - stranded the panel permanently on the
+    // one card of every choice screen that ScreenKeyboardNav focuses on load:
+    // the mouse could raise it, and then nothing was left that would take it
+    // down. _focusShowing is focus *minus* that quiet grab, which is why the
+    // screen still opens silent.
+    private bool _hovered;
+    private bool _focusShowing;
+
     public override void _Ready()
     {
         PivotOffset = Size / 2f;
@@ -196,13 +207,15 @@ public partial class CardView : Panel
         // every choice screen grabs focus for its first card on load
         // (ScreenKeyboardNav), and that used to open a panel over the layout
         // before the player had touched anything.
-        if (!ScreenKeyboardNav.GrantingFocus) ShowKeywordTooltip();
+        _focusShowing = !ScreenKeyboardNav.GrantingFocus;
+        RefreshKeywordTooltip();
     }
 
     private void OnFocusExited()
     {
         ApplyFocusFrame(false);
-        HideKeywordTooltip();
+        _focusShowing = false;
+        RefreshKeywordTooltip();
     }
 
     private void ApplyFocusFrame(bool focused)
@@ -287,11 +300,10 @@ public partial class CardView : Panel
 
     // Re-renders the description for whichever enemy is being targeted right
     // now, so dragging onto a Vulnerable enemy shows the damage that will
-    // actually land instead of the generic "(~N vs Vulnerable)" hint. Only
+    // actually land rather than the base number an un-aimed card carries. Only
     // the text is rebuilt, not the keyword tooltip panel: the panel can be
     // open mid-drag and rebuilding it every time the drag crosses an enemy
-    // would flicker it. It may therefore still list Vulnerable for a beat
-    // after the hint text it came from was replaced by a real number.
+    // would flicker it.
     public void RefreshDescriptionForTarget(EnemyCombatant? target)
     {
         if (CardInstance is null || _descriptionLabel is null) return;
@@ -407,6 +419,17 @@ public partial class CardView : Panel
         });
     }
 
+    // The one place the panel's visibility is decided, so hover and focus can
+    // arrive and leave in any order without either overruling the other. Every
+    // caller sets one of the two flags and comes here; nothing calls Show or
+    // Hide directly, which is what stops a second contradictory rule appearing
+    // at one of the call sites the way the last one did.
+    private void RefreshKeywordTooltip()
+    {
+        if (_hovered || _focusShowing) ShowKeywordTooltip();
+        else HideKeywordTooltip();
+    }
+
     // Shows every keyword this card's text mentions as a small stacked panel
     // beside the card. Driven from four places that all mean "the player is
     // looking at this card": real mouse hover (OnMouseEntered/Exited below),
@@ -486,6 +509,7 @@ public partial class CardView : Panel
     private void OnMouseEntered()
     {
         if (_dragging || _leavingHand) return;
+        _hovered = true;
         if (Interactive)
         {
             ZIndex = 100;
@@ -495,12 +519,13 @@ public partial class CardView : Panel
             tween.TweenProperty(this, "rotation_degrees", 0f, 0.12); // "stands up straight"
             if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: true, CardUpgrade.IsUpgraded(CardInstance.Definition)));
         }
-        ShowKeywordTooltip();
+        RefreshKeywordTooltip();
     }
 
     private void OnMouseExited()
     {
         if (_dragging || _leavingHand) return;
+        _hovered = false;
         if (Interactive)
         {
             ZIndex = _restZIndex;
@@ -510,11 +535,10 @@ public partial class CardView : Panel
             tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.12);
             if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: false, CardUpgrade.IsUpgraded(CardInstance.Definition)));
         }
-        // Not on a non-interactive card that still holds keyboard focus: the
-        // mouse leaving is not the player looking away when the card is also
-        // the focused one, and hiding here would strand OnFocusExited with
-        // nothing left to hide.
-        if (Interactive || !HasFocus()) HideKeywordTooltip();
+        // Not necessarily a hide: a card the player focused themselves keeps
+        // its panel while the mouse wanders off it, which is what _focusShowing
+        // says and RefreshKeywordTooltip honours.
+        RefreshKeywordTooltip();
     }
 
     // Cards animate in from the draw pile when newly added to hand -
