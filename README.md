@@ -11,8 +11,9 @@ networking, desktop only (Windows/Mac/Linux).
 
 The core loop is playable end-to-end — new run, map, combat, events, shop, rest, treasure,
 rewards, bosses, run-end scoring, unlocks, and mid-run save/resume. Current content is three
-acts: **84 cards, 27 relics, 12 potions, 36 enemies (6 of them bosses), 15 events**. Each act has
-its own enemy pools and a two-boss pool the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
+acts: **95 cards (91 offerable, 4 unplayable Curses and Status cards), 27 relics, 12 potions,
+36 enemies (6 of them bosses), 15 events**. Each act has its own enemy pools and a two-boss pool
+the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
 what's still open.
 
 ## Stack
@@ -136,9 +137,32 @@ Most content needs no C# at all.
 }
 ```
 
-The ten `action` keys `EffectRegistry` currently knows: `deal_damage`, `gain_block`,
+`type` is one of `Attack` / `Skill` / `Power` / `Status` / `Curse`. The last two are **unplayable**:
+they are deck pollution rather than deck building, they can never be offered as a reward or bought,
+and `CardUpgrade` refuses them. The only way one enters a deck is an `add_card` effect or the
+`add_card` event outcome.
+
+Three optional keyword bools sit beside `exhaust`, all enforced in `PileManager`: `"retain": true`
+keeps the card in hand when the turn ends, `"innate": true` puts it in the opening hand, and
+`"ethereal": true` exhausts it at end of turn instead of discarding it. Ethereal beats Retain, and
+no card should declare both — asserted by `CardKeywordSmokeTest`.
+
+A `"cost": -1` is the **X-cost sentinel**: the card spends all remaining energy, and any effect
+declaring `"perX": true` multiplies its `amount` by what was spent. Per-spec rather than blanket, so
+`"Deal X damage. Gain 3 Block."` scales one and not the other.
+
+The eleven `action` keys `EffectRegistry` currently knows: `deal_damage`, `gain_block`,
 `apply_status`, `draw_cards`, `heal`, `gain_energy`, `lose_hp`, `discard_cards`, `exhaust_hand`,
-`gain_gold`. The eleven statuses available to `apply_status`: `Vulnerable`, `Weak`, `Strength`,
+`gain_gold`, `add_card`. The last takes a `cardId` and a `pile` (`Hand` / `Draw` / `Discard`, and
+`Draw` shuffles in at a random index rather than stacking on top), with `amount` as the copy count —
+it is what makes Curses, Status cards and self-replicating cards authorable at all.
+
+`scope` is per-effect targeting, one level below the card's own `target`: `Target` (whoever the card
+was aimed at), `Self`, `AllEnemies`, `RandomEnemy`. The last two are why one card can hit its target
+and debuff the whole room. Enemy moves may not use them — `EnemyView` cannot telegraph a target
+chosen at resolution, and `Phase4ContentSmokeTest` refuses any move that tries.
+
+The eleven statuses available to `apply_status`: `Vulnerable`, `Weak`, `Strength`,
 `Poison`, `Dexterity`, `Frail`, `Metallicize`, `Ritual`, `Regen`, `Fervor`, `Foresight` — the last
 five pay out every turn and never decay, which is what a `Power` card buys. A genuinely new
 mechanic means a new `IEffect` in `scripts/effects/` registered in `EffectRegistry` — reach for
@@ -153,10 +177,10 @@ the name of the status a Buff grants are derived from the move's own effects, so
 promise something it doesn't do. A new enemy also needs a 32x32 sprite at
 `assets/sprites/enemies/<id>.png` (sourced and clamped, see `CREDITS.md`) and a reference from
 some act's pool; both are asserted. **An event** (`data/events/events.json`) is text plus choices,
-each naming one of `EventOutcomeRegistry`'s fifteen outcomes (`gain_gold`, `lose_gold`, `heal`,
-`lose_hp`, `gain_max_hp`, `lose_max_hp`, `gain_random_card`, `gain_relic`, `lose_relic`,
+each naming one of `EventOutcomeRegistry`'s sixteen outcomes (`gain_gold`, `lose_gold`, `heal`,
+`lose_hp`, `gain_max_hp`, `lose_max_hp`, `gain_random_card`, `add_card`, `gain_relic`, `lose_relic`,
 `gain_potion`, `upgrade_random_card`, `gamble`, `remove_chosen_card`, `upgrade_chosen_card`,
-`none`).
+`none`). `add_card` takes a `cardId` and is how an event costs something other than HP or gold.
 
 **An act** (`data/acts/acts.json`) is a chapter of a run, in play order: `floorCount`, the
 `normalEncounters` / `eliteEncounters` pools (each entry is one group, so `["slime","slime"]` is a
@@ -204,7 +228,7 @@ that reaches, but nothing in the game currently needs one — same standing as `
 
 There's no test framework. Each `scenes/debug/*SmokeTest.tscn` runs assertions in `_Ready`,
 prints `PASS`/`FAIL` per check and a `<Name>: N passed, M failed` summary, then exits nonzero if
-anything failed. 17 suites, 770 checks:
+anything failed. 20 suites, 1072 checks:
 
 ```bash
 tools/run-smoke-tests.sh                 # all of them; builds first, nonzero exit on any failure

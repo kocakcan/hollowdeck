@@ -14,6 +14,6 @@ public class GainEnergyEffect : IEffect
             return;
         }
 
-        player.CurrentEnergy += spec.Amount;
+        player.CurrentEnergy += ctx.AmountFor(spec);
     }
 }

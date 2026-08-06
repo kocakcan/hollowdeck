@@ -103,6 +103,10 @@ public partial class CombatManager : Node
         _cardsThisTurn = 0;
 
         Player.Piles.Shuffle(Player.Piles.DrawPile);
+        // After the shuffle and before the opening draw in BeginPlayerTurn -
+        // the only window where "drawn first" means anything. See
+        // PileManager.PromoteInnate for why it appends rather than prepends.
+        Player.Piles.PromoteInnate();
 
         var ctx = MakeRelicContext();
         foreach (var relic in Relics) relic.Behavior.OnCombatStart(ctx);
@@ -165,10 +169,26 @@ public partial class CombatManager : Node
     public bool TryPlayCard(CardInstance card, EnemyCombatant? explicitTarget = null)
     {
         if (State != CombatState.PlayerTurn) return false;
-        if (card.Definition.Cost > Player.CurrentEnergy) return false;
+        // The fourth gate, first in the list because it is the only one that
+        // is a property of the card rather than of the situation: a Curse or a
+        // Status card is never playable, at any energy, against any target.
+        if (!card.Definition.IsPlayable) return false;
+
+        // An X-cost card spends everything left, so it is always affordable -
+        // including at zero energy, where it resolves for nothing. Reading the
+        // cost through this local rather than off the definition is what keeps
+        // the -1 sentinel from leaking into the comparison below and into
+        // ResolveCard's subtraction, where it would *grant* energy.
+        int cost = card.Definition.IsXCost ? Player.CurrentEnergy : card.Definition.Cost;
+        // An X card at zero energy resolves for nothing and is gone - a pure
+        // trap, and one the player would spring by misreading an always-bright
+        // frame. Refusing it costs no expressiveness, and it is why CardView
+        // treats an X card as unaffordable at zero rather than always bright.
+        if (card.Definition.IsXCost && cost < 1) return false;
+        if (cost > Player.CurrentEnergy) return false;
         if (card.Definition.Target == CardTargetType.SingleEnemy && explicitTarget is null) return false;
 
-        ResolveCard(card, ResolveTargets(card.Definition.Target, explicitTarget));
+        ResolveCard(card, ResolveTargets(card.Definition.Target, explicitTarget), cost);
         return true;
     }
 
@@ -204,6 +224,45 @@ public partial class CombatManager : Node
         ResolvePotion(potion, ResolveTargets(potion.Definition.Target, enemy));
     }
 
+    // Who a single EffectSpec actually hits, given the card- or move-level
+    // targets already resolved by ResolveTargets. This used to be a three-line
+    // ternary written out twice - once for the player in ResolveCard, once for
+    // the enemy turn - which is exactly how the two would have drifted the
+    // moment a third scope existed.
+    //
+    // AllEnemies and RandomEnemy are resolved against the source's opposition
+    // rather than against the player's, so an enemy authoring one is coherent
+    // (its "all enemies" is the player) instead of crashing. Nothing authors
+    // them, and Phase4ContentSmokeTest refuses any enemy move that does: an
+    // intent's telegraph is derived from these specs, and a scope EnemyView
+    // does not account for is a route to a telegraph that lies.
+    private List<Combatant> ScopedTargets(EffectSpec effect, Combatant source, List<Combatant> declared)
+    {
+        switch (effect.Scope)
+        {
+            case EffectScope.Self:
+                return new List<Combatant> { source };
+            case EffectScope.AllEnemies:
+                return Opposition(source);
+            case EffectScope.RandomEnemy:
+            {
+                var pool = Opposition(source);
+                // Combat, not a stream of its own: a card resolving is combat,
+                // and risk 2 asks for a new stream per new *system*.
+                return pool.Count == 0
+                    ? pool
+                    : new List<Combatant> { pool[RngStreams.Combat.Next(pool.Count)] };
+            }
+            default:
+                return declared;
+        }
+    }
+
+    private List<Combatant> Opposition(Combatant source) =>
+        source == Player
+            ? Enemies.Cast<Combatant>().ToList()
+            : new List<Combatant> { Player };
+
     private List<Combatant> ResolveTargets(CardTargetType targetType, EnemyCombatant? explicitTarget)
     {
         return targetType switch
@@ -220,7 +279,9 @@ public partial class CombatManager : Node
     // OnDamageDealt/OnDamageTaken relic hooks, computed from actual HP lost
     // (post-block), and always attributed to the Player since relics in
     // this game are always player-owned.
-    private void ExecuteEffect(EffectSpec spec, Combatant source, List<Combatant> targets)
+    // x is how much energy an X-cost card spent, or null for everything else -
+    // see EffectContext.AmountFor, which is the only thing that reads it.
+    private void ExecuteEffect(EffectSpec spec, Combatant source, List<Combatant> targets, int? x = null)
     {
         // Snapshotted around EVERY effect, not just deal_damage, so the
         // no-damage-taken scoring bonus (RunScore's Champion/Perfect) also
@@ -228,15 +289,17 @@ public partial class CombatManager : Node
         // anything a future effect does to the player's HP.
         int playerHpBefore = Player.CurrentHp;
 
+        var ctx = new EffectContext { Source = source, Targets = targets, Combat = this, XAmount = x };
+
         if (spec.Action != "deal_damage")
         {
-            EffectRegistry.Execute(new EffectContext { Source = source, Targets = targets, Combat = this }, spec);
+            EffectRegistry.Execute(ctx, spec);
             if (Player.CurrentHp < playerHpBefore) TookDamage = true;
             return;
         }
 
         var before = targets.ToDictionary(t => t, t => t.CurrentHp);
-        EffectRegistry.Execute(new EffectContext { Source = source, Targets = targets, Combat = this }, spec);
+        EffectRegistry.Execute(ctx, spec);
 
         var relicCtx = MakeRelicContext();
         foreach (var target in targets)
@@ -254,11 +317,17 @@ public partial class CombatManager : Node
         if (Player.CurrentHp < playerHpBefore) TookDamage = true;
     }
 
-    private void ResolveCard(CardInstance card, List<Combatant> targets)
+    // cost is what TryPlayCard already resolved: the authored cost, or all
+    // remaining energy for an X-cost card. Never card.Definition.Cost, which
+    // for an X card is the -1 sentinel and would *grant* two energy here.
+    private void ResolveCard(CardInstance card, List<Combatant> targets, int cost)
     {
         TransitionTo(CombatState.ResolvingCard);
 
-        Player.CurrentEnergy -= card.Definition.Cost;
+        // Read before the spend, because the spend zeroes it.
+        int? x = card.Definition.IsXCost ? cost : null;
+
+        Player.CurrentEnergy -= cost;
         _cardsThisTurn++;
         MostCardsInOneTurn = Math.Max(MostCardsInOneTurn, _cardsThisTurn);
         Player.Piles.Hand.Remove(card);
@@ -272,12 +341,14 @@ public partial class CombatManager : Node
 
         foreach (var effect in card.Definition.Effects)
         {
-            var scopedTargets = effect.Scope == EffectScope.Self
-                ? new List<Combatant> { Player }
-                : targets;
-            ExecuteEffect(effect, Player, scopedTargets);
+            ExecuteEffect(effect, Player, ScopedTargets(effect, Player, targets), x);
         }
 
+        // add_card can put a card straight into the hand, and drawing already
+        // could - neither shows until the hand is rebuilt. CombatantsChanged
+        // below drives the same Refresh, so this is covered; it is called out
+        // because the HandChanged above fires *before* the effects run and
+        // reads as though it were the one doing it.
         var relicCtx = MakeRelicContext();
         foreach (var relic in Relics) relic.Behavior.OnCardPlayed(relicCtx, card);
 
@@ -302,10 +373,7 @@ public partial class CombatManager : Node
 
         foreach (var effect in potion.Definition.Effects)
         {
-            var scopedTargets = effect.Scope == EffectScope.Self
-                ? new List<Combatant> { Player }
-                : targets;
-            ExecuteEffect(effect, Player, scopedTargets);
+            ExecuteEffect(effect, Player, ScopedTargets(effect, Player, targets));
         }
 
         RemoveDeadEnemies();
@@ -375,10 +443,7 @@ public partial class CombatManager : Node
             var playerTargets = new List<Combatant> { Player };
             foreach (var effect in move.Effects)
             {
-                var scopedTargets = effect.Scope == EffectScope.Self
-                    ? new List<Combatant> { enemy }
-                    : playerTargets;
-                ExecuteEffect(effect, enemy, scopedTargets);
+                ExecuteEffect(effect, enemy, ScopedTargets(effect, enemy, playerTargets));
             }
 
             if (Player.IsDead)

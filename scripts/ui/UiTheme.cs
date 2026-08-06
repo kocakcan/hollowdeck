@@ -46,6 +46,16 @@ public static class UiTheme
         // when it lands, rather than picking a hue under deadline.
         public static readonly Color PowerFill = PixelSpec.Ramp.P1;
 
+        // The two unplayable types. Both are deliberately *darker* than the
+        // three playable fills rather than a new hue: the signal a player needs
+        // at a glance in a fanned hand is "this one is dead", and the ramp's
+        // low end says that without competing with the rarity border. Status is
+        // the neutral end (inert clutter); Curse is the bruised near-black at
+        // the bottom of the purple ramp, one step below PowerFill so the two
+        // can never be confused for each other.
+        public static readonly Color StatusFill = PixelSpec.Ramp.N3;
+        public static readonly Color CurseFill = PixelSpec.Ramp.P0;
+
         // Damage/heal/block semantics (FloatingText, HP bar fill)
         public static readonly Color Damage = PixelSpec.Ramp.R5;
         public static readonly Color Heal = PixelSpec.Ramp.V4;

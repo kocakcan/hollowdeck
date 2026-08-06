@@ -9,7 +9,7 @@ public class HealEffect : IEffect
     {
         foreach (var target in ctx.Targets)
         {
-            target.CurrentHp = Math.Min(target.MaxHp, target.CurrentHp + spec.Amount);
+            target.CurrentHp = Math.Min(target.MaxHp, target.CurrentHp + ctx.AmountFor(spec));
         }
     }
 }

@@ -234,7 +234,12 @@ public partial class CardView : Panel
 
         var def = card.Definition;
         _nameLabel.Text = def.Name;
-        _costLabel.Text = def.Cost.ToString();
+        // An X card's badge shows the letter, not the -1 sentinel. An
+        // unplayable card has no badge at all: a Curse is authored cost 0, and
+        // a 0 in the energy badge reads as "free to play", which is the one
+        // thing it is not.
+        _costBadge.Visible = def.IsPlayable;
+        _costLabel.Text = def.IsXCost ? "X" : def.Cost.ToString();
         _exhaustBadge.Visible = def.Exhaust;
 
         var icon = ArtAssets.CardIcon(def.Id);
@@ -247,9 +252,14 @@ public partial class CardView : Panel
         // is already the flag separating those two worlds, and gating on it
         // keeps the tint correct even if the CombatManager.Instance lifetime
         // regresses again.
+        // An unplayable card is dimmed at every energy level, which is the only
+        // signal the frame has that TryPlayCard will refuse it. An X card is
+        // affordable whenever there is any energy at all - it spends whatever
+        // is left, and TryPlayCard refuses it at zero.
         bool affordable = !Interactive
-            || CombatManager.Instance?.Player is not { } player
-            || player.CurrentEnergy >= def.Cost;
+            || (def.IsPlayable
+                && (CombatManager.Instance?.Player is not { } player
+                    || (def.IsXCost ? player.CurrentEnergy >= 1 : player.CurrentEnergy >= def.Cost)));
         Modulate = affordable ? Colors.White : UnaffordableTint;
 
         AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(def.Type, def.Rarity, hovered: false, CardUpgrade.IsUpgraded(def)));
@@ -292,8 +302,14 @@ public partial class CardView : Panel
 
     private DescribedEffects RefreshDescription()
     {
-        var described = EffectDescriptionFormatter.DescribeDetailed(
-            CardInstance!.Definition.Effects, BuildDescribeContext());
+        // DescribeCard, not DescribeDetailed: the keyword sentence (Retain,
+        // Innate, Ethereal, Unplayable) is a fact about the card rather than
+        // about its effects, and this is the one renderer that has the whole
+        // CardDefinition. It is also what feeds Keywords.Find below, so the
+        // three new keywords get their hover blurbs from the same text scan
+        // that already explains Block and Exhaust.
+        var described = EffectDescriptionFormatter.DescribeCard(
+            CardInstance!.Definition, BuildDescribeContext());
         SetDescriptionText(described);
         return described;
     }

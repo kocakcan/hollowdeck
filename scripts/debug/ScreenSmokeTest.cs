@@ -296,6 +296,47 @@ public partial class ScreenSmokeTest : Node
         Check("shop_offer_shows_its_icon",
             offers.GetChild(0).GetChild(0).GetChildren().OfType<CenterContainer>().Count() == 1,
             "offer tile has no icon slot");
+
+        // Card removal. It ships in the same phase as Curses on purpose -
+        // adding a way to put dead cards in a deck without a way to take them
+        // out is punishment rather than design - so this asserts the pairing
+        // rather than just the button.
+        //
+        // A button beside Leave, not a fifth tile: five 260px tiles plus
+        // separations come to 1364 against OffersRow's 1112 and the outer two
+        // would clip. That is why the count above stays 4.
+        var removeButton = screen.GetNode<Button>("RemoveCardButton");
+        var picker = screen.GetNode<Control>("PickerCenterContainer");
+        Check("shop_sells_card_removal", removeButton.Text.Contains("75"), $"text='{removeButton.Text}'");
+        Check("shop_removal_picker_starts_hidden", !picker.Visible, "picker visible on load");
+
+        // Two cards, so Selectable()'s one-card floor does not refuse.
+        RunState.Deck = new List<CardDefinition>
+        {
+            CardDatabase.Get("strike"), CardDatabase.Get("defend"),
+        };
+        removeButton.EmitSignal(BaseButton.SignalName.Pressed);
+        Check("shop_removal_opens_a_card_picker", picker.Visible, "picker still hidden");
+        // The shop underneath is hidden rather than merely covered: Godot's
+        // focus navigation reaches controls behind an overlay perfectly
+        // happily, so a visible-but-covered Buy button would still be tabbable.
+        Check("shop_removal_picker_hides_the_shop_beneath_it",
+            !cardRow.Visible && !offers.Visible, "offers still visible behind the picker");
+
+        var pickerList = screen.GetNode<GridContainer>(
+            "PickerCenterContainer/PickerVBox/ScrollContainer/PickerList");
+        Check("shop_removal_picker_shows_one_column_per_card",
+            pickerList.GetChildCount() == 2, $"columns={pickerList.GetChildCount()}");
+
+        // Cancel must not charge - gold is spent in the picker's callback, not
+        // at the button press.
+        int goldBefore = RunState.Gold;
+        screen.GetNode<Button>("PickerCenterContainer/PickerVBox/PickerCancelButton")
+            .EmitSignal(BaseButton.SignalName.Pressed);
+        Check("shop_removal_cancel_is_free",
+            !picker.Visible && RunState.Gold == goldBefore && RunState.Deck.Count == 2,
+            $"gold {goldBefore}->{RunState.Gold}, deck={RunState.Deck.Count}");
+
         screen.QueueFree();
     }
 

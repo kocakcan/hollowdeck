@@ -58,6 +58,26 @@ public static class EffectDescriptionFormatter
     public static string Describe(List<EffectSpec> effects, DescribeContext ctx) =>
         DescribeDetailed(effects, ctx).Text;
 
+    /// The card-aware form, for the one caller that has a whole
+    /// CardDefinition: it prefixes the card's keyword sentence ("Retain.",
+    /// "Unplayable.") onto the generated effect text.
+    ///
+    /// An overload rather than a change to the signature above, because
+    /// potions and enemy moves have effects but no CardDefinition. It is also
+    /// what stops an unplayable card with no effects rendering an empty
+    /// description box, and it feeds Keywords.Find for free - the hover
+    /// tooltips for the three new keywords come out of the same text scan that
+    /// already explains Block and Exhaust.
+    public static DescribedEffects DescribeCard(CardDefinition card, DescribeContext ctx)
+    {
+        var described = DescribeDetailed(card.Effects, ctx);
+        string keywords = card.KeywordLine();
+        if (keywords.Length == 0) return described;
+
+        string text = described.Text.Length == 0 ? keywords : $"{keywords} {described.Text}";
+        return described with { Text = text };
+    }
+
     public static DescribedEffects DescribeDetailed(List<EffectSpec> effects, DescribeContext ctx)
     {
         var parts = new List<string>();
@@ -108,12 +128,28 @@ public static class EffectDescriptionFormatter
     {
         if (ctx.Targets is { Count: > 0 }) return 0;
         return effects
-            .Where(e => e.Action == "deal_damage" && e.Scope == EffectScope.Target)
+            // PerX is excluded because there is no amount yet to preview - the
+            // hint would have to invent a value for X.
+            .Where(e => e.Action == "deal_damage" && IsOutward(e.Scope) && !e.PerX)
             .Sum(e => DamageMath.PreviewVsVulnerable(Outgoing(e.Amount, ctx.Source)));
     }
 
     private static int Outgoing(int baseAmount, Combatant? source) =>
         source is null ? baseAmount : DamageMath.ComputeOutgoing(baseAmount, source);
+
+    // How much a spec is for, as text. An X-cost spec has no number until the
+    // card is played - it is worth whatever energy is left at that moment - so
+    // it prints the letter instead: "X" for the ordinary amount-1 case, "3X"
+    // for a spec that pays 3 per point.
+    //
+    // Deliberately not a live preview against current energy. That would be a
+    // real number, it would be correct, and it would change under the player
+    // every time they spent a card - so the description would flicker between
+    // two truths. "X" is not a lie; it is the card's actual rule.
+    private static string Amount(EffectSpec effect) =>
+        effect.PerX
+            ? (effect.Amount == 1 ? "X" : $"{effect.Amount}X")
+            : effect.Amount.ToString();
 
     // EffectSpec is a plain serialization class, so it has reference equality
     // and cannot be compared directly. Deliberately not converted to a record:
@@ -123,8 +159,13 @@ public static class EffectDescriptionFormatter
     // multi-hit is a run of identical specs on both sides of the game, and
     // "Deal 4 damage twice" and a "4 x2" telegraph must never disagree about
     // what counts as one.
+    // Every field, not just the four that existed when this was written: two
+    // add_card specs naming *different* cards would otherwise collapse into
+    // "Add 1 Wound to your discard pile. twice.", which is both wrong and the
+    // kind of wrong a telegraph inherits.
     public static bool SameEffect(EffectSpec a, EffectSpec b) =>
-        a.Action == b.Action && a.Amount == b.Amount && a.Status == b.Status && a.Scope == b.Scope;
+        a.Action == b.Action && a.Amount == b.Amount && a.Status == b.Status && a.Scope == b.Scope
+        && a.CardId == b.CardId && a.Pile == b.Pile && a.PerX == b.PerX;
 
     // DescribeEffect hands back a finished sentence, so the repetition has to
     // go inside it, before the full stop.
@@ -136,8 +177,20 @@ public static class EffectDescriptionFormatter
             _ => $"{sentence.TrimEnd('.')} {times} times.",
         };
 
+    // Two ways to mean "everything": the card-level CardTargetType.AllEnemies
+    // that has existed since Cleave, and the per-effect EffectScope.AllEnemies
+    // added in Phase 7 so one card can hit its target and debuff the room.
+    // Both read the same to a player, so both produce the same suffix.
     private static bool TargetsAllEnemies(EffectSpec effect, DescribeContext ctx) =>
-        effect.Scope == EffectScope.Target && ctx.TargetType == CardTargetType.AllEnemies;
+        effect.Scope == EffectScope.AllEnemies
+        || (effect.Scope == EffectScope.Target && ctx.TargetType == CardTargetType.AllEnemies);
+
+    // Aimed at somebody other than the caster - which is every scope except
+    // Self. The three that qualify all take the Vulnerable-adjusted damage
+    // treatment and the enemy voice's "to you" suffix; writing it as one
+    // predicate is what stops a fifth scope being added to three of the four
+    // sites that need it.
+    private static bool IsOutward(EffectScope scope) => scope != EffectScope.Self;
 
     private static string DescribeEffect(EffectSpec effect, DescribeContext ctx, List<int> buffed, List<int> weakened, bool hoistedAllEnemies)
     {
@@ -145,12 +198,20 @@ public static class EffectDescriptionFormatter
         {
             case "deal_damage":
             {
+                // An X spec has no number to run Strength/Weak/Vulnerable
+                // through, so it takes none of the tint bookkeeping below
+                // either - there is nothing to compare an adjusted figure to.
+                if (effect.PerX)
+                {
+                    return $"{Verb(ctx, "Deal", "Deals")} {Amount(effect)} damage{Suffix(effect, ctx, hoistedAllEnemies)}.";
+                }
                 int outgoing = Outgoing(effect.Amount, ctx.Source);
                 Record(effect.Amount, outgoing, buffed, weakened);
                 return $"{Verb(ctx, "Deal", "Deals")} {DamageAmount(outgoing, effect, ctx, buffed)} damage{Suffix(effect, ctx, hoistedAllEnemies)}.";
             }
             case "gain_block":
             {
+                if (effect.PerX) return $"{Verb(ctx, "Gain", "Gains")} {Amount(effect)} Block.";
                 // Block goes through BlockMath for the same reason damage goes
                 // through DamageMath: once Dexterity and Frail exist, the
                 // authored amount stops being the amount the player gets, and
@@ -170,18 +231,18 @@ public static class EffectDescriptionFormatter
             // "Apply 3 Metallicize" on a card that targets nobody but you.
             case "apply_status":
                 return effect.Scope == EffectScope.Self
-                    ? $"{Verb(ctx, "Gain", "Gains")} {effect.Amount} {effect.Status}."
-                    : $"{Verb(ctx, "Apply", "Applies")} {effect.Amount} {effect.Status}{Suffix(effect, ctx, hoistedAllEnemies)}.";
+                    ? $"{Verb(ctx, "Gain", "Gains")} {Amount(effect)} {effect.Status}."
+                    : $"{Verb(ctx, "Apply", "Applies")} {Amount(effect)} {effect.Status}{Suffix(effect, ctx, hoistedAllEnemies)}.";
             case "draw_cards":
-                return $"{Verb(ctx, "Draw", "Draws")} {effect.Amount} card{(effect.Amount == 1 ? "" : "s")}.";
+                return $"{Verb(ctx, "Draw", "Draws")} {Amount(effect)} card{(effect.Amount == 1 && !effect.PerX ? "" : "s")}.";
             case "heal":
-                return $"{Verb(ctx, "Heal", "Heals")} {effect.Amount} HP.";
+                return $"{Verb(ctx, "Heal", "Heals")} {Amount(effect)} HP.";
             case "gain_energy":
-                return $"{Verb(ctx, "Gain", "Gains")} {effect.Amount} Energy.";
+                return $"{Verb(ctx, "Gain", "Gains")} {Amount(effect)} Energy.";
             case "lose_hp":
-                return $"{Verb(ctx, "Lose", "Loses")} {effect.Amount} HP.";
+                return $"{Verb(ctx, "Lose", "Loses")} {Amount(effect)} HP.";
             case "discard_cards":
-                return $"{Verb(ctx, "Discard", "Discards")} {effect.Amount} card{(effect.Amount == 1 ? "" : "s")} at random.";
+                return $"{Verb(ctx, "Discard", "Discards")} {Amount(effect)} card{(effect.Amount == 1 && !effect.PerX ? "" : "s")} at random.";
             case "exhaust_hand":
                 return ctx.Voice == DescribeVoice.Enemy ? "Exhausts its hand." : "Exhaust your hand.";
             // Was missing until a card used it: gain_gold shipped for a relic,
@@ -190,7 +251,27 @@ public static class EffectDescriptionFormatter
             // all - which is exactly the silent failure the default arm below
             // produces for an unknown action.
             case "gain_gold":
-                return $"{Verb(ctx, "Gain", "Gains")} {effect.Amount} Gold.";
+                return $"{Verb(ctx, "Gain", "Gains")} {Amount(effect)} Gold.";
+            // The first arm that has to resolve an id against a database. Find
+            // rather than Get, and an empty string rather than a throw, for
+            // the same reason AddCardEffect uses it: this runs on a shop tile
+            // and in a card picker, where a typo in cards.json must not take
+            // the screen down. The audit that catches it is in EffectSmokeTest.
+            case "add_card":
+            {
+                var added = effect.CardId is { Length: > 0 } id ? CardDatabase.Find(id) : null;
+                if (added is null) return "";
+                string count = Amount(effect);
+                // "Shuffle" for the draw pile because that is what the pile
+                // insert actually does (a random index, not the top) - the
+                // word is doing real work, not flavour.
+                return effect.Pile switch
+                {
+                    CardPile.Draw => $"{Verb(ctx, "Shuffle", "Shuffles")} {count} {added.Name} into your draw pile.",
+                    CardPile.Hand => $"{Verb(ctx, "Add", "Adds")} {count} {added.Name} to your hand.",
+                    _ => $"{Verb(ctx, "Add", "Adds")} {count} {added.Name} to your discard pile.",
+                };
+            }
             default:
                 return "";
         }
@@ -203,7 +284,7 @@ public static class EffectDescriptionFormatter
     // being wrong about the rest.
     private static string DamageAmount(int outgoing, EffectSpec effect, DescribeContext ctx, List<int> buffed)
     {
-        if (effect.Scope != EffectScope.Target || ctx.Targets is not { Count: > 0 } targets)
+        if (!IsOutward(effect.Scope) || ctx.Targets is not { Count: > 0 } targets)
         {
             return outgoing.ToString();
         }
@@ -241,7 +322,10 @@ public static class EffectDescriptionFormatter
     private static string Suffix(EffectSpec effect, DescribeContext ctx, bool hoistedAllEnemies)
     {
         if (!hoistedAllEnemies && TargetsAllEnemies(effect, ctx)) return " to ALL enemies";
-        if (ctx.Voice == DescribeVoice.Enemy && effect.Scope == EffectScope.Target) return " to you";
+        // A random target has no drag gesture and no card-level tell either,
+        // so the sentence is the only place it can be said.
+        if (effect.Scope == EffectScope.RandomEnemy) return " to a random enemy";
+        if (ctx.Voice == DescribeVoice.Enemy && IsOutward(effect.Scope)) return " to you";
         return "";
     }
 

@@ -33,9 +33,20 @@ public static class CardUpgrade
 
     public static bool IsUpgraded(CardDefinition card) => card.Id.EndsWith("+");
 
+    // Every field is copied explicitly, which is the trap this method carries:
+    // a new field on CardDefinition that isn't listed here is silently dropped
+    // the moment a card is upgraded, and the card reads correctly right up
+    // until someone smiths it. Same for ScaleEffect below and EffectSpec.
     public static CardDefinition Apply(CardDefinition original)
     {
         if (IsUpgraded(original)) return original;
+
+        // A Curse or a Status card cannot be improved into anything - there is
+        // no effect to scale and no version of "Wound+" that means something.
+        // Refusing here rather than at each call site is what lets the rest
+        // site, the two event pickers and the smoke sweeps all stay unaware
+        // that unplayable cards exist.
+        if (!original.IsPlayable) return original;
 
         return new CardDefinition
         {
@@ -46,6 +57,9 @@ public static class CardUpgrade
             Target = original.Target,
             Exhaust = original.Exhaust,
             Rarity = original.Rarity,
+            Retain = original.Retain,
+            Innate = original.Innate,
+            Ethereal = original.Ethereal,
             Effects = original.Effects.Select(ScaleEffect).ToList(),
         };
     }
@@ -58,6 +72,13 @@ public static class CardUpgrade
             Action = effect.Action,
             Status = effect.Status,
             Scope = effect.Scope,
+            // Dropping either of these would upgrade an add_card card into a
+            // spec that names no card - a "+" that reads identically and does
+            // nothing, which is the exact silent failure ShouldScale's comment
+            // below is about, arriving through the field list instead.
+            CardId = effect.CardId,
+            Pile = effect.Pile,
+            PerX = effect.PerX,
             Amount = Mathf.Max(effect.Amount + 1, Mathf.RoundToInt(effect.Amount * ScaleFactor)),
         };
     }

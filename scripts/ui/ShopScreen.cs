@@ -3,6 +3,11 @@ using System.Linq;
 using Godot;
 using Hollowdeck.Data;
 using Hollowdeck.Effects;
+// For RemoveChosenCardOutcome. Hollowdeck.UI already reaches into
+// Hollowdeck.Events for exactly this reason at RestScreen's Smith picker: the
+// outcome classes are where "what does removing/upgrading a card mean" lives,
+// and a screen re-deriving it would be a second answer.
+using Hollowdeck.Events;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
@@ -22,6 +27,18 @@ public partial class ShopScreen : Control
     private const int RelicPrice = 150;
     private const int PotionPrice = 40;
 
+    // Deck thinning, priced above a card and well below a relic: removing a
+    // Strike is worth more than adding one, and a run that could buy four
+    // removals a shop would out-thin every other lever in the game. Once per
+    // visit for the same reason, which MarkSold already enforces by dropping
+    // the button out of _offerButtons.
+    //
+    // This ships in the same phase as Curses on purpose. Adding a way to put
+    // dead cards in a deck without adding a way to take them out is punishment
+    // rather than design, and deck-thinning existed as exactly one random
+    // event (the_confessor) before this.
+    private const int RemovalPrice = 75;
+
     // Wide enough for two lines of a relic description at the body size, and
     // narrow enough that four tiles plus separations clear the design width.
     // 236 + 24 of frame padding = 260 each, so 4 tiles and 3 gaps come to
@@ -31,6 +48,27 @@ public partial class ShopScreen : Control
 
     private HBoxContainer _offersRow = null!;
     private HBoxContainer _cardOffersRow = null!;
+
+    // The removal service. It is a button beside Leave rather than a fifth
+    // tile in OffersRow: a tile is 236 wide plus 24 of frame, so five of them
+    // plus separations come to 1364 against OffersRow's 1112 and the outer two
+    // would be clipped - the exact failure the 236 in TileWidth was chosen to
+    // avoid. It also is not merchandise, and reads better for not sitting in
+    // the merchandise row.
+    private Button _removeCardButton = null!;
+    private Control _pickerView = null!;
+    private GridContainer _pickerList = null!;
+    private Button _pickerCancelButton = null!;
+    private Button _leaveButton = null!;
+
+    // The picker's first card, so keyboard focus lands inside the grid rather
+    // than on whatever the screen was focusing before it opened.
+    private CardView? _pickerFirstCard;
+
+    // Shared with the rest site and the two event pickers - Prompt, the
+    // deck-count floor in Selectable(), and Apply all come from there rather
+    // than being restated here.
+    private readonly RemoveChosenCardOutcome _removal = new();
 
     // Every buy button on the screen with its price, so RefreshOffers can
     // grey out what the player can no longer afford after each purchase.
@@ -49,9 +87,18 @@ public partial class ShopScreen : Control
 
         _offersRow = GetNode<HBoxContainer>("OffersRow");
         _cardOffersRow = GetNode<HBoxContainer>("CardOffersRow");
-        var leaveButton = GetNode<Button>("LeaveButton");
-        leaveButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
-        leaveButton.Pressed += OnLeavePressed;
+        _leaveButton = GetNode<Button>("LeaveButton");
+        _leaveButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
+        _leaveButton.Pressed += OnLeavePressed;
+
+        _removeCardButton = GetNode<Button>("RemoveCardButton");
+        _pickerView = GetNode<Control>("PickerCenterContainer");
+        _pickerList = GetNode<GridContainer>("PickerCenterContainer/PickerVBox/ScrollContainer/PickerList");
+        _pickerCancelButton = GetNode<Button>("PickerCenterContainer/PickerVBox/PickerCancelButton");
+        ChromeStyles.ApplyEmphasisButtonStyle(_removeCardButton);
+        _removeCardButton.Text = $"Remove a Card ({RemovalPrice}g)";
+        _removeCardButton.Pressed += OnRemoveCardPressed;
+        _pickerCancelButton.Pressed += ClosePicker;
 
         var rng = RngStreams.Shop;
 
@@ -93,14 +140,88 @@ public partial class ShopScreen : Control
             }, ArtAssets.PotionIcon(potion.Id));
         }
 
+        // The removal service is registered like any other offer so
+        // RefreshOffers greys it when the gold runs out, but it is NOT bought
+        // through AddOfferTile's handler: that deducts gold and marks the
+        // offer sold the moment it is pressed, and cancelling out of the
+        // picker must not charge for a card that never left the deck.
+        _offerButtons.Add((_removeCardButton, RemovalPrice));
+
         // Attached before RefreshOffers so its first Regrab happens with the
         // affordable/unaffordable state already applied - starting focus on a
         // button that is about to be disabled would immediately lose it.
-        _keyboardNav = ScreenKeyboardNav.Attach(this,
-            () => _offerButtons.FirstOrDefault(o => !o.Button.Disabled).Button ?? leaveButton,
-            OnLeavePressed);
+        _keyboardNav = ScreenKeyboardNav.Attach(this, PreferredFocus, OnCancelRequested);
 
         RefreshOffers();
+    }
+
+    // While the picker is open it owns the keyboard, and the shop underneath
+    // is hidden rather than merely covered - Godot's focus navigation reaches
+    // controls behind an overlay perfectly happily, so a visible-but-covered
+    // Buy button would still be tabbable.
+    private Control PreferredFocus()
+    {
+        if (_pickerView.Visible) return (Control?)_pickerFirstCard ?? _pickerCancelButton;
+        return _offerButtons.FirstOrDefault(o => !o.Button.Disabled).Button ?? _leaveButton;
+    }
+
+    private void OnCancelRequested()
+    {
+        if (_pickerView.Visible) ClosePicker();
+        else OnLeavePressed();
+    }
+
+    private void OnRemoveCardPressed()
+    {
+        if (RunState.Gold < RemovalPrice) return;
+        AudioManager.Instance?.PlaySfx("ui_click");
+
+        // Selectable() carries the one-card floor: an empty deck draws nothing
+        // and the next fight is unwinnable and unquittable.
+        var selectable = _removal.Selectable().ToList();
+        if (selectable.Count == 0) return;
+
+        _pickerFirstCard = CardPicker.Populate(
+            _pickerList, selectable, "Remove",
+            index => RunState.Deck[index],
+            // No subtitle: nothing changes about the card, it just goes. The
+            // upgrade pickers need a "was:" line because their column shows a
+            // card the deck does not contain yet.
+            _ => null,
+            OnCardRemoved,
+            _pickerCancelButton);
+
+        SetShopVisible(false);
+        _pickerView.Visible = true;
+        _keyboardNav?.Regrab();
+    }
+
+    private void OnCardRemoved(int deckIndex)
+    {
+        // Gold is spent here rather than at the button press, so Cancel is
+        // free. Both this and MarkSold have to happen before ClosePicker's
+        // Regrab, or focus is handed back to a button that is about to change.
+        _removal.Apply(deckIndex);
+        RunState.Gold -= RemovalPrice;
+        MarkSold(_removeCardButton);
+        _removeCardButton.Text = "Removed";
+        ClosePicker();
+    }
+
+    private void ClosePicker()
+    {
+        _pickerView.Visible = false;
+        _pickerFirstCard = null;
+        SetShopVisible(true);
+        RefreshOffers();
+    }
+
+    private void SetShopVisible(bool visible)
+    {
+        _cardOffersRow.Visible = visible;
+        _offersRow.Visible = visible;
+        _leaveButton.Visible = visible;
+        _removeCardButton.Visible = visible;
     }
 
     // Uniform sampling, for the pools that have no rarity to weight by.

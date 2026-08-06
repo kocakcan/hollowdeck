@@ -1064,5 +1064,138 @@
 	  { "action": "deal_damage", "amount": 8, "scope": "Target" },
 	  { "action": "heal", "amount": 8, "scope": "Self" }
 	]
+  },
+  {
+	"id": "wound",
+	"name": "Wound",
+	"cost": 0,
+	"type": "Status",
+	"target": "None",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": []
+  },
+  {
+	"id": "dazed",
+	"name": "Dazed",
+	"cost": 0,
+	"type": "Status",
+	"target": "None",
+	"exhaust": false,
+	"rarity": "Common",
+	"ethereal": true,
+	"effects": []
+  },
+  {
+	"id": "pain",
+	"name": "Pain",
+	"cost": 0,
+	"type": "Curse",
+	"target": "None",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": []
+  },
+  {
+	"id": "writhe",
+	"name": "Writhe",
+	"cost": 0,
+	"type": "Curse",
+	"target": "None",
+	"exhaust": false,
+	"rarity": "Common",
+	"innate": true,
+	"effects": []
+  },
+  {
+	"id": "hold_fast",
+	"name": "Hold Fast",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"retain": true,
+	"effects": [
+	  { "action": "gain_block", "amount": 7, "scope": "Self" }
+	]
+  },
+  {
+	"id": "first_light",
+	"name": "First Light",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"innate": true,
+	"effects": [
+	  { "action": "draw_cards", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "mirage",
+	"name": "Mirage",
+	"cost": 0,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"ethereal": true,
+	"effects": [
+	  { "action": "gain_energy", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "sunder",
+	"name": "Sunder",
+	"cost": 2,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "deal_damage", "amount": 10, "scope": "Target" },
+	  { "action": "apply_status", "status": "Vulnerable", "amount": 1, "scope": "AllEnemies" }
+	]
+  },
+  {
+	"id": "scattershot",
+	"name": "Scattershot",
+	"cost": 1,
+	"type": "Attack",
+	"target": "None",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 4, "scope": "RandomEnemy" },
+	  { "action": "deal_damage", "amount": 4, "scope": "RandomEnemy" },
+	  { "action": "deal_damage", "amount": 4, "scope": "RandomEnemy" }
+	]
+  },
+  {
+	"id": "blood_price",
+	"name": "Blood Price",
+	"cost": 0,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "deal_damage", "amount": 9, "scope": "Target" },
+	  { "action": "add_card", "cardId": "wound", "amount": 1, "pile": "Discard", "scope": "Self" }
+	]
+  },
+  {
+	"id": "overload",
+	"name": "Overload",
+	"cost": -1,
+	"type": "Attack",
+	"target": "SingleEnemy",
+	"exhaust": false,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "deal_damage", "amount": 5, "perX": true, "scope": "Target" }
+	]
   }
 ]

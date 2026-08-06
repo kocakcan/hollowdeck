@@ -45,13 +45,23 @@ public static class CardPool
     ///
     /// Draws a *tier* first and then a uniform card within it, rather than
     /// weighting each card by its own rarity. The difference matters: the
-    /// pool is 34 Common / 34 Uncommon / 16 Rare, so per-card weighting would
+    /// offerable pool is roughly half Common and half Uncommon with a thin
+    /// Rare tier (re-measure with tools/balance-report.sh rather than trusting
+    /// a number written here), so per-card weighting would
     /// hand Uncommon more total probability than Common purely because there
     /// happen to be more of them, and every card authored later would silently
     /// re-tune the odds of every tier.
     public static List<CardDefinition> Sample(IEnumerable<CardDefinition> pool, int count, Random rng)
     {
-        var remaining = pool.GroupBy(c => c.Rarity)
+        // Curses and Status cards live in CardDatabase like any other row, and
+        // nothing on the unlock track gates them (MetaProgressionManager
+        // treats an ungated id as unlocked), so without this they would be
+        // offered as rewards and stocked in the shop. Filtering here rather
+        // than at each caller is the whole reason this class exists: it is the
+        // single place "which cards does the player get offered" is decided,
+        // and a fourth grant site added later inherits the rule for free.
+        var remaining = pool.Where(c => c.IsPlayable)
+            .GroupBy(c => c.Rarity)
             .ToDictionary(g => g.Key, g => g.ToList());
         var picked = new List<CardDefinition>();
 

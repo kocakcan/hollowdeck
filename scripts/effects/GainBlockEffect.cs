@@ -13,7 +13,7 @@ public class GainBlockEffect : IEffect
             // same combatant (gain_block is always self-scoped), but an enemy
             // move that shields a different enemy would otherwise apply the
             // caster's Dexterity to someone else's Block.
-            target.Block += BlockMath.ComputeOutgoing(spec.Amount, target);
+            target.Block += BlockMath.ComputeOutgoing(ctx.AmountFor(spec), target);
         }
     }
 }

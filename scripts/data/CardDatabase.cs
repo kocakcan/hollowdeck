@@ -15,5 +15,12 @@ public static class CardDatabase
 
 	public static CardDefinition Get(string id) => ById[id];
 
+	// The non-throwing form, for the two callers that read an id out of
+	// content data rather than out of code: AddCardEffect and the add_card
+	// event outcome. A typo in cards.json must name itself in the log, not
+	// throw a KeyNotFoundException out of the middle of combat resolution.
+	public static CardDefinition? Find(string id) =>
+		ById.TryGetValue(id, out var def) ? def : null;
+
 	public static IReadOnlyCollection<CardDefinition> All => ById.Values;
 }

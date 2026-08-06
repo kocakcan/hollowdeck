@@ -7,7 +7,7 @@ public class DealDamageEffect : IEffect
 {
     public void Execute(EffectContext ctx, EffectSpec spec)
     {
-        int amount = DamageMath.ComputeOutgoing(spec.Amount, ctx.Source);
+        int amount = DamageMath.ComputeOutgoing(ctx.AmountFor(spec), ctx.Source);
 
         foreach (var target in ctx.Targets)
         {

@@ -17,7 +17,7 @@ public class ApplyStatusEffect : IEffect
 
         foreach (var target in ctx.Targets)
         {
-            target.AddStatus(status, spec.Amount);
+            target.AddStatus(status, ctx.AmountFor(spec));
         }
     }
 }

@@ -43,6 +43,8 @@ public partial class EventSmokeTest : Node
         TestGamble();
         TestCardPickerOutcomes();
         TestCompoundOutcomesResolveInOrder();
+        TestAddCardOutcome();
+        TestEveryAuthoredAddCardNamesARealCardAndACount();
         TestMapGeneratorProducesEventNodes();
         TestEventScreenLoadsAndResolvesAChoice();
         TestEventScreenOpensAndResolvesAPicker();
@@ -150,6 +152,64 @@ public partial class EventSmokeTest : Node
             Amount = amount,
             ResultText = resultText,
         }).Text;
+
+    // The outcome that turns an event from a trade into a risk. Before it,
+    // every downside an event could author was HP, gold, max HP or a relic -
+    // all of which are resources the player already spends - so an event was
+    // never able to cost something that follows the run.
+    private void TestAddCardOutcome()
+    {
+        RunState.Deck = new List<CardDefinition> { CardDatabase.Get("strike") };
+
+        EventOutcomeRegistry.Begin(new EventChoice
+        {
+            Outcomes = new List<EventOutcomeSpec>
+            {
+                new() { Outcome = "add_card", CardId = "wound", Amount = 2 },
+            },
+        });
+
+        Check("add_card_outcome_adds_the_named_card_twice",
+            RunState.Deck.Count(c => c.Id == "wound") == 2,
+            $"deck={string.Join(",", RunState.Deck.Select(c => c.Id))}");
+
+        // Deliberately not routed through CardPool: this outcome names its
+        // card, and CardPool would refuse an unplayable one.
+        Check("add_card_outcome_can_deliver_an_unplayable_card",
+            RunState.Deck.Any(c => !c.IsPlayable), "no unplayable card reached the deck");
+
+        // An unknown id pushes an error and adds nothing, rather than throwing
+        // out of an event screen. The error is expected output for this suite.
+        int before = RunState.Deck.Count;
+        EventOutcomeRegistry.Begin(new EventChoice
+        {
+            Outcomes = new List<EventOutcomeSpec>
+            {
+                new() { Outcome = "add_card", CardId = "no_such_card", Amount = 1 },
+            },
+        });
+        Check("add_card_outcome_with_an_unknown_id_adds_nothing",
+            RunState.Deck.Count == before, $"deck grew to {RunState.Deck.Count}");
+    }
+
+    // The authoring audit. AddCardOutcome does not clamp a missing count to 1,
+    // so an amount of 0 is a choice whose label promises a cost it never pays -
+    // and the label is the only place the player would ever see the difference.
+    private void TestEveryAuthoredAddCardNamesARealCardAndACount()
+    {
+        var bad = new List<string>();
+        foreach (var def in EventDatabase.All)
+        {
+            foreach (var spec in def.Choices.SelectMany(AllSpecs).Where(s => s.Outcome == "add_card"))
+            {
+                if (CardDatabase.Find(spec.CardId) is null) bad.Add($"{def.Id}: id '{spec.CardId}'");
+                else if (spec.Amount < 1) bad.Add($"{def.Id}: amount {spec.Amount}");
+            }
+        }
+
+        Check("every_authored_event_add_card_names_a_real_card_and_a_count",
+            bad.Count == 0, string.Join(", ", bad));
+    }
 
     private void TestGainAndLoseGold()
     {

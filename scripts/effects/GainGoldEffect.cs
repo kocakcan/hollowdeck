@@ -17,6 +17,6 @@ public class GainGoldEffect : IEffect
 {
     public void Execute(EffectContext ctx, EffectSpec spec)
     {
-        RunState.Gold += spec.Amount;
+        RunState.Gold += ctx.AmountFor(spec);
     }
 }
