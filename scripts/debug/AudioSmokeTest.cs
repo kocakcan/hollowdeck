@@ -136,12 +136,38 @@ public partial class AudioSmokeTest : Node
         }
         Check("sfx_pool_playback_no_throw", !threw, "PlaySfx threw on repeated/overlapping calls");
 
-        bool anyPlaying = false;
+        // This used to assert that a pooled voice still reported Playing, and
+        // that is a race the test loses on a loaded machine. Play() registers
+        // the playback synchronously, but the audio thread then mixes on
+        // wall-clock time and drops it when the stream ends - and ui_click is
+        // 60ms of audio (AudioCues.BuildUiClick: a 0.06s glide). So the
+        // assertion had a 60ms budget between the loop above and the read
+        // below, which this machine always wins and a shared CI runner
+        // intermittently loses to a scheduler hiccup. It failed on Linux CI,
+        // passed on a re-run of the identical commit, and never reproduced in
+        // 15 consecutive local runs.
+        //
+        // What it was really guarding is that PlaySfx routes a cue onto a
+        // pooled voice rather than silently doing nothing, and that does not
+        // need the audio backend to still be mid-sound. The stream assignment
+        // is synchronous and permanent, so compare the bytes: AudioManager
+        // builds its ui_click from AudioCues.BuildUiClick, whose synthesis is
+        // pure (a glide through an ADSR envelope, no RNG - unlike BuildCardPlay,
+        // which mixes noise and would not reproduce), so rebuilding it here
+        // yields the identical PCM. Matching those bytes on a pooled player
+        // proves the routing *and* that it is this cue and not another one.
+        var expected = AudioCues.BuildUiClick().Data;
+        int voicesCarryingTheCue = 0;
         foreach (var child in AudioManager.Instance.GetChildren())
         {
-            if (child is AudioStreamPlayer { Playing: true }) { anyPlaying = true; break; }
+            if (child is AudioStreamPlayer { Stream: AudioStreamWav wav }
+                && wav.Data.AsSpan().SequenceEqual(expected))
+            {
+                voicesCarryingTheCue++;
+            }
         }
-        Check("sfx_pool_has_playing_voice", anyPlaying, "expected at least one pooled AudioStreamPlayer to report Playing");
+        Check("sfx_pool_routes_the_cue_onto_a_voice", voicesCarryingTheCue > 0,
+            $"{voicesCarryingTheCue} pooled players carry ui_click's PCM - PlaySfx assigned nothing");
     }
 
     private void TestUnknownCueDoesNotThrow()
