@@ -355,15 +355,21 @@ public partial class ShopScreen : Control
         }
 
         // Buying takes offers out of reach, including the one just pressed, so
-        // without this a purchase leaves the shop with no focus owner and the
-        // keyboard stops working mid-screen.
+        // without this a purchase leaves the keyboard stranded mid-screen. Must
+        // stay *after* the loop, which is what makes something to re-grab from.
         //
-        // Must stay *after* the loop. Control.SetFocusMode releases focus when
-        // it is handed FocusModeEnum.None, so the assignment above is what
-        // drops the pressed button - which also means this Regrab is now
-        // load-bearing for a mechanism the older comment here did not name (it
-        // credited Disabled, which on 4.7.1 leaves FocusMode alone; see the
-        // note in ScreenKeyboardNav).
+        // The symptom was right and the stated cause was not, and both halves
+        // are worth keeping. This used to read "Godot drops focus off a control
+        // the moment it becomes Disabled" - measured on 4.7.1, it does not:
+        // disabling a focused control leaves it holding focus. So the original
+        // failure was not an *absent* focus owner but an inert one, focus stuck
+        // on a greyed-out "Sold" button where Enter did nothing.
+        //
+        // Since the loop above now also sets FocusModeEnum.None, and
+        // Control.SetFocusMode *does* release focus, the pressed button is
+        // genuinely dropped and this Regrab is load-bearing for the reason it
+        // was always credited with. Both behaviours are pinned by
+        // KeyboardSmokeTest.TestOnlyFocusModeExcludesAControlFromTheKeyboard.
         _keyboardNav?.Regrab();
     }
 
