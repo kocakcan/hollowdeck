@@ -33,6 +33,10 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "status", name: "regen", draw: regen },
         Icon { category: "status", name: "fervor", draw: fervor },
         Icon { category: "status", name: "foresight", draw: foresight },
+        Icon { category: "status", name: "artifact", draw: artifact },
+        Icon { category: "status", name: "thorns", draw: thorns },
+        Icon { category: "status", name: "intangible", draw: intangible },
+        Icon { category: "status", name: "plating", draw: plating },
         // Intents
         Icon { category: "intents", name: "attack", draw: intent_attack },
         Icon { category: "intents", name: "defend", draw: intent_defend },
@@ -361,6 +365,146 @@ fn foresight() -> Canvas {
     let mut canvas = new_icon();
     eye(&mut canvas, 16, 17, 14, 9, B3);
     sparkle(&mut canvas, 25, 5, 4, B5);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Artifact: a faceted gem, flat-topped and tapering to a point.
+///
+/// Violet because the ramp reserves that family for the arcane, which puts it
+/// next to `ritual` — but a ring and a gem share no outline, and that is the
+/// whole reason a gem was picked over the obvious ward-sigil. The set already
+/// has two rings (`ritual`, `thorned_carapace`) and a third would be one at 1x.
+///
+/// Hard facets rather than a glow: what the status does is *refuse* something,
+/// and a cut stone reads harder than anything soft-edged.
+fn artifact() -> Canvas {
+    let mut canvas = new_icon();
+
+    gem(&mut canvas, 16, 5, 12, 24, P1, P3, P4);
+
+    // Facet seams, drawn dark so they read as edges rather than as cracks —
+    // `vulnerable` owns cracks and the two must not converge.
+    canvas.line(8, 13, 16, 26, P1);
+    canvas.line(24, 13, 16, 26, P1);
+    canvas.line(12, 7, 13, 13, P2);
+    canvas.line(20, 7, 19, 13, P2);
+    canvas.set(13, 9, N7);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Thorns: a bramble stem with barbs raking back down it.
+///
+/// Explicitly *not* a spiked disc — `thorned_carapace` in the relic set is
+/// already spikes-around-a-circle, and the relic is close enough in meaning
+/// that two similar icons would read as the same thing rather than as a pair.
+/// A bare stem has no enclosed shape at all, so the collision cannot happen.
+///
+/// The barbs are oxblood while the stem is green: what the status does is bill
+/// the *attacker*, and that colour break is the only place the icon can say so.
+fn thorns() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Upright rather than diagonal, which is what buys the barbs their length:
+    // a diagonal stem leaves each one about five pixels to be a triangle in,
+    // and five-pixel triangles read as specks rather than as thorns.
+    canvas.thick_line(16, 3, 16, 30, 5, V1);
+    canvas.thick_line(15, 4, 15, 29, 2, V3);
+
+    // Six barbs, alternating sides and raking upwards, each with a wide base on
+    // the stem so it reads as growing out of it rather than stuck to it.
+    for y in [9, 17, 25] {
+        barb(&mut canvas, (14, y), 3, (4, y - 5), R2, R4);
+    }
+    for y in [13, 21, 29] {
+        barb(&mut canvas, (18, y), 3, (28, y - 5), R2, R4);
+    }
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Intangible: a pale shade with a bitten hem.
+///
+/// The one silhouette in the whole set that is a *creature* rather than an
+/// object or a mark, which is what makes it findable in a crowded status row.
+/// Nothing else is a dome over a wavy skirt, and the reading — attacks pass
+/// through it — needs a body to pass through.
+fn intangible() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Pale rather than saturated: this is a shade, and the ramp's bright end is
+    // what says "you can see through it" without any actual transparency, which
+    // the spec's hard-alpha rule does not allow.
+    canvas.disc(16, 13, 9, B2);
+    canvas.rect(7, 13, 19, 14, B2);
+    canvas.disc(16, 12, 7, B4);
+    canvas.rect(9, 12, 15, 14, B4);
+
+    // The hem, bitten out rather than drawn on, so the three lobes are the
+    // shape's own outline and pick up the finishing pass.
+    canvas.erase_disc(11, 28, 4);
+    canvas.erase_disc(21, 28, 4);
+    canvas.erase_rect(0, 29, 32, 3);
+
+    canvas.disc(12, 12, 2, N0);
+    canvas.disc(20, 12, 2, N0);
+    canvas.vline(10, 8, 5, B5);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Plating: a field of scales with one flaked off the corner.
+///
+/// Deliberately in the same visual family as `metallicize` — they are the same
+/// kind of thing, both granting Block at the start of every turn, and a player
+/// comparing them should see that at a glance. What separates them is texture,
+/// not subject: four wide horizontals with rivets against a field of small
+/// curves, which do not read as each other at 1x even though both say "armour".
+///
+/// The missing scale is the second half of the mechanic. Metallicize is
+/// permanent; this erodes, one stack per hit that gets through, and the chip is
+/// the only place the icon can carry that.
+fn plating() -> Canvas {
+    let mut canvas = new_icon();
+
+    // A dark hide behind the scales, so the gaps between them are a material
+    // rather than the background showing through - without it the rows read as
+    // loose stones piled up.
+    canvas.rect(4, 4, 24, 25, B0);
+
+    for (row, y) in [8, 15, 22, 29].iter().enumerate() {
+        let stagger = if row % 2 == 0 { 0 } else { 4 };
+        let mut x = 5 + stagger;
+        while x < 29 {
+            // Lit upper arc per scale, so each sits proud of the row beneath it
+            // - the same trick metallicize uses on its plate edges.
+            scale(&mut canvas, x, *y, 4, B2, B3, B4);
+            canvas.set(x - 1, *y - 3, B5);
+            x += 8;
+        }
+    }
+
+    // The flaked corner. Bitten out down to bare hide rather than to the
+    // background, so it reads as a scale missing rather than as the icon being
+    // clipped - and it is the only place the erosion half of the mechanic can
+    // live.
+    canvas.erase_disc(25, 25, 5);
+    canvas.disc(25, 25, 4, B0);
+    canvas.erase_rect(28, 0, 4, 32);
+    canvas.erase_rect(0, 30, 32, 2);
+
+    // Corners knocked off. Every other icon in the set has a shape; a bare
+    // rectangle is the one silhouette that reads as "unfinished" rather than as
+    // anything, and rounding it turns the swatch into a pauldron.
+    canvas.erase_poly(&[(0, 0), (9, 0), (0, 9)]);
+    canvas.erase_poly(&[(31, 0), (22, 0), (31, 9)]);
+    canvas.erase_poly(&[(0, 31), (8, 31), (0, 23)]);
+    canvas.erase_poly(&[(31, 31), (23, 31), (31, 23)]);
+
     finish(&mut canvas);
     canvas
 }

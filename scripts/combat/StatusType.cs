@@ -39,8 +39,32 @@ namespace Hollowdeck.Combat;
 // hand size are *assigned* at turn start, so a grant applied before that
 // assignment is overwritten, the same ordering trap Block has in the opposite
 // direction.
+//
+// Artifact, Thorns, Intangible and Plating are the four that stop a debuff, a
+// deck shape or a turn from being unconditionally correct.
+//
+// Artifact is the load-bearing one, and it is the only status in the roster
+// that is *spent* rather than decayed: it consumes a stack to refuse an
+// incoming debuff instead of wearing off on a clock. Before it, stacking
+// Vulnerable was always right and there was no read to make. Its gate is
+// StatusRow.IsDebuff, which is what turns that predicate from a rendering
+// detail into a resolution rule - a debuff missing from that list would slip
+// past Artifact silently, which is why EffectSmokeTest now drives Artifact over
+// the whole enum rather than over a hand-picked few.
+//
+// Thorns and Plating are the two that read the *incoming hit* rather than the
+// turn: Thorns bills the attacker, Plating spends a stack per unblocked hit.
+// Both live in DealDamageEffect for that reason, and Plating's grant half sits
+// with Metallicize in ApplyTurnStartGrants, inheriting the Block-clear ordering
+// trap's solution rather than restating it.
+//
+// Intangible is the one new *decaying* status, and it is the reason the two
+// hand-written decay lists in CombatManager were folded into DecayAtTurnEnd.
+// Two lists is exactly how a status ends up wearing off for the player and not
+// for the enemy. It floors incoming attack damage only - not lose_hp, not the
+// poison tick - so Poison stays a live answer to it.
 public enum StatusType
 {
     Vulnerable, Weak, Strength, Poison, Metallicize, Ritual, Dexterity, Frail, Regen,
-    Fervor, Foresight,
+    Fervor, Foresight, Artifact, Thorns, Intangible, Plating,
 }

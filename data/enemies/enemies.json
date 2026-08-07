@@ -538,9 +538,9 @@
     "moves": [
       {
         "moveId": "molten_guard",
-        "intent": { "type": "Defend", "displayAmount": 14 },
+        "intent": { "type": "Buff", "displayAmount": 4 },
         "effects": [
-          { "action": "gain_block", "amount": 14, "scope": "Self" }
+          { "action": "apply_status", "status": "Plating", "amount": 4, "scope": "Self" }
         ]
       },
       {
@@ -1242,9 +1242,9 @@
       },
       {
         "moveId": "absolve",
-        "intent": { "type": "Buff", "displayAmount": 3 },
+        "intent": { "type": "Buff", "displayAmount": 1 },
         "effects": [
-          { "action": "apply_status", "status": "Regen", "amount": 3, "scope": "Self" }
+          { "action": "apply_status", "status": "Artifact", "amount": 1, "scope": "Self" }
         ]
       }
     ],

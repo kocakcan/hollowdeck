@@ -116,6 +116,12 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "cards", name: "dazed", draw: dazed },
         Icon { category: "cards", name: "pain", draw: pain },
         Icon { category: "cards", name: "writhe", draw: writhe },
+        Icon { category: "cards", name: "ward_sigil", draw: ward_sigil },
+        Icon { category: "cards", name: "reliquary_seal", draw: reliquary_seal },
+        Icon { category: "cards", name: "bramble_mail", draw: bramble_mail },
+        Icon { category: "cards", name: "bramble_guard", draw: bramble_guard },
+        Icon { category: "cards", name: "scaled_hide", draw: scaled_hide },
+        Icon { category: "cards", name: "hollow_form", draw: hollow_form },
     ]
 }
 
@@ -1756,6 +1762,151 @@ fn writhe() -> Canvas {
     // Barbs, so the knot reads as hostile rather than decorative.
     canvas.line(4, 6, 8, 10, P4);
     canvas.line(28, 26, 24, 22, P4);
+    finish(&mut canvas);
+    canvas
+}
+
+// -- the Phase 8 status cards ----------------------------------------------
+
+/// Ward Sigil: the Artifact gem, hung inside a ring of warding.
+///
+/// Quotes `shapes::gem` rather than inventing a ward mark, under the set's
+/// families-share-a-base rule - what the card hands you is that gem, so the
+/// player should recognise the status icon the moment it appears in the row.
+fn ward_sigil() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.ring(16, 17, 14, 2, P1);
+    // Cardinal marks: the "sealed" half, and what keeps a bare ring from
+    // reading as the Ritual sigil.
+    for (x, y) in [(16, 1), (16, 31), (1, 17), (31, 17)] {
+        canvas.disc(x, y, 2, P3);
+    }
+    gem(&mut canvas, 16, 8, 8, 17, P1, P3, P4);
+    canvas.set(14, 11, N7);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Reliquary Seal: two gems on a clasped casket. Two Artifact, so two stones —
+/// the count is the card's whole difference from Ward Sigil, and at 96px in the
+/// card art window it is readable as a count rather than as texture.
+fn reliquary_seal() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Casket: a lidded box, wider than tall, with a bronze band across it.
+    canvas.rect(3, 11, 26, 18, G0);
+    canvas.rect(4, 12, 24, 16, G1);
+    canvas.rect(3, 8, 26, 4, G2);
+    canvas.hline(3, 8, 26, G3);
+    canvas.rect(14, 8, 4, 21, G2);
+
+    gem(&mut canvas, 9, 15, 5, 11, P1, P3, P4);
+    gem(&mut canvas, 23, 15, 5, 11, P1, P3, P4);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Bramble Mail: a breastplate overgrown with thorns. Quotes `metallicize`'s
+/// pauldroned plate for the armour and `shapes::barb` for the thorns, so the
+/// Power reads as the two things it is rather than as a new idea.
+fn bramble_mail() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Steel rather than the neutral ramp, so it lands in the same family as the
+    // Metallicize card - both are a plate you wear, and the green is the only
+    // thing that should be doing the separating.
+    canvas.poly(&[(4, 8), (13, 8), (16, 11), (19, 8), (28, 8), (25, 16), (23, 26), (16, 29), (9, 26), (7, 16)], B2);
+    canvas.poly(&[(7, 10), (12, 10), (16, 13), (20, 10), (25, 10), (23, 16), (21, 25), (16, 27), (11, 25), (9, 16)], B1);
+    canvas.rect(4, 8, 5, 4, B3);
+    canvas.rect(23, 8, 5, 4, B3);
+
+    // The vine, crossing the plate diagonally so it reads as growing over the
+    // armour rather than as engraved into it.
+    canvas.thick_line(5, 25, 27, 11, 3, V1);
+    canvas.thick_line(5, 24, 27, 10, 1, V3);
+    barb(&mut canvas, (11, 21), 2, (7, 14), R2, R4);
+    barb(&mut canvas, (19, 16), 2, (16, 24), R2, R4);
+    barb(&mut canvas, (24, 12), 2, (21, 5), R2, R4);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Bramble Guard: the shield every Block card quotes, with thorns down its
+/// edge. Block *and* Thorns, and the silhouette says both without a second
+/// object. Distinct from `barbed_guard`, which is the same shield with the
+/// poison family growing out of it - one card is Thorns, the other is Poison.
+fn bramble_guard() -> Canvas {
+    let mut canvas = new_icon();
+    shield(&mut canvas, 15, 5, 22, 24, SHIELD_FACE, SHIELD_RIM);
+    for y in [10, 17, 24] {
+        barb(&mut canvas, (26, y), 2, (31, y - 4), R2, R4);
+    }
+    canvas.vline(15, 10, 12, B4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Scaled Hide: the Plating scale, laid over a hide rather than tiled edge to
+/// edge — the status is the material, the card is the garment made of it.
+fn scaled_hide() -> Canvas {
+    let mut canvas = new_icon();
+
+    // A pelt: wide at the shoulders, pinched at the waist, hem coming to a
+    // point. Leather rather than steel, so the scales laid on it are visibly
+    // *on* something - the first draft was a dark blue backing that vanished
+    // against the frame and left the card reading as a square of scales.
+    let hide = [(7, 4), (25, 4), (28, 11), (23, 21), (16, 30), (9, 21), (4, 11)];
+    canvas.poly(&hide, N3);
+    canvas.poly(&[(9, 6), (23, 6), (25, 12), (21, 20), (16, 27), (11, 20), (7, 12)], N4);
+
+    for (row, y) in [9, 15, 21].iter().enumerate() {
+        let stagger = if row % 2 == 0 { 0 } else { 4 };
+        let mut x = 8 + stagger;
+        while x < 26 {
+            scale(&mut canvas, x, *y, 4, B2, B3, B4);
+            x += 8;
+        }
+    }
+
+    // Clipped back to the pelt, so the scales stop at the hem instead of
+    // squaring the silhouette off - the mistake the first plating draft made.
+    let mut mask = new_icon();
+    mask.poly(&hide, N3);
+    canvas.intersect(&mask);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// Hollow Form: the Intangible shade, mid-dissolve.
+///
+/// The status icon is a whole shade; the card is one coming apart, which is the
+/// difference between "you are untouchable" and "become untouchable". Same
+/// body, bitten through.
+fn hollow_form() -> Canvas {
+    let mut canvas = new_icon();
+
+    canvas.disc(16, 12, 10, B2);
+    canvas.rect(6, 12, 21, 15, B2);
+    canvas.disc(16, 11, 8, B4);
+    canvas.rect(8, 11, 17, 15, B4);
+
+    canvas.erase_disc(10, 28, 4);
+    canvas.erase_disc(22, 28, 4);
+    canvas.erase_rect(0, 29, 32, 3);
+
+    // Dissolving: holes bitten out of the body, largest at the hem, so the
+    // shade reads as going rather than as damaged.
+    canvas.erase_disc(11, 24, 3);
+    canvas.erase_disc(21, 21, 2);
+    canvas.erase_disc(16, 26, 2);
+
+    canvas.disc(12, 11, 2, N0);
+    canvas.disc(20, 11, 2, N0);
+    canvas.vline(9, 7, 5, B5);
+
     finish(&mut canvas);
     canvas
 }

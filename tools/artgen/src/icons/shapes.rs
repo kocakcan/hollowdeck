@@ -319,3 +319,81 @@ pub fn orb(canvas: &mut Canvas, cx: i32, cy: i32, radius: i32, body: Rgb, core: 
     );
     canvas.disc(cx, cy, radius / 2, core);
 }
+
+/// A table-cut gem: flat crown, tapering pavilion, one bright table face.
+///
+/// The Artifact status draws it full-bleed and the two ward cards quote it at
+/// smaller sizes, for the reason `raised_fist` and `orb` are shared - the cards
+/// hand you the status, so they have to be the same object rather than two
+/// takes on one idea.
+pub fn gem(
+    canvas: &mut Canvas,
+    cx: i32,
+    top: i32,
+    half_width: i32,
+    height: i32,
+    body: Rgb,
+    face: Rgb,
+    table: Rgb,
+) {
+    let crown = half_width / 2;
+    let shoulder = top + height / 3;
+    canvas.poly(
+        &[
+            (cx - crown, top),
+            (cx + crown, top),
+            (cx + half_width, shoulder),
+            (cx, top + height),
+            (cx - half_width, shoulder),
+        ],
+        body,
+    );
+    canvas.poly(
+        &[
+            (cx - crown + 1, top + 2),
+            (cx + crown - 1, top + 2),
+            (cx + half_width - 3, shoulder),
+            (cx, top + height - 3),
+            (cx - half_width + 3, shoulder),
+        ],
+        face,
+    );
+    // Nearly all of a gem's readability at this size is the table being one
+    // step lighter than everything under it.
+    canvas.poly(
+        &[
+            (cx - crown + 1, top + 2),
+            (cx + crown - 1, top + 2),
+            (cx + half_width - 4, shoulder - 1),
+            (cx - half_width + 4, shoulder - 1),
+        ],
+        table,
+    );
+}
+
+/// One armour scale: a rounded plate with a lit upper arc. `misc::plating`
+/// tiles it into a field, `cards::scaled_hide` lays it over a body.
+pub fn scale(canvas: &mut Canvas, cx: i32, cy: i32, radius: i32, body: Rgb, face: Rgb, lit: Rgb) {
+    canvas.disc(cx, cy, radius, body);
+    canvas.disc(cx, cy - 1, radius - 1, face);
+    canvas.hline(cx - radius + 2, cy - radius, radius * 2 - 3, lit);
+}
+
+/// One thorn: a wide-based wedge raking away from a stem toward `tip`.
+///
+/// The base is a vertical span rather than a point because a thorn narrow at
+/// both ends reads as a speck at 1x - the first draft of the Thorns status was
+/// exactly that, and looked like dirt on the stem.
+pub fn barb(
+    canvas: &mut Canvas,
+    base: (i32, i32),
+    spread: i32,
+    tip: (i32, i32),
+    body: Rgb,
+    point: Rgb,
+) {
+    let (bx, by) = base;
+    canvas.poly(&[(bx, by - spread), (bx, by + spread), tip], body);
+    canvas.set(tip.0, tip.1, point);
+    canvas.set(tip.0, tip.1 + 1, point);
+}

@@ -119,8 +119,17 @@ public static class CardUpgrade
             // BalanceSmokeTest pins the actual amounts so the claim and the
             // data cannot part company again; whether they *should* be this
             // large is the open retune in ROADMAP.md, not a bug.
+            //
+            // The four Phase 8 statuses scale for the same reason, and the +1
+            // floor bites hardest here: Artifact 1 and Intangible 1 upgrade to
+            // 2, which is twice as many refused debuffs and twice as many
+            // untouchable turns. Both are deliberate - they are the payload of
+            // Rare cards and an upgrade that moved a 1 to a 1 would be the
+            // silent no-op this whole method exists to prevent - but they are
+            // the numbers to look at first if the pool ever reads too strong.
             EffectScope.Self => effect.Status is "Strength" or "Dexterity"
-                or "Metallicize" or "Ritual" or "Regen" or "Fervor" or "Foresight",
+                or "Metallicize" or "Ritual" or "Regen" or "Fervor" or "Foresight"
+                or "Artifact" or "Thorns" or "Intangible" or "Plating",
             _ => false,
         };
     }

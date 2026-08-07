@@ -4,8 +4,8 @@
 
 The run is complete and playable end to end: three acts of branching map, telegraphed-intent combat,
 relics, potions, events, a shop, mid-run save/resume, a score-driven unlock track, 13 screens on one
-pixel-art spec, 20 smoke suites, CI, and packaged exports for three platforms. Content stands at 95
-cards (91 offerable), 36 enemies, 27 relics, 12 potions, 15 events.
+pixel-art spec, 20 smoke suites, CI, and packaged exports for three platforms. Content stands at 101
+cards (97 offerable), 36 enemies, 27 relics, 12 potions, 15 events.
 
 **The gating problem is no longer presentation, and it is no longer content volume. It is
 mechanical vocabulary.** The previous roadmap correctly identified visual coherence as the ceiling
@@ -14,8 +14,8 @@ enemies to 36. What neither phase changed is the size of the vocabulary all of t
 and the content had saturated it — which is why the game read as a competent deckbuilder rather
 than as this genre.
 
-**Phase 7 has since closed the card half of that.** The four struck rows below are done; the live
-ones are what Phases 8 through 10 own.
+**Phase 7 has since closed the card half of that, and Phase 8's status half is now in.** The five
+struck rows below are done; the live ones are what the rest of Phases 8 through 10 own.
 
 ### The diagnosis
 
@@ -25,7 +25,7 @@ ones are what Phases 8 through 10 own.
 | ~~`EffectScope`~~ | ~~`{ Target, Self }`~~ | **Closed in Phase 7** — `AllEnemies` and `RandomEnemy` |
 | ~~`EffectRegistry` actions~~ | ~~10, every one of which moves an *existing* card or moves a number~~ | **Closed in Phase 7** — `add_card` is 11 |
 | ~~`CardType`~~ | ~~`{ Attack, Skill, Power }`~~ | **Closed in Phase 7** — `Status` and `Curse`, unplayable |
-| `StatusType` | 11 | No Artifact — so stacking debuffs is always correct |
+| ~~`StatusType`~~ | ~~11~~ | **Closed in Phase 8** — `Artifact`, `Thorns`, `Intangible`, `Plating` make 15 |
 | Enemy AI types | 3, all "pick a move off a list" | No minions, no split, no escape, no on-death |
 | `RelicDefinition` | no tier field | A boss grants from the same pool 150 gold buys from |
 | `PotionDefinition` | no rarity field, no combat drop | The three-slot belt is nearly always empty |
@@ -105,8 +105,10 @@ Compressed. The decisions worth not relitigating, and nothing else; the full nar
 
 The curve as of today: encounter HP scales 1.49x then 1.44x per act, incoming damage 2.10x across
 the run, player max HP only 1.32x — so **deck power has to cover 1.59x**, drawn from a mean of 16.6
-three-card rewards. Elites span 1.13x–1.85x of an average normal fight and bosses 2.44x–3.16x, both
-asserted as bands by `BalanceSmokeTest`.
+three-card rewards. Elites span 1.13x–1.84x of an average normal fight and bosses 2.43x–3.23x, both
+asserted as bands by `BalanceSmokeTest` — which reads them from `BalanceModel.EliteCost*`/`BossCost*`
+rather than holding its own copy, so the report's printed header and the suite's flags cannot
+disagree.
 
 ---
 
@@ -152,14 +154,30 @@ no hook for anything else. This is why 36 enemies feel like a dozen.
 - **A fourth AI type, `wake_on_damage`** — structurally `PhaseThresholdIntentPicker` inverted
   (transition on damage taken rather than an HP threshold), reusing that file's shape the way
   `BlockMath` reuses `DamageMath`'s.
-- **`Artifact`, plus three more statuses.** Artifact is the single highest-value status left: it is
-  the counter that turns stacking debuffs from always-correct into a decision, and it is one arm in
-  `ApplyStatusEffect` (consume a stack instead of applying, debuffs only). `Thorns` is one arm in
-  `DealDamageEffect`, `Intangible` one arm in `DamageMath`, and `Plated Armor` is a turn-start grant
-  that decays on damage, slotting straight in beside Metallicize. Statuses 11 → 15. Each still needs
-  the documented four steps — an icon in `tools/artgen/src/icons/misc.rs`, an arm in
-  `StatusRow.Describe`, an entry in `CardUpgrade.ShouldScale`, and cards that actually grant it.
-  Never speculatively; that rule has held for every status so far.
+- ~~**`Artifact`, plus three more statuses.**~~ **Shipped** — statuses 11 → 15, and six cards
+  (`ward_sigil`, `reliquary_seal`, `bramble_mail`, `bramble_guard`, `scaled_hide`, `hollow_form`)
+  plus two re-authored enemy moves that actually grant them. Landed as forecast: `Artifact` is one
+  arm in `ApplyStatusEffect`, `Thorns` and `Plating` in `DealDamageEffect`, `Intangible` in
+  `DamageMath`. Three things the forecast got wrong, all worth carrying forward:
+  - The authoring cost is **six steps, not four**, and the two extra ones are the silent ones. A
+    debuff must also be added to `StatusRow.IsDebuff` — since `Artifact` gates on that predicate it
+    is now a resolution rule, and a debuff missing from it walks straight past `Artifact` with
+    nothing thrown. A clock-decaying status must also be added to `CombatManager.DecayAtTurnEnd`.
+    (The forecast also named `StatusRow.Describe` for the prose arm; it is `Keywords.Blurb`.)
+  - **The two turn-end decay sites were two hand-written lists**, and `Intangible` was the first
+    status to need adding to both. Folded into one array walked by `DecayTurnEndStatuses`, because
+    the alternative is a status that wears off for the player and not the enemy while both sites
+    keep compiling.
+  - **`EncounterCost` needed re-measuring for a reason unrelated to `Artifact`.** Fight length was a
+    closed form (`total HP / throughput`) computed up front, so nothing happening *during* a fight
+    could change its length — which made the first Block model provably inert: `Plating` 3, 4 and 5
+    all priced identically. It walks turn by turn now, draining HP and stopping when the group dies,
+    which is what makes self-granted Block cost the player turns. Six enemies carried `Metallicize`
+    and the analyser had been draining them as though they did not. The boss ceiling moved 3.2 →
+    3.3 as a consequence of that accuracy, not of any content getting harder.
+
+  Still unmodelled in `EncounterCost` and the next thing to do to it: one-off `gain_block` moves,
+  i.e. every Defend intent in the game.
 - **Fix the two-move `WeightedRandomIntentPicker` collapse.** Its anti-repeat rule only engages at
   three or more moves, so a two-move enemy strictly alternates and its authored `Weight` values are a
   lie the content cannot see. Replace it with a per-move "not more than N times in a row" cap, which
@@ -168,8 +186,10 @@ no hook for anything else. This is why 36 enemies feel like a dozen.
 
 *Proven by:* `Phase4ContentSmokeTest` (every intent still telegraphs what it resolves, now including
 summons and escapes), `CombatTargetingSmokeTest` (mid-fight `EnemyView` creation, hit test with a
-summon appended). Note that summons and Artifact both change `EncounterCost`, so `BalanceSmokeTest`'s
-act bands need **re-measuring, not re-asserting**.
+summon appended). Note that summons change `EncounterCost`, so `BalanceSmokeTest`'s act bands need
+**re-measuring, not re-asserting** — as the status half already did.
+
+The status bullet above is done; the five behaviour bullets are what remains of this phase.
 
 ## Phase 9 — The map, and the run's texture
 

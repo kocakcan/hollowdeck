@@ -11,7 +11,7 @@ networking, desktop only (Windows/Mac/Linux).
 
 The core loop is playable end-to-end — new run, map, combat, events, shop, rest, treasure,
 rewards, bosses, run-end scoring, unlocks, and mid-run save/resume. Current content is three
-acts: **95 cards (91 offerable, 4 unplayable Curses and Status cards), 27 relics, 12 potions,
+acts: **101 cards (97 offerable, 4 unplayable Curses and Status cards), 27 relics, 12 potions,
 36 enemies (6 of them bosses), 15 events**. Each act has its own enemy pools and a two-boss pool
 the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
 what's still open.
@@ -80,7 +80,7 @@ scenes/       11 screens + reusable CardView/EnemyView/PotionView/FloatingText
 data/         acts / cards / relics / potions / enemies / events — all JSON, the content layer
 assets/       sprites, icons, fonts, backgrounds, themes (see CREDITS.md for licensing)
 tools/        run-smoke-tests.sh
-  artgen/     Rust asset tool — generates the 172 icons, palette-clamps art, validates ART_SPEC
+  artgen/     Rust asset tool — generates the 182 icons, palette-clamps art, validates ART_SPEC
 ```
 
 ## Architecture
@@ -162,9 +162,13 @@ was aimed at), `Self`, `AllEnemies`, `RandomEnemy`. The last two are why one car
 and debuff the whole room. Enemy moves may not use them — `EnemyView` cannot telegraph a target
 chosen at resolution, and `Phase4ContentSmokeTest` refuses any move that tries.
 
-The eleven statuses available to `apply_status`: `Vulnerable`, `Weak`, `Strength`,
-`Poison`, `Dexterity`, `Frail`, `Metallicize`, `Ritual`, `Regen`, `Fervor`, `Foresight` — the last
-five pay out every turn and never decay, which is what a `Power` card buys. A genuinely new
+The fifteen statuses available to `apply_status`: `Vulnerable`, `Weak`, `Strength`,
+`Poison`, `Dexterity`, `Frail`, `Metallicize`, `Ritual`, `Regen`, `Fervor`, `Foresight`,
+`Artifact`, `Thorns`, `Intangible`, `Plating`. `Metallicize`/`Ritual`/`Regen`/`Fervor`/`Foresight`
+pay out every turn and never decay, which is what a `Power` card buys; `Plating` pays out the same
+way but is spent by taking unblocked damage. `Artifact` refuses an incoming debuff for a stack,
+`Thorns` bills whoever attacks its holder (even through Block), and `Intangible` floors incoming
+attacks to 1 and wears off by 1 a turn. A genuinely new
 mechanic means a new `IEffect` in `scripts/effects/` registered in `EffectRegistry` — reach for
 that only when the mechanic can't be composed from existing actions.
 
