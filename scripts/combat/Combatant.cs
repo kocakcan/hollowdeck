@@ -41,4 +41,20 @@ public class EnemyCombatant : Combatant
     public IIntentPicker IntentPicker = null!;
     public EnemyMove? CurrentMove;
     public EnemyMove? LastMove;
+
+    // Left the fight alive, via an escape move. Set by EscapeEffect and acted
+    // on one pass later in CombatManager.ResolveDeathsAndSettle, so an enemy
+    // cannot vanish part-way through the remaining specs of its own move.
+    public bool HasEscaped;
+
+    // Recursion guard for Definition.OnDeath: an onDeath can kill another
+    // enemy (or summon one that immediately dies), so ResolveDeaths loops
+    // until nothing new is dying, and this is what terminates it.
+    public bool OnDeathFired;
+
+    // The one predicate every "is this still in the fight" site reads - the
+    // combat loop's skips, the drag hit test, the keyboard target. There are
+    // two ways out of a fight now and a third would otherwise be four call
+    // sites to remember rather than one.
+    public bool IsGone => IsDead || HasEscaped;
 }

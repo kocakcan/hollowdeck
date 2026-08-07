@@ -5,7 +5,14 @@ namespace Hollowdeck.Data;
 // Debuff is the intent for a move that only worsens the player's position -
 // no damage, no block. Without it such a move has to be authored as an Attack
 // telegraphing 0, which is the one thing the intent system exists to prevent.
-public enum IntentType { Attack, Defend, Buff, Debuff }
+//
+// Summon and Escape are the two moves that change the roster rather than a
+// number on it. Both need a type of their own rather than borrowing an
+// existing one: Phase4ContentSmokeTest resolves a Buff to a Self-scoped
+// apply_status/heal and an Attack to a deal_damage, and neither move has
+// either - so authored as a Buff a summon fails that sweep, correctly, because
+// the label it produced would be a lie.
+public enum IntentType { Attack, Defend, Buff, Debuff, Summon, Escape }
 
 public class EnemyIntent
 {

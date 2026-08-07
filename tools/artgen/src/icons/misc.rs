@@ -42,6 +42,8 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "intents", name: "defend", draw: intent_defend },
         Icon { category: "intents", name: "buff", draw: intent_buff },
         Icon { category: "intents", name: "debuff", draw: intent_debuff },
+        Icon { category: "intents", name: "summon", draw: intent_summon },
+        Icon { category: "intents", name: "escape", draw: intent_escape },
     ]
 }
 
@@ -511,7 +513,7 @@ fn plating() -> Canvas {
 
 // -- intents ---------------------------------------------------------------
 
-/// The intent set is the game's most load-bearing telegraph, so all four are
+/// The intent set is the game's most load-bearing telegraph, so all six are
 /// drawn oversized and centred with no secondary detail at all.
 fn intent_attack() -> Canvas {
     let mut canvas = new_icon();
@@ -554,6 +556,56 @@ fn intent_debuff() -> Canvas {
     canvas.vline(15, 6, 18, R4);
     sparkle(&mut canvas, 26, 24, 4, R4);
     sparkle(&mut canvas, 6, 17, 3, R3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Summon: a skull rising out of a violet portal. The other four intents are
+/// all a change to a *number*, and this one is a change to who is on the
+/// board, so it deliberately shares no shape vocabulary with them — no arrow,
+/// no shield, no blade. Violet because it is the only ramp the intent set does
+/// not already spend, which is what keeps it separable at 1x from the buff it
+/// otherwise sits closest to in meaning.
+fn intent_summon() -> Canvas {
+    let mut canvas = new_icon();
+    // The portal, as a flattened lens rather than a ring: a circle at this
+    // size reads as a coin or an orb, and the whole job of the shape is to
+    // read as ground the skull is coming *through*.
+    for (y, half) in [(23, 4), (24, 8), (25, 10), (26, 9), (27, 5)] {
+        canvas.hline(16 - half, y, half * 2 + 1, P2);
+    }
+    canvas.hline(9, 25, 15, P4);
+    skull(&mut canvas, 16, 3, N7, N5);
+    sparkle(&mut canvas, 27, 12, 3, P4);
+    sparkle(&mut canvas, 5, 16, 3, P3);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Escape: an arrow leaving at speed. Horizontal where buff and debuff are
+/// vertical, and *going somewhere* rather than pointing at the fight, which is
+/// the whole distinction being telegraphed — this enemy is about to stop being
+/// a target.
+///
+/// Gold rather than the buff green, because what an escape costs the player is
+/// gold: the label beside it reads `-25g`, and the icon should not be the one
+/// element of the telegraph disagreeing about that.
+///
+/// A doorway to leave *through* was the first draft and is the better idea on
+/// paper. It does not survive the grid: half the width is already spent on the
+/// arrow, so the door gets nine pixels, and nine pixels of arch outlined in N0
+/// reads as a post the arrow has run into. Speed lines say the same thing with
+/// the pixels available.
+fn intent_escape() -> Canvas {
+    let mut canvas = new_icon();
+    arrow(&mut canvas, (11, 16), (28, 16), 4, 9, G3);
+    canvas.hline(12, 14, 8, G4);
+    // Bright enough to read as part of the mark. At G1 they were dashes the
+    // eye discarded, and an escape icon with the trail discarded is a buff
+    // arrow lying on its side.
+    canvas.hline(2, 8, 7, G2);
+    canvas.hline(1, 16, 6, G3);
+    canvas.hline(2, 24, 7, G2);
     finish(&mut canvas);
     canvas
 }

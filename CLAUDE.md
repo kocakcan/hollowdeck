@@ -207,7 +207,8 @@ are exactly where these games accumulate input-during-animation bugs if left imp
 5. Repeat to victory/defeat → RewardScreen.
 
 **A telegraph is mostly derived, and that is what keeps it honest.** An `EnemyIntent` is a type —
-`Attack`/`Defend`/`Buff`/`Debuff` — plus a single authored `DisplayAmount`; everything else in the
+`Attack`/`Defend`/`Buff`/`Debuff`/`Summon`/`Escape` — plus a single authored `DisplayAmount`;
+everything else in the
 label `EnemyView.FormatIntent` builds comes from the move's own `EffectSpec`s. How many hits it is
 (`4 x2`) is a run of identical `deal_damage` specs, counted through
 `EffectDescriptionFormatter.SameEffect` so cards and intents can't disagree about what one hit is;
@@ -218,7 +219,54 @@ number is pinned against its effects for every move of every enemy by
 `Phase4ContentSmokeTest.TestEveryIntentTelegraphsWhatItResolves`; a drifted telegraph is the
 canonical bad bug in this genre, because the player has already committed a turn against it.
 `Debuff` exists so a move that only worsens the player's position doesn't have to be authored as an
-Attack telegraphing 0.
+Attack telegraphing 0. `Summon` and `Escape` are there for the same reason one level up: that sweep
+resolves a `Buff` to a `Self`-scoped `apply_status`/`heal` and an `Attack` to a `deal_damage`, and a
+move that changes *who is in the fight* has neither — so borrowing an existing type is a label that
+lies and a red suite, in that order. Their derived halves are the summoned enemy's own `Name` and
+the gold an escape takes, the latter read off a **negative `gain_gold`** and shown positive
+(`-25g`): one action rather than one per sign, and `EnemyView.StolenGold` is the single place that
+sign is turned back around.
+
+**The roster mutates mid-fight, and everything about that lives in one settle pass.** `Enemies` was
+fixed for the length of a fight until Phase 8's behaviour half — set once in `StartCombat`, only ever
+shrunk by a dead-enemy sweep. Three things change it now: `summon_enemy` appends, `escape` removes an
+enemy alive, and `EnemyDefinition.OnDeath` fires as one leaves. All three go through
+`CombatManager.ResolveDeathsAndSettle`, which replaced the four near-identical
+`RemoveDeadEnemies(); CombatantsChanged; if (Enemies.Count == 0) Win` triples the resolution sites
+used to carry.
+
+Four rules in it are load-bearing, and none is derivable from reading the call sites:
+
+- **Lose is checked before Win.** An `onDeath` resolves *before* the fight is scored, so a dying
+  enemy can still take the player with it. Win-first would silently no-op every `onDeath` on the last
+  enemy alive — the one it matters most on. `Phase4ContentSmokeTest` drives a synthetic lethal burst
+  rather than asserting about the branch, because no authored `onDeath` should be a parting blow the
+  player cannot answer (every one in `enemies.json` is a Poison, which costs them a turn, not the
+  run).
+- **Escaping does not touch `EnemiesKilled`.** That omission *is* "escaping grants no reward" — the
+  tally feeds `RunState.Stats.EnemiesSlain` and from there `RunScore`.
+- **`ResolveDeaths` loops rather than making one pass**, because an `onDeath` can kill another enemy
+  or summon one that immediately dies. `EnemyCombatant.OnDeathFired` is what terminates it.
+- **A summon does not act on the turn it lands, and that is free rather than arranged.**
+  `ResolveEnemyTurnAsync` walks `_enemyTurnOrder`, a snapshot taken in `TryEndTurn`, so a newcomer is
+  simply not in the list being iterated. Rewriting that loop to walk `Enemies` directly would hit the
+  player with a move they were never shown, and nothing else would notice.
+
+`EnemyCombatant.IsGone` (`IsDead || HasEscaped`) is the predicate every "is this still in the fight"
+site reads — the turn loop's two skips, `CardView`'s drag hit test, `SimpleHookEffectRelic`'s three
+targeting arms. An escaped enemy is *alive*, so each of those walks straight past an `IsDead` check
+while its view slides off the board; one predicate is what keeps a third exit from being four sites
+to remember.
+
+**`CombatManager.MaxEnemies` is a layout budget, not a design one.** `EnemyRow` is an 800px band
+bounded by the relic bar on the left and the pile counter strip on the right, and an `EnemyView`
+authors a 220px minimum — three fit, four do not. Widening the row is the wrong fix and
+`DeckViewSmokeTest.pile_counter_strip_does_not_overlap_enemy_row` catches it; narrowing the scene's
+minimum is worse in the common case of one or two enemies. So 220 is a *maximum* and
+`CombatScreen.FitEnemiesToTheRow` derives the real width from the row's own size each refresh, with
+`NameLabel` set to ellipsis for the names that no longer fit at four. `BalanceModel` reads the same
+constant rather than keeping a copy — an analyser pricing five enemies the screen will only ever show
+four of is pricing a fight nobody can have.
 
 **Input is two layers, and the game is fully playable without a mouse.** Every binding is a named
 `hd_*` action in `project.godot`'s `[input]` — never a raw `Key.X` switch — so there is one place
@@ -258,16 +306,19 @@ An earlier shard *shop* was removed — don't reintroduce shard-purchase languag
 Content stands at **101 cards** — 97 offerable (37 Common / 41 Uncommon / 19 Rare, 12 of them
 Powers) plus 4 unplayable (2 Status, 2 Curse) that can only arrive through `add_card` — **15
 events**, 27 relics, 12 potions, **36 enemies** (7 normals + 3 elites per act, plus 6 bosses), 3
-acts. Fifteen statuses, eleven effect actions, four effect scopes, three card keywords, four intent
+acts. Fifteen statuses, thirteen effect actions, four effect scopes, three card keywords, six intent
 types, sixteen event outcome keys.
 
 Those per-act counts are *enemy ids*, not encounter slots: each act's `eliteEncounters` also fields
 one of its own **normals** as an escort — `rot_hound` (act 1), `ember_wisp` (act 2), `hollow_shade`
 (act 3) — so a normal appearing in an elite group is intended, not a mis-authored row. Sharing
 *across* acts is the thing that is forbidden, and that is the half `ActSmokeTest` asserts.
+`summon_enemy` is a *second* route an enemy id reaches a fight by, and it bypasses the act pools
+entirely — `ActSmokeTest.TestNoSummonCrossesAnAct` is what stops it being the one way act 3 content
+turns up in an act 1 room.
 
 **Icons are generated; sprites are sourced. Nothing in `assets/` is drawn by hand, and nothing is
-an SVG.** All **182** icons — 101 cards, 27 relics, 15 events, 12 potions, 15 status, 8 map, 4
+an SVG.** All **184** icons — 101 cards, 27 relics, 15 events, 12 potions, 15 status, 8 map, 6
 intents — are original work emitted by `tools/artgen`, one Rust `fn` per icon composing shapes onto
 a 32x32 grid out of the single 43-colour ramp in `docs/ART_SPEC.md` §5. They therefore need **no
 attribution**: the game-icons.net SVG set was retired in Phase 3 when the project committed to pixel
@@ -289,7 +340,7 @@ to catch committed art drifting from its source. The one command, for all three 
 
 ```bash
 cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
-#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 182
+#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 184
 #   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
 #   validate           what run-smoke-tests.sh calls; nonzero exit on failure
 ```
@@ -301,9 +352,10 @@ above.
 `ROADMAP.md` tracks what's genuinely still open. Packaged export, the card and enemy passes, the
 balance retune, the *card* half of the vocabulary — keywords, per-effect targeting, the `add_card`
 primitive, unplayable card types, X-cost — and now the *status* half — `Artifact`, `Thorns`,
-`Intangible`, `Plating` — have all shipped. What's open is enemy behaviours beyond picking a move,
-relic tiers, potion rarity and combat drops, the `?` node, an ascension ladder. Don't treat this
-section as a to-do list.
+`Intangible`, `Plating` — and the *behaviour* half — `summon_enemy`, `onDeath`, escape — have all
+shipped. What's open of the enemy vocabulary is a `wake_on_damage` picker and the two-move
+`WeightedRandomIntentPicker` collapse; after that, relic tiers, potion rarity and combat drops, the
+`?` node, an ascension ladder. Don't treat this section as a to-do list.
 
 Two open items are worth knowing *before* you touch the code they sit in, rather than when the
 roadmap is next read:
@@ -436,18 +488,18 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 
 | Test | Covers | Run when you touch |
 |---|---|---|
-| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text, rarity coverage *over the offerable pool*, `CardPool` weighting and its unplayable exclusion, Power routing, every playable card's `+` actually changing something, and the four Phase 8 statuses: `Artifact` refused-iff-`IsDebuff` over the whole enum, `Thorns` billing a fully-blocked attack but not `lose_hp`, `Intangible` flooring after Vulnerable, `Plating` granting and eroding only on damage that gets through, and turn-end decay reaching both combatants | `scripts/effects/`, `PileManager`, `CardPool`, `cards.json`, `StatusType`, `StatusRow.IsDebuff`, `CombatManager.DecayAtTurnEnd` |
+| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text, rarity coverage *over the offerable pool*, `CardPool` weighting and its unplayable exclusion, Power routing, every playable card's `+` actually changing something, a negative `gain_gold` stealing and clamping at zero, no card/potion/relic authoring the enemy-only `summon_enemy`/`escape`, and the four Phase 8 statuses: `Artifact` refused-iff-`IsDebuff` over the whole enum, `Thorns` billing a fully-blocked attack but not `lose_hp`, `Intangible` flooring after Vulnerable, `Plating` granting and eroding only on damage that gets through, and turn-end decay reaching both combatants | `scripts/effects/`, `PileManager`, `CardPool`, `cards.json`, `StatusType`, `StatusRow.IsDebuff`, `CombatManager.DecayAtTurnEnd` |
 | `CardKeywordSmokeTest` | the Phase 7 vocabulary: Retain/Innate/Ethereal in `PileManager` (including Ethereal beating Retain, and no card declaring both), `add_card` into all three piles, the unplayable gate leaving the hand unchanged, `AllEnemies`/`RandomEnemy` through a real fight, X-cost spending everything and scaling only `PerX` specs | `PileManager` keywords, `AddCardEffect`, `CardType`, `EffectScope`, X-cost, `cards.json` |
 | `CombatSmokeTest` | `CombatScreen.tscn` boots and wires up | `CombatScreen`, `CombatManager` |
-| `CombatTargetingSmokeTest` | the drag/targeting layer (risk 5): target-lock glow, HUD never painting over an enemy, the intent tooltip staying off the hand, and the `CardView` drag path itself — the rejected-drop round trip, the reparent-before-resolve invariant, `TryPlayCard`'s four rejection gates leaving the hand *unchanged*, `_ExitTree` clearing the glow, the corpse-skipping hit test, potion cancel/click, live description vs a Vulnerable target | `EnemyView`, `CardView` drag/targeting, `CombatManager` targeting sub-state |
+| `CombatTargetingSmokeTest` | the drag/targeting layer (risk 5): target-lock glow, HUD never painting over an enemy, the intent tooltip staying off the hand, and the `CardView` drag path itself — the rejected-drop round trip, the reparent-before-resolve invariant, `TryPlayCard`'s four rejection gates leaving the hand *unchanged*, `_ExitTree` clearing the glow, the hit test skipping both a corpse *and* a runaway, a summon building an `EnemyView` mid-fight and appending to `Instances`, potion cancel/click, live description vs a Vulnerable target | `EnemyView`, `CardView` drag/targeting, `CombatManager` targeting sub-state, `CombatScreen.RefreshEnemies` |
 | `RelicSmokeTest` | relic hooks fire through combat | `scripts/relics/`, relic hooks, `relics.json` |
-| `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic, every intent's telegraph against its effects, no enemy move using a card-only scope or `PerX`, the derived label shapes, turn-start grants on both sides (`Metallicize` for an enemy, `Fervor`/`Foresight` for the player) | intent pickers, statuses, elite rewards, `EnemyView.FormatIntent`, `BeginPlayerTurn`, `enemies.json` |
+| `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic, every intent's telegraph against its effects (now including Summon and Escape), no enemy move using a card-only scope or `PerX`, the derived label shapes, turn-start grants on both sides (`Metallicize` for an enemy, `Fervor`/`Foresight` for the player), and the roster-mutating half: every `summon_enemy` naming a real enemy that does not itself summon, a summon arriving telegraphed but not acting that turn, an escape leaving without a kill, `onDeath` firing before the fight is scored | intent pickers, statuses, elite rewards, `EnemyView.FormatIntent`, `BeginPlayerTurn`, `CombatManager.ResolveDeathsAndSettle`/`SummonEnemy`, `enemies.json` |
 | `HandLayoutSmokeTest` | hand fan spacing at 11+ cards, every card's text fits its box | `RefreshHand`, `HandFanLayout`, `CardView` text |
 | `DeckViewSmokeTest` | pile popups, pile counters, combat-end z-order | `PileViewPopup`, `DeckViewButtons`, `PileCounterBar` |
 | `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders, fits *and fills* the canvas | `MapGenerator`, `MapScreen`, `MapNode`, `acts.json` |
 | `EventSmokeTest` | event DB, outcome keys, the `add_card` outcome and its authoring audit, `EventScreen` | `scripts/events/`, `events.json` |
 | `ScreenSmokeTest` | Reward/Shop/Treasure/Rest load, populate and show their art; the shop's card-removal picker opening, hiding the shop beneath it, and cancelling for free; the keyword panel tracking hover and focus independently | any non-combat screen, `ScreenChrome`, `CardView`'s keyword tooltip, or its `.tscn` |
-| `ActSmokeTest` | acts load, act progression, per-act content is distinct | `acts.json`, `ActDefinition`, `RunState.AdvanceAct` |
+| `ActSmokeTest` | acts load, act progression, per-act content is distinct, no `summon_enemy` crossing an act | `acts.json`, `ActDefinition`, `RunState.AdvanceAct`, any `summon_enemy` spec |
 | `RunSaveSmokeTest` | in-run save/load round-trip, save v2/v3 tolerance | `RunSaveData`, `RunSaveManager`, `RunState` |
 | `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |
 | `AudioSmokeTest` | stream construction, bus setup, volume round-trip, and a volume change leaving the window mode alone | `scripts/audio/`, `AudioManager`, `SettingsManager` |

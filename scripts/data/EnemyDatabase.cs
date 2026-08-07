@@ -20,4 +20,10 @@ public static class EnemyDatabase
     public static IReadOnlyCollection<EnemyDefinition> All => ById.Values;
 
     public static EnemyDefinition Get(string id) => ById[id];
+
+    // The tolerant half, for the one caller that reads an id out of authored
+    // content at *runtime* rather than at load: a typo in a summon_enemy spec
+    // must name itself in the log rather than throw a KeyNotFoundException out
+    // of the middle of an enemy turn. Same split CardDatabase.Find exists for.
+    public static EnemyDefinition? Find(string id) => ById.GetValueOrDefault(id);
 }

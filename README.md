@@ -80,7 +80,7 @@ scenes/       11 screens + reusable CardView/EnemyView/PotionView/FloatingText
 data/         acts / cards / relics / potions / enemies / events — all JSON, the content layer
 assets/       sprites, icons, fonts, backgrounds, themes (see CREDITS.md for licensing)
 tools/        run-smoke-tests.sh
-  artgen/     Rust asset tool — generates the 182 icons, palette-clamps art, validates ART_SPEC
+  artgen/     Rust asset tool — generates the 184 icons, palette-clamps art, validates ART_SPEC
 ```
 
 ## Architecture

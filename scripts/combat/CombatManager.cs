@@ -56,6 +56,15 @@ public partial class CombatManager : Node
     // as "draw five", and "5 + Foresight" reads as arithmetic on nothing.
     public const int BaseHandSize = 5;
 
+    // How many enemies can be on screen at once, and therefore what a summon
+    // is refused past. This is a *layout* budget rather than a design one:
+    // EnemyRow is 900px wide and an EnemyView has a 220px minimum, so four fit
+    // and five overflow the band into the relic bar. Named and public because
+    // BalanceModel's encounter walk has to cap its roster at the same number -
+    // an analyser that models five enemies the game will never show is
+    // reporting a fight nobody can have.
+    public const int MaxEnemies = 4;
+
     private const float PreActionDelaySec = 0.2f;
     private const float PostActionDelaySec = 0.15f;
 
@@ -352,14 +361,9 @@ public partial class CombatManager : Node
         var relicCtx = MakeRelicContext();
         foreach (var relic in Relics) relic.Behavior.OnCardPlayed(relicCtx, card);
 
-        RemoveDeadEnemies();
-        CombatantsChanged?.Invoke();
-
-        if (Enemies.Count == 0)
-        {
-            EndCombat(CombatOutcome.Win);
-            return;
-        }
+        // Can end the fight in either direction from the player's own turn now
+        // that an onDeath resolves here - see ResolveDeathsAndSettle.
+        if (ResolveDeathsAndSettle()) return;
 
         TransitionTo(CombatState.PlayerTurn);
     }
@@ -376,14 +380,7 @@ public partial class CombatManager : Node
             ExecuteEffect(effect, Player, ScopedTargets(effect, Player, targets));
         }
 
-        RemoveDeadEnemies();
-        CombatantsChanged?.Invoke();
-
-        if (Enemies.Count == 0)
-        {
-            EndCombat(CombatOutcome.Win);
-            return;
-        }
+        if (ResolveDeathsAndSettle()) return;
 
         TransitionTo(CombatState.PlayerTurn);
     }
@@ -412,18 +409,15 @@ public partial class CombatManager : Node
     {
         foreach (var enemy in _enemyTurnOrder)
         {
-            if (enemy.IsDead) continue; // Died earlier this round (e.g. a relic retaliation kill).
+            // Left the fight earlier this round - a relic retaliation kill, an
+            // onDeath, or an escape triggered by something ahead of it in the
+            // order. IsGone rather than IsDead so all three read the same.
+            if (enemy.IsGone) continue;
 
             ApplyPoisonTick(enemy);
             if (enemy.IsDead)
             {
-                RemoveDeadEnemies();
-                CombatantsChanged?.Invoke();
-                if (Enemies.Count == 0)
-                {
-                    EndCombat(CombatOutcome.Win);
-                    return;
-                }
+                if (ResolveDeathsAndSettle()) return;
                 continue;
             }
 
@@ -450,16 +444,12 @@ public partial class CombatManager : Node
                 return;
             }
 
-            RemoveDeadEnemies();
-            CombatantsChanged?.Invoke();
+            if (ResolveDeathsAndSettle()) return;
 
-            if (Enemies.Count == 0)
-            {
-                EndCombat(CombatOutcome.Win);
-                return;
-            }
-
-            if (!enemy.IsDead)
+            // IsGone, not IsDead: an enemy that just fled must not tick its
+            // statuses or pick a next move, or it telegraphs an intent from
+            // off the board and its EnemyView shows one on the way out.
+            if (!enemy.IsGone)
             {
                 DecayTurnEndStatuses(enemy);
                 AdvanceEnemyIntent(enemy);
@@ -559,12 +549,106 @@ public partial class CombatManager : Node
         if (regen > 0) c.CurrentHp = Math.Min(c.MaxHp, c.CurrentHp + regen);
     }
 
-    // Replaces the four bare Enemies.RemoveAll(e => e.IsDead) calls this
-    // class used to make, so every path that clears corpses - card kill,
-    // potion kill, poison tick, enemy-turn retaliation - feeds the same
-    // kill tally without each call site having to remember to.
-    private void RemoveDeadEnemies()
+    // Brings an enemy into a fight already in progress - the primitive minions,
+    // escorts and splitting are all downstream of. Called only by
+    // SummonEnemyEffect, which is what keeps the roster cap, the opening intent
+    // and the change notification from having to be restated per effect.
+    //
+    // Two things here are load-bearing:
+    //
+    //  - The newcomer picks an intent immediately, so it arrives already
+    //    telegraphing. An enemy sitting with a blank intent panel for a turn is
+    //    the telegraph bug in its most literal form.
+    //  - It does not act this turn, and that is free rather than arranged:
+    //    ResolveEnemyTurnAsync walks _enemyTurnOrder, a snapshot taken in
+    //    TryEndTurn, so anything summoned mid-turn is simply not in the list
+    //    being iterated. Do not "fix" that into iterating Enemies directly -
+    //    a summon that acts the instant it lands hits the player with a move
+    //    they were never shown.
+    public void SummonEnemy(string definitionId, int count)
     {
+        // Find rather than Get: a typo in enemies.json must name itself in the
+        // log rather than throw out of the middle of an enemy turn.
+        var definition = EnemyDatabase.Find(definitionId);
+        if (definition is null)
+        {
+            GD.PushError($"CombatManager.SummonEnemy: no enemy with id '{definitionId}'.");
+            return;
+        }
+
+        // Counts the *live* roster, not Enemies.Count. A summon fired from an
+        // onDeath runs while the corpses are still in the list (ResolveDeaths
+        // strips them afterwards), so counting the raw list would let a dying
+        // enemy's replacement be refused by its own body - which is precisely
+        // the split case this primitive exists to make possible.
+        for (int i = 0; i < count && Enemies.Count(e => !e.IsGone) < MaxEnemies; i++)
+        {
+            var summoned = EnemyFactory.Create(definition);
+            AdvanceEnemyIntent(summoned);
+            Enemies.Add(summoned);
+        }
+    }
+
+    // Everything that happens between "an effect resolved" and "the fight is
+    // either over or waiting for input", in one place rather than the four
+    // near-identical triples the four resolution sites used to carry. Returns
+    // true when the fight ended, so a caller's next line is always `return`.
+    //
+    // The Lose-before-Win order is a rule, not the order they happened to be
+    // written in. An onDeath resolves *before* the fight is scored, so a dying
+    // enemy that poisons or strikes the player can still kill them as it goes.
+    // The alternative - Win first - would silently no-op every onDeath on the
+    // last enemy alive, which is the one it matters most on.
+    private bool ResolveDeathsAndSettle()
+    {
+        ResolveDeaths();
+        CombatantsChanged?.Invoke();
+
+        if (Player.IsDead)
+        {
+            EndCombat(CombatOutcome.Lose);
+            return true;
+        }
+
+        if (Enemies.Count == 0)
+        {
+            EndCombat(CombatOutcome.Win);
+            return true;
+        }
+
+        return false;
+    }
+
+    // Fires onDeath for everything that just died, then clears the fight of
+    // whoever has left it by either exit.
+    //
+    // The loop is not defensive padding: an onDeath can kill another enemy, or
+    // summon one that a lingering effect immediately kills, and each new corpse
+    // owes its own onDeath. OnDeathFired is what terminates it - a definition
+    // whose onDeath somehow resurrects itself still only fires once.
+    //
+    // Escaped enemies are removed *without* touching EnemiesKilled, and that
+    // omission is the entire mechanical content of "escaping grants no reward":
+    // the tally feeds RunState.Stats.EnemiesSlain and from there RunScore.
+    private void ResolveDeaths()
+    {
+        while (true)
+        {
+            var dying = Enemies.Where(e => e.IsDead && !e.OnDeathFired).ToList();
+            if (dying.Count == 0) break;
+
+            foreach (var enemy in dying)
+            {
+                enemy.OnDeathFired = true;
+                var playerTargets = new List<Combatant> { Player };
+                foreach (var spec in enemy.Definition.OnDeath)
+                {
+                    ExecuteEffect(spec, enemy, ScopedTargets(spec, enemy, playerTargets));
+                }
+            }
+        }
+
+        Enemies.RemoveAll(e => e.HasEscaped);
         EnemiesKilled += Enemies.RemoveAll(e => e.IsDead);
     }
 

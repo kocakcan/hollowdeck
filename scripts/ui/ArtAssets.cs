@@ -41,6 +41,8 @@ public static class ArtAssets
         IntentType.Defend => "defend",
         IntentType.Buff => "buff",
         IntentType.Debuff => "debuff",
+        IntentType.Summon => "summon",
+        IntentType.Escape => "escape",
         _ => "unknown",
     }}.png");
 

@@ -46,6 +46,9 @@
         ],
         "weight": 40
       }
+    ],
+    "onDeath": [
+      { "action": "apply_status", "status": "Poison", "amount": 2, "scope": "Target" }
     ]
   },
   {
@@ -81,7 +84,7 @@
   {
     "id": "possessed_armor",
     "name": "Possessed Armor",
-    "maxHp": 113,
+    "maxHp": 120,
     "aiType": "weighted_random",
     "loopFromIndex": 0,
     "moves": [
@@ -255,8 +258,15 @@
     "name": "Ward Acolyte",
     "maxHp": 40,
     "aiType": "sequential",
-    "loopFromIndex": 0,
+    "loopFromIndex": 1,
     "moves": [
+      {
+        "moveId": "call_the_faithful",
+        "intent": { "type": "Summon", "displayAmount": 1 },
+        "effects": [
+          { "action": "summon_enemy", "enemyId": "slime", "amount": 1 }
+        ]
+      },
       {
         "moveId": "raise_ward",
         "intent": { "type": "Defend", "displayAmount": 8 },
@@ -365,6 +375,14 @@
         "effects": [
           { "action": "deal_damage", "amount": 5, "scope": "Target" },
           { "action": "apply_status", "status": "Poison", "amount": 2, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "snatch_and_flee",
+        "intent": { "type": "Escape", "displayAmount": 25 },
+        "effects": [
+          { "action": "gain_gold", "amount": -25, "scope": "Self" },
+          { "action": "escape", "scope": "Self" }
         ]
       }
     ]

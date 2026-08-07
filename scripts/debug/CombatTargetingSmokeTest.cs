@@ -78,6 +78,7 @@ public partial class CombatTargetingSmokeTest : Node
         await TestCancelTargetingRestoresACleanBoard();
         await TestClickingAnEnemyResolvesAnAimedPotion();
         await TestHitTestSkipsCorpsesAndIgnoresUntargetedCards();
+        await TestASummonBuildsAnEnemyViewMidFight();
 
         GD.Print($"CombatTargetingSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -92,6 +93,14 @@ public partial class CombatTargetingSmokeTest : Node
     // leftmost enemy of a 3-enemy fight from 5 relics on. Worst case is
     // therefore the widest encounter and a late-run relic count, which is what
     // this builds.
+    //
+    // The widest encounter is four since summons: three is what the encounter
+    // *table* fields, but a summon takes a three-enemy group to
+    // CombatManager.MaxEnemies, and the extra column is what pushed EnemyRow's
+    // right edge out to 1076 - which moves every enemy left, back toward the
+    // relic bar this is measuring against. Built from four rather than three
+    // for exactly that reason; a summon is not reproducible from a static
+    // encounter id, so the group is authored at the cap directly.
     private async System.Threading.Tasks.Task TestHudNeverPaintsOverAnEnemy()
     {
         RunState.Relics = new List<RelicInstance>();
@@ -103,7 +112,8 @@ public partial class CombatTargetingSmokeTest : Node
         Check("worst_case_relic_count_available", RunState.Relics.Count == 8,
             $"only {RunState.Relics.Count} relics in the database");
 
-        CombatContext.EnemyDefinitionIds = new List<string> { "cultist", "cultist", "cultist" };
+        CombatContext.EnemyDefinitionIds =
+            Enumerable.Repeat("cultist", CombatManager.MaxEnemies).ToList();
         var packed = GD.Load<PackedScene>("res://scenes/CombatScreen.tscn");
         var instance = packed.Instantiate();
         AddChild(instance);
@@ -119,18 +129,30 @@ public partial class CombatTargetingSmokeTest : Node
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
-        Check("three_enemies_present", enemyRow.GetChildCount() == 3, $"got {enemyRow.GetChildCount()}");
+        Check("a_full_roster_is_present", enemyRow.GetChildCount() == CombatManager.MaxEnemies,
+            $"got {enemyRow.GetChildCount()}");
 
+        // The row has to actually hold them, not overflow. An HBoxContainer
+        // does not shrink a child below its custom_minimum_size - it runs past
+        // its own rect instead - so four 220px enemies in an 800px band would
+        // have looked fine in every assertion below while the rightmost one
+        // hung outside the band entirely.
+        var rowRect = enemyRow.GetGlobalRect();
+        int index = 0;
         foreach (var child in enemyRow.GetChildren())
         {
             if (child is not EnemyView enemy) continue;
+            Check($"enemy_{index}_fits_inside_the_row",
+                rowRect.Encloses(enemy.GetGlobalRect()),
+                $"enemy at {enemy.GetGlobalRect()} is not inside EnemyRow at {rowRect}");
             foreach (var painted in HudRects(topLeft))
             {
-                Check($"hud_clear_of_{enemy.Combatant.Definition.Id}_{painted.Name}",
+                Check($"hud_clear_of_enemy_{index}_{painted.Name}",
                     !painted.Rect.Intersects(enemy.GetGlobalRect()),
                     $"{painted.Name} at {painted.Rect} overlaps an enemy at {enemy.GetGlobalRect()} - " +
                     "the target-lock glow is that enemy's own background and would be painted over");
             }
+            index++;
         }
 
         instance.QueueFree();
@@ -524,7 +546,15 @@ public partial class CombatTargetingSmokeTest : Node
         // The corpse goes in first deliberately: it is first in Instances, so
         // it wins the naive hit test. That is the bug this guards, and it has
         // shipped once already.
+        //
+        // The runaway sits between them for the same reason, and is the harder
+        // of the two: it is *alive*, so an IsDead check waves it straight
+        // through while its view is sliding off the board. Both exits from a
+        // fight leave a rect behind for the length of a tween, which is why the
+        // hit test reads IsGone rather than either flag on its own.
         var corpse = SpawnEnemyOverTheMouse("cultist", alive: false);
+        var runaway = SpawnEnemyOverTheMouse("cultist", alive: true);
+        runaway.Combatant.HasEscaped = true;
         var live = SpawnEnemyOverTheMouse("cultist", alive: true);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
@@ -539,9 +569,9 @@ public partial class CombatTargetingSmokeTest : Node
 
         Check("hit_test_finds_an_enemy_under_the_mouse", found is not null,
             "no enemy matched - the setup is wrong, not the code under test");
-        Check("hit_test_skips_the_corpse", ReferenceEquals(found, live),
-            "a dead enemy won the hit test; a drag over it locks a target that is fading out, which "
-            + "reads to the player as no glow at all");
+        Check("hit_test_skips_the_corpse_and_the_runaway", ReferenceEquals(found, live),
+            "an enemy that has left the fight won the hit test; a drag over it locks a target that "
+            + "is fading out, which reads to the player as no glow at all");
 
         // A Self-targeted card must not light anything up, and the Strike
         // beside it must - without that control this passes trivially.
@@ -557,17 +587,60 @@ public partial class CombatTargetingSmokeTest : Node
         Invoke(strike, "ClearTargetHighlight");
         Check("clearing_the_highlight_unlocks_the_enemy", !live.IsTargetLocked, "enemy still lit");
 
-        // Kill the survivor too: with every candidate dead the hit test has to
+        // Kill the survivor too: with every candidate gone the hit test has to
         // come back empty rather than falling back to the nearest corpse.
         live.Combatant.CurrentHp = 0;
         var afterAllDead = strike.GetType()
             .GetMethod("FindEnemyViewUnderMouse",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
             .Invoke(strike, null);
-        Check("hit_test_returns_nothing_when_every_candidate_is_dead", afterAllDead is null,
-            "a corpse was returned once nothing was alive");
+        Check("hit_test_returns_nothing_when_every_candidate_is_gone", afterAllDead is null,
+            "a corpse was returned once nothing was targetable");
 
-        foreach (var node in new Node[] { strike, block, corpse, live }) node.QueueFree();
+        foreach (var node in new Node[] { strike, block, corpse, runaway, live }) node.QueueFree();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    // RefreshEnemies has always instantiated a view for anything in Enemies it
+    // has no view for, but until summons existed that set only ever shrank, so
+    // the growth branch had never run against a live screen. Two things are
+    // being pinned: the view gets built at all, and it is *appended* to
+    // EnemyView.Instances - which is the list the drag hit test walks in order,
+    // so a newcomer inserted anywhere else would silently reorder targeting.
+    private async System.Threading.Tasks.Task TestASummonBuildsAnEnemyViewMidFight()
+    {
+        Check("enemy_instances_clean_before_the_summon", EnemyView.Instances.Count == 0,
+            $"{EnemyView.Instances.Count} EnemyViews leaked from an earlier test");
+
+        CombatContext.EnemyDefinitionIds = new List<string> { "cultist" };
+        var instance = GD.Load<PackedScene>("res://scenes/CombatScreen.tscn").Instantiate();
+        AddChild(instance);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        var enemyRow = instance.GetNode<Control>("EnemyRow");
+        var combat = CombatManager.Instance!;
+        Check("one_enemy_before_the_summon", enemyRow.GetChildCount() == 1,
+            $"got {enemyRow.GetChildCount()}");
+
+        var existing = EnemyView.Instances.ToList();
+        combat.SummonEnemy("slime", 1);
+        // The screen rebuilds off CombatantsChanged, which SummonEnemy does not
+        // raise itself - the resolution site that called it does. Driving that
+        // here rather than adding an event to the manager keeps the assertion
+        // about the view layer instead of about who notifies whom.
+        combat.TryEndTurn();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("the_summon_gets_a_view", enemyRow.GetChildCount() == 2,
+            $"got {enemyRow.GetChildCount()} children in EnemyRow");
+        Check("the_new_view_is_appended_to_instances",
+            EnemyView.Instances.Count == existing.Count + 1
+                && EnemyView.Instances.Take(existing.Count).SequenceEqual(existing),
+            "a summon reordered EnemyView.Instances, which is the order the drag hit test walks");
+
+        instance.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }

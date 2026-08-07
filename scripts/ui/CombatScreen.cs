@@ -97,6 +97,12 @@ public partial class CombatScreen : Control
     private readonly Dictionary<CardInstance, CardView> _cardViews = new();
     private readonly Dictionary<EnemyCombatant, EnemyView> _enemyViews = new();
 
+    // What EnemyView.tscn authors as its own minimum, and what an enemy gets
+    // whenever the row can afford it. Named here rather than read back off the
+    // scene because FitEnemiesToTheRow overwrites that very property, so after
+    // the first call the scene's value is no longer there to read.
+    private const float EnemyViewPreferredWidth = 220f;
+
     // Keyboard card-play (Left/Right/number keys to select, Space to play) -
     // a second input path feeding the exact same CombatManager.TryPlayCard
     // drag-and-drop already uses, so none of this touches CombatManager's
@@ -978,20 +984,27 @@ public partial class CombatScreen : Control
             _keyboardTargetEnemy = null;
         }
 
-        // Death case: still tracked but no longer in Enemies (already
-        // stripped by Enemies.RemoveAll(e => e.IsDead) before
-        // CombatantsChanged fires) - play a death tween before removing.
+        // Gone case: still tracked but no longer in Enemies (already stripped
+        // by CombatManager.ResolveDeaths before CombatantsChanged fires) - play
+        // an exit tween before removing.
+        //
+        // Which exit is not derivable from "absent from the list", so it is
+        // read off the combatant: HasEscaped survives the strip precisely so
+        // this can tell the two apart. Playing the death tween for a runaway
+        // would tell the player they got a kill they did not get.
         foreach (var (enemyCombatant, view) in _enemyViews.ToList())
         {
             if (currentSet.Contains(enemyCombatant)) continue;
             _enemyViews.Remove(enemyCombatant);
             if (!IsInstanceValid(view)) continue;
-            view.PlayDeathTween(() =>
+            void Remove()
             {
                 if (!IsInstanceValid(view)) return;
                 if (view.GetParent() == _enemyRow) _enemyRow.RemoveChild(view);
                 view.QueueFree();
-            });
+            }
+            if (enemyCombatant.HasEscaped) view.PlayEscapeTween(Remove);
+            else view.PlayDeathTween(Remove);
         }
 
         foreach (var enemy in _combat.Enemies)
@@ -1010,6 +1023,41 @@ public partial class CombatScreen : Control
                 enemyView.Refresh();
             }
             PopupDelta(enemy, enemyView, new Vector2(30, 4));
+        }
+
+        FitEnemiesToTheRow();
+    }
+
+    // An HBoxContainer never shrinks a child below its custom_minimum_size - it
+    // runs past its own rect instead - and EnemyView's authored 220 fits three
+    // in EnemyRow's 800px band with nothing to spare. Summons made a fourth
+    // possible, so the width has to come from the row rather than from the
+    // scene.
+    //
+    // Widening the row was the first attempt and is the wrong fix: the band is
+    // bounded on the left by the relic bar and on the right by the pile counter
+    // strip, and pushing it right put it under the counters -
+    // DeckViewSmokeTest.pile_counter_strip_does_not_overlap_enemy_row caught
+    // that, which is the alarm working. Narrowing every enemy to 196 in the
+    // scene was the second and is worse in the common case, where there are one
+    // or two enemies and the space is there.
+    //
+    // So the authored 220 is a *maximum* and the real width is whatever the row
+    // can give. Reading it off EnemyRow's own size rather than a literal is also
+    // the shape the non-16:9 layout bug wants everywhere (see CLAUDE.md).
+    private void FitEnemiesToTheRow()
+    {
+        int count = _enemyRow.GetChildCount();
+        if (count == 0) return;
+
+        float separation = _enemyRow.GetThemeConstant("separation");
+        float available = _enemyRow.Size.X - separation * (count - 1);
+        float width = Mathf.Min(EnemyViewPreferredWidth, available / count);
+
+        foreach (var child in _enemyRow.GetChildren())
+        {
+            if (child is not Control view) continue;
+            view.CustomMinimumSize = new Vector2(width, view.CustomMinimumSize.Y);
         }
     }
 

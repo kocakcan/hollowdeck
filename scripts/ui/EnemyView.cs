@@ -231,6 +231,31 @@ public partial class EnemyView : Button
         tween.Chain().TweenCallback(Callable.From(onComplete));
     }
 
+    // The other way out of a fight, and it has to look like a different event
+    // than dying: an enemy that fled is one the player failed to kill, and the
+    // death tween's collapse-and-fade would read as a kill they did get. So it
+    // *leaves* - sideways, at speed, no death SFX, no slump.
+    //
+    // Same completion-callback shape as PlayDeathTween because CombatScreen
+    // drives both from the same diff of Enemies against _enemyViews.
+    //
+    // Animates scale from a right-edge pivot rather than position, and that is
+    // not a stylistic choice: this node is still a child of EnemyRow while the
+    // tween runs, and an HBoxContainer owns its children's position and size -
+    // it would overwrite a position tween on its next sort. Scale and pivot are
+    // the two transform properties a container does not touch, which is also
+    // why PlayDeathTween above only ever uses scale, rotation and modulate.
+    public void PlayEscapeTween(System.Action onComplete)
+    {
+        PivotOffset = new Vector2(Size.X, Size.Y * 0.5f);
+        var tween = CreateTween();
+        tween.SetParallel(true);
+        tween.TweenProperty(this, "scale", new Vector2(0.15f, 0.85f), 0.35)
+            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.In);
+        tween.TweenProperty(this, "modulate:a", 0f, 0.35).SetTrans(Tween.TransitionType.Sine);
+        tween.Chain().TweenCallback(Callable.From(onComplete));
+    }
+
     public override void _ExitTree()
     {
         HideIntentTooltip();
@@ -294,6 +319,12 @@ public partial class EnemyView : Button
         IntentType.Defend => ("Defend", UiTheme.Palette.Block),
         IntentType.Buff => ("Buff", UiTheme.Palette.StatusBuff),
         IntentType.Debuff => ("Debuff", UiTheme.Palette.StatusDebuff),
+        // The two that change who is in the fight. Summon borrows the buff
+        // colour because that is what it is from the enemy side - the room
+        // getting better for them - and Escape takes the gold that every other
+        // "this costs you something you own" surface in the game uses.
+        IntentType.Summon => ("Summon", UiTheme.Palette.StatusBuff),
+        IntentType.Escape => ("Escape", UiTheme.Palette.AccentGold),
         _ => ("Intent", UiTheme.Palette.AccentGold),
     };
 
@@ -399,8 +430,37 @@ public partial class EnemyView : Button
             // The status icon badge beside this label names *which* debuff, so
             // repeating it here would only cost width the enemy row hasn't got.
             IntentType.Debuff => $"{intent.DisplayAmount}",
+            // What arrives is a fact about the effects, exactly like a Buff's
+            // status name: the authored number is only how many.
+            IntentType.Summon => SummonName(move, intent.DisplayAmount),
+            // The gold is the only thing an escape costs the player, so it is
+            // the whole label. A move that steals nothing shows nothing, and
+            // the "Escape" title carries it.
+            IntentType.Escape => StolenGold(move) is int gold and > 0 ? $"-{gold}g" : "",
             _ => "",
         };
+    }
+
+    // The summoned enemy's own Name, so a mis-authored id telegraphs nothing
+    // rather than something false - the same Find-not-Get tolerance
+    // EffectDescriptionFormatter's add_card arm takes, and for the same reason:
+    // this runs on a live combat screen.
+    private static string SummonName(EnemyMove move, int count)
+    {
+        var spec = move.Effects.FirstOrDefault(e => e.Action == "summon_enemy");
+        var summoned = spec?.EnemyId is { Length: > 0 } id ? EnemyDatabase.Find(id) : null;
+        if (summoned is null) return "";
+        return count > 1 ? $"{count}x {summoned.Name}" : summoned.Name;
+    }
+
+    // Positive: what the player loses, not what the enemy gains. The spec
+    // itself is authored negative (gain_gold is one action, and a second
+    // "steal_gold" differing only by a sign would be two places to change),
+    // and this is the one place that sign is turned back around for display.
+    private static int StolenGold(EnemyMove move)
+    {
+        var spec = move.Effects.FirstOrDefault(e => e.Action == "gain_gold" && e.Amount < 0);
+        return spec is null ? 0 : -spec.Amount;
     }
 
     private static string FormatAttack(EnemyIntent intent, EnemyMove move, Combatant source, Combatant? target)

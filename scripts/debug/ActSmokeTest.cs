@@ -39,6 +39,7 @@ public partial class ActSmokeTest : Node
 
         TestActsLoad();
         TestActContentIsDistinct();
+        TestNoSummonCrossesAnAct();
         TestNewRunStartsInFirstAct();
         TestAdvanceActKeepsProgressAndReplacesMap();
         TestFinalActDoesNotAdvance();
@@ -314,5 +315,52 @@ public partial class ActSmokeTest : Node
             .ToHashSet();
         var orphans = EnemyDatabase.All.Select(e => e.Id).Where(id => !reachable.Contains(id)).ToList();
         Check("no_enemy_is_unreachable", orphans.Count == 0, $"unreferenced: {string.Join(", ", orphans)}");
+    }
+
+    // summon_enemy is a *second* way an enemy id reaches a fight, and it does
+    // not go through an act's encounter pools - so it is the one route that can
+    // put act 3 content into an act 1 room without any of the assertions above
+    // seeing it. Per-act distinctness is the half this file owns, and it stops
+    // being true the moment a summon crosses an act.
+    //
+    // Enforced as "the summoner and its summon share every act they appear in",
+    // which is the strongest form available: an escort like rot_hound is in one
+    // act's normal *and* elite pools, so membership is a set rather than an
+    // index.
+    private void TestNoSummonCrossesAnAct()
+    {
+        var actsOf = new Dictionary<string, HashSet<string>>();
+        foreach (var act in ActDatabase.All)
+        {
+            var ids = act.NormalEncounters.Concat(act.EliteEncounters).SelectMany(g => g).Concat(act.BossIds);
+            foreach (var id in ids)
+            {
+                if (!actsOf.TryGetValue(id, out var set)) actsOf[id] = set = new HashSet<string>();
+                set.Add(act.Id);
+            }
+        }
+
+        var problems = new List<string>();
+        foreach (var def in EnemyDatabase.All)
+        {
+            var summoned = def.Moves.Concat(def.EnrageMoves).SelectMany(m => m.Effects)
+                .Concat(def.OnDeath)
+                .Where(e => e.Action == "summon_enemy" && e.EnemyId is { Length: > 0 })
+                .Select(e => e.EnemyId!)
+                .Distinct();
+
+            foreach (var id in summoned)
+            {
+                var summonerActs = actsOf.GetValueOrDefault(def.Id, new HashSet<string>());
+                var summonedActs = actsOf.GetValueOrDefault(id, new HashSet<string>());
+                if (!summonerActs.SetEquals(summonedActs))
+                {
+                    problems.Add($"{def.Id} ({string.Join("/", summonerActs)}) summons "
+                        + $"{id} ({string.Join("/", summonedActs)})");
+                }
+            }
+        }
+
+        Check("no_summon_crosses_an_act", problems.Count == 0, string.Join("; ", problems));
     }
 }

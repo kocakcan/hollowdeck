@@ -38,6 +38,7 @@ public partial class EffectSmokeTest : Node
         TestHeal();
         TestGainEnergy();
         TestGainGold();
+        TestEnemyOnlyActionsStayOffCardsPotionsAndRelics();
         TestEffectDescriptionFormatter();
         TestAllEnemiesWording();
         TestLiveTargetDamage();
@@ -215,7 +216,60 @@ public partial class EffectSmokeTest : Node
         EffectRegistry.Execute(ctx, new EffectSpec { Action = "gain_gold", Amount = 7 });
         Check("gain_gold_ignores_targets", RunState.Gold == before + 7,
             $"before={before} after={RunState.Gold}");
+
+        // A negative amount is theft, and it is authored content now: an
+        // escaping enemy's parting move. Two things about it are worth pinning
+        // rather than trusting - that the sign works at all, and that it
+        // cannot drive the purse below zero, where the next reward would be
+        // silently swallowed paying the debt off.
+        RunState.Gold = 10;
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "gain_gold", Amount = -4 });
+        Check("negative_gain_gold_steals", RunState.Gold == 6, $"gold={RunState.Gold}");
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "gain_gold", Amount = -99 });
+        Check("gain_gold_clamps_at_zero_not_negative", RunState.Gold == 0, $"gold={RunState.Gold}");
+
         RunState.Gold = before;
+    }
+
+    // summon_enemy and escape resolve coherently from anywhere - a summon joins
+    // the enemy side whoever fired it, and EscapeEffect refuses a non-enemy
+    // source with a logged error rather than a throw. So a card authoring
+    // either is not a crash; it is a card that does nothing, or one that spawns
+    // reinforcements for the other side. Nothing in the game would report it.
+    //
+    // The mirror of Phase4ContentSmokeTest's card-only-scope guard, running the
+    // other way: that one keeps card vocabulary off enemy moves, this one keeps
+    // enemy vocabulary off cards.
+    private void TestEnemyOnlyActionsStayOffCardsPotionsAndRelics()
+    {
+        var enemyOnly = new[] { "summon_enemy", "escape" };
+        var problems = new List<string>();
+
+        foreach (var card in CardDatabase.All)
+        {
+            foreach (var spec in card.Effects.Where(e => enemyOnly.Contains(e.Action)))
+            {
+                problems.Add($"card {card.Id}: {spec.Action}");
+            }
+        }
+        foreach (var potion in PotionDatabase.All)
+        {
+            foreach (var spec in potion.Effects.Where(e => enemyOnly.Contains(e.Action)))
+            {
+                problems.Add($"potion {potion.Id}: {spec.Action}");
+            }
+        }
+        foreach (var relic in RelicDatabase.All)
+        {
+            // A relic carries at most one spec, not a list.
+            if (relic.Effect is { } effect && enemyOnly.Contains(effect.Action))
+            {
+                problems.Add($"relic {relic.Id}: {effect.Action}");
+            }
+        }
+
+        Check("enemy_only_actions_stay_off_cards_potions_and_relics", problems.Count == 0,
+            string.Join("; ", problems));
     }
 
     private void TestEffectDescriptionFormatter()

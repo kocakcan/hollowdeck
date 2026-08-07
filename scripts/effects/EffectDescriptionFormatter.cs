@@ -241,8 +241,28 @@ public static class EffectDescriptionFormatter
             // here, so the gap only showed up as a card with no rules text at
             // all - which is exactly the silent failure the default arm below
             // produces for an unknown action.
+            // A negative amount is theft, not a gain of a negative number, and
+            // it is authored content now (an escaping enemy's parting move), so
+            // it gets its own sentence rather than printing "Gains -25 Gold".
             case "gain_gold":
-                return $"{Verb(ctx, "Gain", "Gains")} {Amount(effect)} Gold.";
+                return effect.Amount < 0
+                    ? $"{Verb(ctx, "Lose", "Steals")} {-effect.Amount} Gold."
+                    : $"{Verb(ctx, "Gain", "Gains")} {Amount(effect)} Gold.";
+            // Reads the enemy database for the same reason add_card reads the
+            // card one, and takes the same tolerant Find: this runs inside the
+            // intent tooltip, where a typo in enemies.json must not take the
+            // combat screen down with it.
+            case "summon_enemy":
+            {
+                var summoned = effect.EnemyId is { Length: > 0 } enemyId ? EnemyDatabase.Find(enemyId) : null;
+                if (summoned is null) return "";
+                return $"{Verb(ctx, "Summon", "Summons")} {Amount(effect)} {summoned.Name}.";
+            }
+            // No amount to print - the whole content of the effect is that the
+            // enemy stops being in the fight, and unlike a death that pays out
+            // nothing, which is what the sentence has to convey.
+            case "escape":
+                return ctx.Voice == DescribeVoice.Enemy ? "Flees the fight." : "Flee the fight.";
             // The first arm that has to resolve an id against a database. Find
             // rather than Get, and an empty string rather than a throw, for
             // the same reason AddCardEffect uses it: this runs on a shop tile
