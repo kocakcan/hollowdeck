@@ -39,10 +39,16 @@ public partial class MapSmokeTest : Node
         GetTree().Quit(_fail == 0 ? 0 : 1);
     }
 
-    private void Check(string name, bool condition, string detail)
+    // Returns the condition so a caller can bail before dereferencing whatever
+    // the failed check was about. A test that throws inside _Ready never
+    // reaches GetTree().Quit(), so Godot sits in an idle main loop and the
+    // sweep reports TIMEOUT - which per CLAUDE.md means a restructured .tscn,
+    // not a red assertion. A failing test must fail, not hang.
+    private bool Check(string name, bool condition, string detail)
     {
         if (condition) { _pass++; GD.Print($"PASS {name}"); }
         else { _fail++; GD.Print($"FAIL {name}: {detail}"); }
+        return condition;
     }
 
     // Every act, not just the first: floor counts and encounter pools now come
@@ -223,9 +229,15 @@ public partial class MapSmokeTest : Node
         var reachable = RunState.GetMapNode(start.Id).NextNodeIds.ToHashSet();
         var paired = RunState.MapNodes.Zip(buttons, (node, button) => (node, button)).ToList();
 
-        Check("map_screen_pairs_every_node_with_a_button",
-            buttons.Count == RunState.MapNodes.Count,
-            $"buttons={buttons.Count}, nodes={RunState.MapNodes.Count}");
+        // Everything below indexes into `paired`, so a broken pairing has to
+        // stop the test rather than let First() throw out of _Ready.
+        if (!Check("map_screen_pairs_every_node_with_a_button",
+                buttons.Count == RunState.MapNodes.Count,
+                $"buttons={buttons.Count}, nodes={RunState.MapNodes.Count}"))
+        {
+            instance.QueueFree();
+            return;
+        }
 
         var untraversed = paired.Where(p =>
             p.node.Type != MapNodeType.Boss

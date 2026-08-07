@@ -443,12 +443,32 @@ public partial class ScreenShot : Node
     private static void OpenShopRemoval(Node screen) =>
         screen.GetNode<Button>("RemoveCardButton").EmitSignal(BaseButton.SignalName.Pressed);
 
-    private static void SeedMap()
+    private static void SeedMap() => SeedMapWalkedTo(3);
+
+    // Several floors in, not parked on the start node. MapScreen draws four
+    // node states and a one-node trail can only show three of them - visited
+    // and current were the same button, so ChromeStyles.MapNodeTrailStyle was
+    // invisible in every committed shot and a regression in it would have been
+    // unreviewable. Walking also puts the untraversed dim next to a real path
+    // rather than next to a single lit square, which is the comparison a human
+    // is actually checking.
+    //
+    // Deterministic: always the first successor, so the trail is the same every
+    // run like the rest of these fixtures. Stops short of a Boss node - entering
+    // one ends the act, so it is a state MapScreen never renders.
+    private static void SeedMapWalkedTo(int floors)
     {
         RunState.MapNodes = MapGenerator.Generate(new Random(7), RunState.CurrentAct);
-        var start = RunState.MapNodes.First(n => n.Floor == 0);
-        RunState.CurrentNodeId = start.Id;
-        RunState.VisitedNodeIds = new HashSet<string> { start.Id };
+        var node = RunState.MapNodes.First(n => n.Floor == 0);
+        RunState.VisitedNodeIds = new HashSet<string> { node.Id };
+        for (int i = 0; i < floors; i++)
+        {
+            var next = node.NextNodeIds.Select(RunState.GetMapNode).FirstOrDefault();
+            if (next is null || next.Type == MapNodeType.Boss) break;
+            node = next;
+            RunState.VisitedNodeIds.Add(node.Id);
+        }
+        RunState.CurrentNodeId = node.Id;
     }
 
     // Deep into a run rather than the start of one: a later act, and the
@@ -465,10 +485,9 @@ public partial class ScreenShot : Node
     private static void SeedActMap(int actIndex)
     {
         SeedActProgress(actIndex);
-        RunState.MapNodes = MapGenerator.Generate(new Random(7), RunState.CurrentAct);
-        var start = RunState.MapNodes.First(n => n.Floor == 0);
-        RunState.CurrentNodeId = start.Id;
-        RunState.VisitedNodeIds = new HashSet<string> { start.Id };
+        // Deeper than act 1's shot: these acts are longer, and SeedActProgress
+        // already says "a run that has cleared what came before".
+        SeedMapWalkedTo(4);
     }
 
     private static void SeedActBossCombat(int actIndex)

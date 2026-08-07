@@ -45,18 +45,24 @@ public partial class MapScreen : Control
     private Control _nodeButtons = null!;
     private readonly Dictionary<string, Vector2> _nodeCenters = new();
 
-    // Where the keyboard starts. Godot's focus *neighbour search* skips
-    // Disabled controls, and BuildButtons disables every unreachable node, so
-    // from here Tab and the arrow keys only ever visit legal moves - the map
-    // needed no navigation code of its own, only somewhere to begin.
+    // Where the keyboard starts. From here Tab and the arrow keys only ever
+    // visit legal moves, so the map still needs no navigation code of its own -
+    // but *why* that holds was wrong here for a long time, and the correction
+    // matters because other screens were written against the wrong version.
     //
-    // Disabled alone is not enough, though, and this is the gap: a mouse press
-    // on a disabled Control still makes the Viewport grab key focus for it, and
-    // Godot draws the focus stylebox *on top of* the disabled one. Clicking a
-    // node you cannot walk to therefore parked the 4px FocusRing box - the
-    // brightest thing in the design system - on an illegal move. BuildButtons
-    // sets FocusMode.None on everything unreachable, which is what actually
-    // closes it.
+    // Disabled does not do it. Measured on 4.7.1: FindNextValidFocus and
+    // FindValidFocusNeighbor both hand back a Disabled Button quite happily -
+    // they filter on FocusMode and visibility, and BaseButton never drops its
+    // FocusMode when disabled. A mouse press on a disabled Control likewise
+    // still makes the Viewport grab key focus for it, and Godot draws the focus
+    // stylebox *on top of* the disabled one. So an unreachable node could be
+    // reached both ways, and parked the 4px FocusRing box - the brightest thing
+    // in the design system - on a move the player could not make.
+    //
+    // FocusMode.None in BuildButtons is what actually closes both routes.
+    // ScreenKeyboardNav's own comment and README's keyboard section carried the
+    // same wrong claim and are corrected alongside this; the shop's unaffordable
+    // Buy buttons still rely on the wrong version and are worth the same fix.
     private Button? _firstReachableButton;
 
     // Untraversed *and* unreachable: a node the player has neither been to nor
