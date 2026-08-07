@@ -336,4 +336,26 @@ public static class ChromeStyles
         style.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
         return style;
     }
+
+    // The map node the player has already walked through. Disabled like every
+    // other illegal move, but it is history rather than a wall, so it keeps a
+    // warm border instead of falling through to the theme's neutral
+    // sb_btn_disabled (#2e2724).
+    //
+    // G0 and not G1/G2 is the load-bearing part: G1 is what the theme paints on
+    // a *reachable* node, so anything at or above it would make the path you
+    // already took compete with the move you can still make. One step below
+    // says "trail" without saying "click me". Warm-vs-neutral is then what
+    // separates visited from untraversed independently of MapScreen's
+    // brightness axis, so the two signals reinforce rather than duplicate.
+    public static StyleBoxFlat MapNodeTrailStyle()
+    {
+        var style = new StyleBoxFlat
+        {
+            BgColor = PixelSpec.Ramp.N1,
+            BorderColor = PixelSpec.Ramp.G0,
+        };
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
+        return style;
+    }
 }

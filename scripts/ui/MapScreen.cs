@@ -45,11 +45,34 @@ public partial class MapScreen : Control
     private Control _nodeButtons = null!;
     private readonly Dictionary<string, Vector2> _nodeCenters = new();
 
-    // Where the keyboard starts. Godot's focus navigation skips Disabled
-    // controls, and BuildButtons disables every unreachable node, so from here
-    // Tab and the arrow keys only ever visit legal moves - the map needed no
-    // navigation code of its own, only somewhere to begin.
+    // Where the keyboard starts. From here Tab and the arrow keys only ever
+    // visit legal moves, so the map still needs no navigation code of its own -
+    // but *why* that holds was wrong here for a long time, and the correction
+    // matters because other screens were written against the wrong version.
+    //
+    // Disabled does not do it. Measured on 4.7.1: FindNextValidFocus and
+    // FindValidFocusNeighbor both hand back a Disabled Button quite happily -
+    // they filter on FocusMode and visibility, and BaseButton never drops its
+    // FocusMode when disabled. A mouse press on a disabled Control likewise
+    // still makes the Viewport grab key focus for it, and Godot draws the focus
+    // stylebox *on top of* the disabled one. So an unreachable node could be
+    // reached both ways, and parked the 4px FocusRing box - the brightest thing
+    // in the design system - on a move the player could not make.
+    //
+    // FocusMode.None in BuildButtons is what actually closes both routes.
+    // ScreenKeyboardNav's own comment and README's keyboard section carried the
+    // same wrong claim and are corrected alongside this; ShopScreen.RefreshOffers
+    // is the other place that was relying on it, and pairs the two the same way.
     private Button? _firstReachableButton;
+
+    // Untraversed *and* unreachable: a node the player has neither been to nor
+    // can move to now. It recedes on brightness because the theme's disabled
+    // border is all that distinguished it otherwise, and a 2px near-black
+    // outline does not register against a 64px icon at full white - the map
+    // read as uniformly lit and carried no sense of progress through the act.
+    // Modulate is inherited by children, so this dims the icon TextureRect too,
+    // which is where the whole effect lives.
+    private static readonly Color UntraversedDim = new(0.45f, 0.45f, 0.45f);
 
     public override void _Ready()
     {
@@ -179,6 +202,7 @@ public partial class MapScreen : Control
         {
             var center = _nodeCenters[node.Id];
             bool isReachable = reachable.Contains(node.Id);
+            bool isVisited = RunState.VisitedNodeIds.Contains(node.Id);
             bool isBoss = node.Type == MapNodeType.Boss;
             float size = isBoss ? BossNodeSize : NodeSize;
             var button = new Button
@@ -186,14 +210,44 @@ public partial class MapScreen : Control
                 Position = center - new Vector2(size / 2f, size / 2f),
                 Size = new Vector2(size, size),
                 Disabled = !isReachable,
-                Modulate = RunState.VisitedNodeIds.Contains(node.Id) ? new Color(0.6f, 0.6f, 0.6f) : Colors.White,
+
+                // The brightness rule used to be the other way round - visited
+                // was the only thing dimmed - which meant a node twenty minutes
+                // of play away was drawn exactly as brightly as the one move
+                // the player could actually make.
+                //
+                // The boss is exempt rather than falling through: it is
+                // untraversed and unreachable for an entire act, so the rule
+                // would recede the map's one landmark for ten floors, which is
+                // the opposite of what BossNodeGlowStyle exists to say.
+                Modulate = isBoss || isReachable || isVisited ? Colors.White : UntraversedDim,
+
+                // Not folded into Disabled - the two do different jobs and both
+                // are needed. Disabled is what suppresses the hover stylebox and
+                // what ScreenKeyboardNav.CanTakeFocus reads; FocusMode is what
+                // stops a mouse press from grabbing focus anyway. See
+                // _firstReachableButton. Applies to the boss too: it overrides
+                // normal/hover/disabled but not focus, so an unreachable boss
+                // would otherwise take the cream box as readily as anything else.
+                FocusMode = isReachable ? FocusModeEnum.All : FocusModeEnum.None,
+
+                // Kept on unreachable nodes on purpose: reading the route ahead
+                // is how this genre is played. Only the *highlight* goes away.
                 TooltipText = NodeLabel(node.Type),
             };
+            // Boss wins over the trail style below. The two cannot co-occur on a
+            // live map (entering the boss ends the act, so it is never both
+            // visited and rendered), but the winner is stated rather than left
+            // to which branch happens to run last.
             if (isBoss)
             {
                 button.AddThemeStyleboxOverride("normal", ChromeStyles.BossNodeGlowStyle());
                 button.AddThemeStyleboxOverride("hover", ChromeStyles.BossNodeGlowStyle());
                 button.AddThemeStyleboxOverride("disabled", ChromeStyles.BossNodeGlowStyle());
+            }
+            else if (isVisited)
+            {
+                button.AddThemeStyleboxOverride("disabled", ChromeStyles.MapNodeTrailStyle());
             }
             // Icon-only node buttons when art exists; text label fallback.
             //

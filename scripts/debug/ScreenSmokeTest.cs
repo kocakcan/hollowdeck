@@ -43,6 +43,7 @@ public partial class ScreenSmokeTest : Node
         TestRewardScreen();
         TestTreasureScreen();
         TestShopScreen();
+        TestShopUnaffordableOffersAreUnfocusable();
         TestRestScreen();
 
         GD.Print($"ScreenSmokeTest: {_pass} passed, {_fail} failed");
@@ -396,6 +397,57 @@ public partial class ScreenSmokeTest : Node
         Check("shop_removal_cancel_is_free",
             !picker.Visible && RunState.Gold == goldBefore && RunState.Deck.Count == 2,
             $"gold {goldBefore}->{RunState.Gold}, deck={RunState.Deck.Count}");
+
+        screen.QueueFree();
+    }
+
+    // The keyboard must not stop on an offer the player cannot buy. Disabled
+    // does not achieve that on its own - Godot's focus navigation filters on
+    // FocusMode and visibility, and BaseButton keeps FocusModeEnum.All when
+    // disabled - so ShopScreen.RefreshOffers pairs the two, and this is the
+    // assertion that says it stayed paired. Same rule, same wrong belief
+    // corrected, as MapScreen's unreachable nodes.
+    //
+    // Gold is 60 so both populations are guaranteed non-empty whatever the
+    // relic/potion stock rolls: the four card offers at 50 are affordable and
+    // the 75g removal service is not. An invariant asserted over an all-
+    // affordable shop would pass without testing anything.
+    private void TestShopUnaffordableOffersAreUnfocusable()
+    {
+        RunState.Gold = 60;
+        RunState.Relics = new List<RelicInstance>();
+        RunState.Potions = new List<PotionInstance>();
+
+        var screen = LoadScene("res://scenes/ShopScreen.tscn");
+        var buyButtons = screen.GetNode<Control>("CardOffersRow").GetChildren()
+            .SelectMany(c => c.GetChildren()).OfType<Button>()
+            .Concat(screen.GetNode<Control>("OffersRow").GetChildren()
+                .SelectMany(c => c.GetChildren()).SelectMany(c => c.GetChildren()).OfType<Button>())
+            .Append(screen.GetNode<Button>("RemoveCardButton"))
+            .ToList();
+
+        var affordable = buyButtons.Where(b => !b.Disabled).ToList();
+        var unaffordable = buyButtons.Where(b => b.Disabled).ToList();
+
+        Check("shop_has_both_affordable_and_unaffordable_offers",
+            affordable.Count > 0 && unaffordable.Count > 0,
+            $"affordable={affordable.Count}, unaffordable={unaffordable.Count}");
+        Check("shop_unaffordable_offers_refuse_focus",
+            unaffordable.All(b => b.FocusMode == Control.FocusModeEnum.None),
+            $"still focusable=[{string.Join(",", unaffordable.Where(b => b.FocusMode != Control.FocusModeEnum.None).Select(b => b.Text))}]");
+        Check("shop_affordable_offers_keep_focus",
+            affordable.All(b => b.FocusMode != Control.FocusModeEnum.None),
+            $"unfocusable=[{string.Join(",", affordable.Where(b => b.FocusMode == Control.FocusModeEnum.None).Select(b => b.Text))}]");
+
+        // Buying drops the button out of _offerButtons entirely, so the refresh
+        // loop never sees it again - MarkSold has to do this itself or a "Sold"
+        // offer stays tabbable for the rest of the visit.
+        var bought = affordable.First(b => b.Text.StartsWith("Buy"));
+        bought.EmitSignal(BaseButton.SignalName.Pressed);
+        Check("shop_sold_offers_refuse_focus",
+            bought.Text == "Sold" && bought.Disabled
+            && bought.FocusMode == Control.FocusModeEnum.None,
+            $"text='{bought.Text}', disabled={bought.Disabled}, focus={bought.FocusMode}");
 
         screen.QueueFree();
     }

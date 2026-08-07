@@ -32,16 +32,23 @@ public partial class MapSmokeTest : Node
         TestBossPickIsSeedDeterministic();
         TestEncounterPoolsResolve();
         TestMapScreenRendersGraph();
+        TestMapScreenNodeStates();
         TestLongestActFitsOnScreen();
 
         GD.Print($"MapSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
     }
 
-    private void Check(string name, bool condition, string detail)
+    // Returns the condition so a caller can bail before dereferencing whatever
+    // the failed check was about. A test that throws inside _Ready never
+    // reaches GetTree().Quit(), so Godot sits in an idle main loop and the
+    // sweep reports TIMEOUT - which per CLAUDE.md means a restructured .tscn,
+    // not a red assertion. A failing test must fail, not hang.
+    private bool Check(string name, bool condition, string detail)
     {
         if (condition) { _pass++; GD.Print($"PASS {name}"); }
         else { _fail++; GD.Print($"FAIL {name}: {detail}"); }
+        return condition;
     }
 
     // Every act, not just the first: floor counts and encounter pools now come
@@ -182,6 +189,92 @@ public partial class MapSmokeTest : Node
         Check("map_screen_names_the_current_act",
             actLabel is not null && actLabel.Text.Contains(ActDatabase.At(0).Name),
             $"label='{actLabel?.Text}'");
+
+        instance.QueueFree();
+    }
+
+    // The four node states MapScreen.BuildButtons derives, all live at once.
+    // Seeded exactly like ScreenShot.SeedMap so the assertions here and the
+    // screenshot a human looks at describe the same picture: one visited node
+    // (which is also the current one), its successors reachable, every other
+    // node untraversed, and the boss unreachable for the whole act.
+    //
+    // The focus assertion is the one with a bug behind it. Disabled is not
+    // enough on its own - a mouse press on a disabled Control still grabs key
+    // focus, and Godot paints the focus stylebox over the disabled one, so
+    // clicking an unreachable node used to leave the 4px FocusRing box on a
+    // move the player could not make.
+    private void TestMapScreenNodeStates()
+    {
+        RunState.Gold = 0;
+        RunState.PlayerMaxHp = 50;
+        RunState.PlayerCurrentHp = 40;
+        RunState.Relics = new List<RelicInstance>();
+        RunState.ActIndex = 0;
+        RunState.MapNodes = MapGenerator.Generate(new Random(7), ActDatabase.At(0));
+        var start = RunState.MapNodes.First(n => n.Floor == 0);
+        RunState.CurrentNodeId = start.Id;
+        RunState.VisitedNodeIds = new HashSet<string> { start.Id };
+
+        var packed = GD.Load<PackedScene>("res://scenes/MapScreen.tscn");
+        var instance = packed.Instantiate();
+        AddChild(instance);
+
+        // OfType, not Cast: with CurrentNodeId set, BuildCurrentNodeRing adds a
+        // Panel to this container (at child index 0, via MoveChild). The buttons
+        // that remain are still in RunState.MapNodes order, which is what lets
+        // them be zipped back onto their nodes below.
+        var buttons = instance.GetNode<Control>("NodeButtons")
+            .GetChildren().OfType<Button>().ToList();
+        var reachable = RunState.GetMapNode(start.Id).NextNodeIds.ToHashSet();
+        var paired = RunState.MapNodes.Zip(buttons, (node, button) => (node, button)).ToList();
+
+        // Everything below indexes into `paired`, so a broken pairing has to
+        // stop the test rather than let First() throw out of _Ready.
+        if (!Check("map_screen_pairs_every_node_with_a_button",
+                buttons.Count == RunState.MapNodes.Count,
+                $"buttons={buttons.Count}, nodes={RunState.MapNodes.Count}"))
+        {
+            instance.QueueFree();
+            return;
+        }
+
+        var untraversed = paired.Where(p =>
+            p.node.Type != MapNodeType.Boss
+            && !reachable.Contains(p.node.Id)
+            && !RunState.VisitedNodeIds.Contains(p.node.Id)).ToList();
+        Check("map_screen_dims_untraversed_nodes",
+            untraversed.Count > 0 && untraversed.All(p => p.button.Modulate.R < 0.6f),
+            $"untraversed={untraversed.Count}, " +
+            $"bright={untraversed.Count(p => p.button.Modulate.R >= 0.6f)}");
+
+        var reachableButtons = paired.Where(p => reachable.Contains(p.node.Id)).ToList();
+        Check("map_screen_keeps_reachable_nodes_bright",
+            reachableButtons.Count > 0 && reachableButtons.All(p => p.button.Modulate.R > 0.9f),
+            $"reachable={reachableButtons.Count}, " +
+            $"dim={reachableButtons.Count(p => p.button.Modulate.R <= 0.9f)}");
+
+        // Both halves: the visited node stops being the dimmed one *and* picks
+        // up the trail border. Asserting only the modulate would let the
+        // stylebox override silently go missing, and the two are what separate
+        // "walked through" from "cannot reach" once both are at full brightness.
+        var visited = paired.First(p => p.node.Id == start.Id).button;
+        var visitedBorder = (visited.GetThemeStylebox("disabled") as StyleBoxFlat)?.BorderColor;
+        Check("map_screen_marks_visited_nodes_as_a_trail",
+            visited.Modulate.R > 0.9f && visitedBorder == PixelSpec.Ramp.G0,
+            $"modulate={visited.Modulate}, border={visitedBorder}");
+
+        var boss = paired.First(p => p.node.Type == MapNodeType.Boss).button;
+        Check("map_screen_keeps_the_boss_bright_while_unreachable",
+            boss.Disabled && boss.Modulate.R > 0.9f,
+            $"disabled={boss.Disabled}, modulate={boss.Modulate}");
+
+        var focusable = paired.Where(p => p.button.FocusMode != Control.FocusModeEnum.None).ToList();
+        Check("map_screen_denies_focus_to_unreachable_nodes",
+            focusable.Count == reachableButtons.Count
+            && focusable.All(p => reachable.Contains(p.node.Id)),
+            $"focusable={focusable.Count}, reachable={reachableButtons.Count}, " +
+            $"illegal=[{string.Join(",", focusable.Where(p => !reachable.Contains(p.node.Id)).Select(p => p.node.Id))}]");
 
         instance.QueueFree();
     }
