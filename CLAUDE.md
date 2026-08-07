@@ -196,10 +196,19 @@ to look and a future rebinding UI has something to rebind. Above that, the two s
 navigated differently *on purpose*:
 
 - **Non-combat screens use Godot's own focus system.** They are stock `Button`s, so Tab/arrow
-  navigation and the skipping of `Disabled` controls come free — which is why the map needs no
-  navigation code at all: unreachable nodes are already disabled. `ScreenKeyboardNav.Attach` is the
-  one line each screen adds, giving it an initial focus owner, a re-grab after it rebuilds
-  controls, and `hd_cancel`.
+  navigation comes free. `ScreenKeyboardNav.Attach` is the one line each screen adds, giving it an
+  initial focus owner, a re-grab after it rebuilds controls, and `hd_cancel`.
+
+  **Keeping the keyboard *off* an illegal choice is not free, and `Disabled` does not do it.**
+  Measured on 4.7.1: `Disabled` excludes a control from neither Tab nor arrow navigation, and does
+  not release focus it already holds — `BaseButton` keeps `FocusModeEnum.All` throughout. Only
+  `FocusModeEnum.None` excludes *or* releases. The two screens with illegal-but-present choices set
+  both together (`MapScreen.BuildButtons` on unreachable nodes, `ShopScreen.RefreshOffers` on
+  unaffordable and sold offers); everywhere else every control on screen is a legal one, so
+  `Disabled` alone is fine. This file, `ScreenKeyboardNav` and README all claimed the opposite for a
+  long time, and the resulting bug — the focus ring parked on a map node the player could not walk
+  to — shipped. `KeyboardSmokeTest.TestOnlyFocusModeExcludesAControlFromTheKeyboard` pins the engine
+  behaviour so an upgrade that changes it is noticed here.
 - **Combat drives its own `_UnhandledInput`.** Cards are fanned `Panel`s and targeting is a
   `CombatState` sub-state, so `EnemyView`, `PotionView`, End Turn and Continue all stay
   `FocusModeEnum.None` — focus navigation would fight the arrow-key card cycling. Don't "fix" those
@@ -414,7 +423,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `AudioSmokeTest` | stream construction, bus setup, volume round-trip, and a volume change leaving the window mode alone | `scripts/audio/`, `AudioManager`, `SettingsManager` |
 | `TransitionSmokeTest` | cross-screen fade: overlay geometry/layer, the Reduce Motion gate, covered-action firing once | `ScreenFade`, `RunManager.ChangeScreen` |
 | `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon- *and sprite*-to-definition coverage, `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
-| `KeyboardSmokeTest` | `hd_*` InputMap coverage and no duplicate keycodes, which control each screen focuses on load, the card picker's grid navigation (down a column, out to Cancel, back in), combat's card/potion keys, potion aiming, Continue at combat end | `project.godot` `[input]`, `ScreenKeyboardNav`, `CardPicker`, any screen's focus wiring, `CombatScreen._UnhandledInput` |
+| `KeyboardSmokeTest` | `hd_*` InputMap coverage and no duplicate keycodes, which control each screen focuses on load, that only `FocusMode` (never `Disabled`) excludes a control from the keyboard, the card picker's grid navigation (down a column, out to Cancel, back in), combat's card/potion keys, potion aiming, Continue at combat end | `project.godot` `[input]`, `ScreenKeyboardNav`, `CardPicker`, any screen's focus wiring, `CombatScreen._UnhandledInput` |
 | `VictorySmokeTest` | the final act's boss win routing to `RunEndScreen` rather than another reward, and that screen reading VICTORY | `CombatScreen.OnContinuePressed`, `RunState.IsFinalAct`/`AdvanceAct`, `RunEndScreen` |
 | `BalanceSmokeTest` | the difficulty curve rising act over act, every elite and boss encounter costing what its node type promises (bands, plus no boss cheaper than the act's costliest elite), every enrage phase out-hitting its own normal phase, every `RunScore` threshold being reachable by some seed, upgrade amounts matching the documented formula | `enemies.json`, `acts.json`, `RunScore` thresholds, `CardUpgrade`, `MapGenerator` weights |
 

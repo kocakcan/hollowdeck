@@ -50,14 +50,15 @@ public partial class MapScreen : Control
     // but *why* that holds was wrong here for a long time, and the correction
     // matters because other screens were written against the wrong version.
     //
-    // Disabled does not do it. Measured on 4.7.1: FindNextValidFocus and
-    // FindValidFocusNeighbor both hand back a Disabled Button quite happily -
-    // they filter on FocusMode and visibility, and BaseButton never drops its
-    // FocusMode when disabled. A mouse press on a disabled Control likewise
-    // still makes the Viewport grab key focus for it, and Godot draws the focus
-    // stylebox *on top of* the disabled one. So an unreachable node could be
-    // reached both ways, and parked the 4px FocusRing box - the brightest thing
-    // in the design system - on a move the player could not make.
+    // Disabled does not do it. Measured on 4.7.1 and pinned by
+    // KeyboardSmokeTest.TestOnlyFocusModeExcludesAControlFromTheKeyboard:
+    // FindNextValidFocus and FindValidFocusNeighbor both hand back a Disabled
+    // Button quite happily, and disabling a focused one does not even take its
+    // focus away. A mouse press on a disabled Control likewise still makes the
+    // Viewport grab key focus for it, and Godot draws the focus stylebox *on
+    // top of* the disabled one. So an unreachable node could be reached every
+    // way there is, and parked the 4px FocusRing box - the brightest thing in
+    // the design system - on a move the player could not make.
     //
     // FocusMode.None in BuildButtons is what actually closes both routes.
     // ScreenKeyboardNav's own comment and README's keyboard section carried the

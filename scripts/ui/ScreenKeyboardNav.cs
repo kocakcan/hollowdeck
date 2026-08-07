@@ -17,10 +17,13 @@ namespace Hollowdeck.UI;
 // went nowhere.
 //
 // This used to add "and already skips Disabled controls", and it does not.
-// Measured on 4.7.1: FindNextValidFocus and FindValidFocusNeighbor filter on
-// FocusMode and visibility only, and BaseButton keeps FocusModeEnum.All when
-// disabled - so an inert control takes focus and paints the focus ring on a
-// choice that cannot be made. Excluding one costs an explicit
+// Measured on 4.7.1 (and pinned by
+// KeyboardSmokeTest.TestOnlyFocusModeExcludesAControlFromTheKeyboard, because
+// the wrong version of this was load-bearing in two screens): Disabled excludes
+// a control from neither Tab nor arrow navigation, and does not even release
+// focus it already holds - BaseButton keeps FocusModeEnum.All throughout. So an
+// inert control takes focus and paints the focus ring on a choice that cannot
+// be made, and can keep it after going inert. Excluding one costs an explicit
 // FocusModeEnum.None, which MapScreen.BuildButtons sets on every unreachable
 // node and ShopScreen.RefreshOffers on every offer the player cannot afford.
 // Those are the two screens with illegal-but-present choices; everywhere else

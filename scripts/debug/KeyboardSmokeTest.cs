@@ -60,6 +60,7 @@ public partial class KeyboardSmokeTest : Node
 
         TestInputMapLayer();
         TestFocusModeSplit();
+        TestOnlyFocusModeExcludesAControlFromTheKeyboard();
         await TestEveryNonCombatScreenTakesFocus(tree);
         await TestEventPickerTakesFocus(tree);
         await TestRestPickerGridNavigation(tree);
@@ -139,6 +140,64 @@ public partial class KeyboardSmokeTest : Node
     }
 
     // --- 2. who is allowed to hold focus ---------------------------------
+
+    // Pins the engine behaviour MapScreen and ShopScreen both depend on, because
+    // this repo has now been wrong about it twice in comments and once in code.
+    //
+    // The belief was that Godot's focus navigation skips Disabled controls, so
+    // marking a map node or a shop offer Disabled was enough to keep the
+    // keyboard off it. It is not: Disabled excludes nothing and does not even
+    // release focus a control already holds. Only FocusModeEnum.None does
+    // either. That is why both screens now set the two together, and why an
+    // engine upgrade that changed it would need to be noticed here rather than
+    // discovered as a focus ring sitting on a move the player cannot make.
+    //
+    // Asserting Godot rather than Hollowdeck is deliberate and rare: the wrong
+    // version of this was load-bearing in two screens and invisible to every
+    // other test in the suite.
+    private void TestOnlyFocusModeExcludesAControlFromTheKeyboard()
+    {
+        // Under a real Control root. Buttons hung off a bare Node are not
+        // reachable by focus navigation at all, which makes for a probe whose
+        // control case is degenerate and whose result means nothing (measured -
+        // it reported an exclusion that was really just an unreachable tree).
+        var root = new Control { Name = "FocusProbeRoot", Size = new Vector2(400, 400) };
+        AddChild(root);
+        var a = new Button { Name = "A", Position = new Vector2(0, 0), Size = new Vector2(80, 30) };
+        var b = new Button { Name = "B", Position = new Vector2(0, 50), Size = new Vector2(80, 30) };
+        var c = new Button { Name = "C", Position = new Vector2(0, 100), Size = new Vector2(80, 30) };
+        root.AddChild(a);
+        root.AddChild(b);
+        root.AddChild(c);
+
+        // Control case first. Without it an exclusion below is indistinguishable
+        // from navigation not working here at all.
+        Check("focus_navigation_reaches_the_next_control_at_all",
+            a.FindNextValidFocus() == b && a.FindValidFocusNeighbor(Side.Bottom) == b,
+            $"tab={a.FindNextValidFocus()?.Name}, arrow={a.FindValidFocusNeighbor(Side.Bottom)?.Name}");
+
+        b.Disabled = true;
+        Check("disabled_alone_does_not_exclude_a_control_from_focus_navigation",
+            a.FindNextValidFocus() == b && a.FindValidFocusNeighbor(Side.Bottom) == b,
+            $"tab={a.FindNextValidFocus()?.Name}, arrow={a.FindValidFocusNeighbor(Side.Bottom)?.Name} - " +
+            "if this now skips B, the engine changed and the FocusMode pairing in " +
+            "MapScreen/ShopScreen can be simplified");
+
+        b.GrabFocus();
+        b.Disabled = true;
+        Check("disabling_a_focused_control_does_not_release_its_focus",
+            b.HasFocus(),
+            "Disabled released focus - ShopScreen.RefreshOffers' Regrab is documented against this");
+
+        b.Disabled = false;
+        b.FocusMode = Control.FocusModeEnum.None;
+        Check("focus_mode_none_excludes_a_control_and_releases_its_focus",
+            !b.HasFocus() && a.FindNextValidFocus() == c && a.FindValidFocusNeighbor(Side.Bottom) == c,
+            $"hasFocus={b.HasFocus()}, tab={a.FindNextValidFocus()?.Name}, " +
+            $"arrow={a.FindValidFocusNeighbor(Side.Bottom)?.Name} - this is the mechanism both screens use");
+
+        root.QueueFree();
+    }
 
     private void TestFocusModeSplit()
     {
