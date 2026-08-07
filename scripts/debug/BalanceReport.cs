@@ -98,7 +98,8 @@ public partial class BalanceReport : Node
     private void PrintEncounterBands(List<BalanceModel.ActProfile> acts)
     {
         Header("WHAT AN ENCOUNTER COSTS - damage absorbed, against an average normal fight");
-        GD.Print("  Elites should land in 1.0-1.9x, bosses in 2.2-3.2x. Ratios are within an act:");
+        GD.Print($"  Elites should land in {BalanceModel.EliteCostLow}-{BalanceModel.EliteCostHigh}x, "
+            + $"bosses in {BalanceModel.BossCostLow}-{BalanceModel.BossCostHigh}x. Ratios are within an act:");
         GD.Print("  the reference throughput does not grow act over act but a real deck does.");
 
         foreach (var a in acts)
@@ -108,11 +109,11 @@ public partial class BalanceReport : Node
 
             foreach (var e in a.Elites.OrderBy(e => a.CostRatio(e)))
             {
-                Band("elite", e.Cost, a.CostRatio(e), 1.0, 1.9, e.Label, e.TotalHp);
+                Band("elite", e.Cost, a.CostRatio(e), BalanceModel.EliteCostLow, BalanceModel.EliteCostHigh, e.Label, e.TotalHp);
             }
             foreach (var b in a.BossEncounters.OrderBy(e => a.CostRatio(e)))
             {
-                Band("boss ", b.Cost, a.CostRatio(b), 2.2, 3.2, b.Label, b.TotalHp);
+                Band("boss ", b.Cost, a.CostRatio(b), BalanceModel.BossCostLow, BalanceModel.BossCostHigh, b.Label, b.TotalHp);
             }
         }
     }
@@ -340,12 +341,18 @@ public partial class BalanceReport : Node
         }
     }
 
-    // The five statuses CombatManager pays out at the start of a turn - the
-    // three in ApplyTurnStartGrants plus the two folded into BeginPlayerTurn's
-    // energy and hand-size assignments.
+    // The six statuses CombatManager pays out at the start of a turn - the four
+    // in ApplyTurnStartGrants plus the two folded into BeginPlayerTurn's energy
+    // and hand-size assignments.
+    //
+    // Hand-listed, and nothing fails if it falls behind ApplyTurnStartGrants:
+    // a missing status just quietly stops being counted as a per-turn grant and
+    // the report under-reports the pool's ceiling. Add here whenever a grant is
+    // added there.
     private static bool IsPerTurnGrant(EffectSpec spec) =>
         spec.Action == "apply_status" && spec.Scope == EffectScope.Self
-        && spec.Status is "Metallicize" or "Ritual" or "Regen" or "Fervor" or "Foresight";
+        && spec.Status is "Metallicize" or "Ritual" or "Regen" or "Fervor" or "Foresight"
+            or "Plating";
 
     // ------------------------------------------------------------- utilities
 

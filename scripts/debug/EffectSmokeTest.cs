@@ -51,8 +51,13 @@ public partial class EffectSmokeTest : Node
         TestEveryCardUpgradeChangesSomething();
         TestEveryStatusHasAKeywordBlurb();
         TestEnemyVoiceDescriptions();
+        TestArtifactRefusesExactlyTheDebuffs();
+        TestThornsBillsTheAttackerOnlyForAnAttack();
+        TestIntangibleFloorsDamagePastVulnerable();
         await TestTurnStartGrantingStatuses();
         await TestRegenHealsEachTurn();
+        await TestIntangibleDecaysForBothSides();
+        await TestPlatingGrantsBlockAndErodesOnlyOnUnblockedDamage();
 
         GD.Print($"EffectSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -816,6 +821,238 @@ public partial class EffectSmokeTest : Node
         await RunOneRound(combat);
         Check("regen_never_exceeds_max_hp", player.CurrentHp <= player.MaxHp,
             $"hp={player.CurrentHp}/{player.MaxHp}");
+
+        combat.QueueFree();
+    }
+
+    // Artifact's gate is StatusRow.IsDebuff, which until Phase 8 only decided an
+    // icon tint. Nothing asserted that list was right, and now a debuff missing
+    // from it walks past Artifact in silence.
+    //
+    // So this drives every StatusType rather than a hand-picked few, and asserts
+    // the *biconditional*: refused iff IsDebuff. A test that only checked "Weak
+    // is refused" would pass with an IsDebuff that had drifted, and a test that
+    // only checked the debuffs would pass with an IsDebuff that returned true
+    // for everything - which would make Artifact eat Strength.
+    private void TestArtifactRefusesExactlyTheDebuffs()
+    {
+        var wrongly = new List<string>();
+        var stackNotSpent = new List<string>();
+
+        foreach (var status in System.Enum.GetValues<StatusType>())
+        {
+            // Artifact refusing an incoming Artifact is a coherent question with
+            // no interesting answer, and it would make the stack bookkeeping
+            // below ambiguous. It is a buff, so it lands; that is covered by the
+            // buff half of the sweep like any other.
+            var target = new EnemyCombatant { Name = "Target", MaxHp = 50, CurrentHp = 50 };
+            target.AddStatus(StatusType.Artifact, 1);
+
+            var ctx = new EffectContext
+            {
+                Source = new EnemyCombatant { Name = "Source", MaxHp = 50, CurrentHp = 50 },
+                Targets = new List<Combatant> { target },
+                Combat = null!,
+            };
+            EffectRegistry.Execute(ctx, new EffectSpec
+            {
+                Action = "apply_status", Status = status.ToString(), Amount = 3,
+            });
+
+            bool shouldRefuse = StatusRow.IsDebuff(status);
+            int landed = status == StatusType.Artifact
+                ? target.GetStatus(status) - 1
+                : target.GetStatus(status);
+
+            if (shouldRefuse != (landed == 0)) wrongly.Add(status.ToString());
+
+            // One stack per refused *application*, not per stack of the debuff:
+            // the spec above applies 3 and must still cost exactly one Artifact.
+            int artifactLeft = status == StatusType.Artifact
+                ? target.GetStatus(StatusType.Artifact) - 3
+                : target.GetStatus(StatusType.Artifact);
+            if (artifactLeft != (shouldRefuse ? 0 : 1)) stackNotSpent.Add(status.ToString());
+        }
+
+        Check("artifact_refuses_exactly_the_debuffs", wrongly.Count == 0,
+            $"wrong for: {string.Join(", ", wrongly)} - either ApplyStatusEffect's gate or "
+            + "StatusRow.IsDebuff disagrees with the other about what a debuff is");
+        Check("artifact_spends_one_stack_per_application", stackNotSpent.Count == 0,
+            $"wrong stack cost for: {string.Join(", ", stackNotSpent)}");
+
+        // The control: with no Artifact held, every debuff lands. Without this
+        // the sweep above would pass if ApplyStatusEffect refused nothing and
+        // IsDebuff returned false for everything.
+        var unwarded = new EnemyCombatant { Name = "Unwarded", MaxHp = 50, CurrentHp = 50 };
+        var plainCtx = new EffectContext
+        {
+            Source = unwarded, Targets = new List<Combatant> { unwarded }, Combat = null!,
+        };
+        EffectRegistry.Execute(plainCtx, new EffectSpec
+        {
+            Action = "apply_status", Status = "Weak", Amount = 3,
+        });
+        Check("a_debuff_lands_without_artifact", unwarded.GetStatus(StatusType.Weak) == 3,
+            $"weak={unwarded.GetStatus(StatusType.Weak)} - the sweep above proves nothing if "
+            + "debuffs never land in the first place");
+    }
+
+    // Thorns is the one status that damages a combatant who is not in
+    // ctx.Targets, so the two things worth pinning are that it fires on an
+    // attack that was fully blocked (it bills the attempt, not the damage) and
+    // that it does not fire on lose_hp - which is HP loss with no attacker to
+    // bill, and would otherwise have to invent one.
+    private void TestThornsBillsTheAttackerOnlyForAnAttack()
+    {
+        var attacker = new EnemyCombatant { Name = "Attacker", MaxHp = 50, CurrentHp = 50 };
+        var target = new EnemyCombatant { Name = "Target", MaxHp = 50, CurrentHp = 50 };
+        target.AddStatus(StatusType.Thorns, 3);
+
+        var ctx = new EffectContext
+        {
+            Source = attacker, Targets = new List<Combatant> { target }, Combat = null!,
+        };
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 6 });
+
+        Check("thorns_bills_the_attacker", attacker.CurrentHp == 47,
+            $"attacker hp={attacker.CurrentHp}, expected 47");
+
+        // Fully blocked, and it still pricks: Thorns is an answer to a
+        // multi-hit deck, which it would not be if Block turned it off.
+        target.Block = 99;
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 6 });
+        Check("thorns_fires_through_block", attacker.CurrentHp == 44,
+            $"attacker hp={attacker.CurrentHp}, expected 44");
+
+        // lose_hp has no attacker, so nothing is billed.
+        int before = attacker.CurrentHp;
+        var selfCtx = new EffectContext
+        {
+            Source = target, Targets = new List<Combatant> { target }, Combat = null!,
+        };
+        EffectRegistry.Execute(selfCtx, new EffectSpec { Action = "lose_hp", Amount = 5 });
+        Check("thorns_does_not_fire_on_lose_hp", attacker.CurrentHp == before,
+            $"attacker hp={attacker.CurrentHp}, expected {before}");
+
+        // A Thorns holder attacking a Thorns holder resolves once and stops.
+        // Direct HP subtraction rather than a nested deal_damage is what makes
+        // that structural - see the comment in DealDamageEffect.
+        var spiky = new EnemyCombatant { Name = "Spiky", MaxHp = 50, CurrentHp = 50 };
+        spiky.AddStatus(StatusType.Thorns, 4);
+        var other = new EnemyCombatant { Name = "Other", MaxHp = 50, CurrentHp = 50 };
+        other.AddStatus(StatusType.Thorns, 4);
+        var duelCtx = new EffectContext
+        {
+            Source = spiky, Targets = new List<Combatant> { other }, Combat = null!,
+        };
+        EffectRegistry.Execute(duelCtx, new EffectSpec { Action = "deal_damage", Amount = 5 });
+        Check("thorns_does_not_retaliate_against_its_own_retaliation",
+            spiky.CurrentHp == 46 && other.CurrentHp == 45,
+            $"spiky={spiky.CurrentHp} (expected 46) other={other.CurrentHp} (expected 45)");
+    }
+
+    // Order inside DamageMath.ApplyIncoming, which is the rule rather than an
+    // accident: Vulnerable amplifies and Intangible then floors, so a target
+    // holding both takes 1. Flooring first would let Vulnerable multiply the
+    // floor back up, and an Intangible target would take *more* from a
+    // Vulnerable-stacking deck than from a plain one.
+    private void TestIntangibleFloorsDamagePastVulnerable()
+    {
+        var attacker = new EnemyCombatant { Name = "Attacker", MaxHp = 99, CurrentHp = 99 };
+        attacker.AddStatus(StatusType.Strength, 5);
+
+        var target = new EnemyCombatant { Name = "Target", MaxHp = 99, CurrentHp = 99 };
+        target.AddStatus(StatusType.Intangible, 1);
+        target.AddStatus(StatusType.Vulnerable, 2);
+
+        var ctx = new EffectContext
+        {
+            Source = attacker, Targets = new List<Combatant> { target }, Combat = null!,
+        };
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 20 });
+
+        Check("intangible_floors_damage_past_vulnerable",
+            target.CurrentHp == 99 - DamageMath.IntangibleDamage,
+            $"hp={target.CurrentHp}, expected {99 - DamageMath.IntangibleDamage}");
+
+        // It floors attacks and nothing else. Poison and lose_hp bypass it on
+        // purpose, which is what keeps Poison a live answer to it.
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "lose_hp", Amount = 7 });
+        Check("intangible_does_not_floor_lose_hp",
+            target.CurrentHp == 99 - DamageMath.IntangibleDamage - 7,
+            $"hp={target.CurrentHp}");
+    }
+
+    // The two turn-end decay sites used to be two hand-written lists, and a
+    // status added to one and not the other wears off for the player and not
+    // the enemy while both sites keep compiling. They are one array now, and
+    // this is what says so - it would have failed against the old shape.
+    private async System.Threading.Tasks.Task TestIntangibleDecaysForBothSides()
+    {
+        var combat = new CombatManager();
+        AddChild(combat);
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 200, CurrentHp = 200,
+            MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(CardDatabase.All),
+        };
+        var enemy = EnemyFactory.Create(EnemyDatabase.Get("cultist"));
+        combat.StartCombat(player, new List<EnemyCombatant> { enemy }, new List<RelicInstance>());
+
+        player.AddStatus(StatusType.Intangible, 3);
+        enemy.AddStatus(StatusType.Intangible, 3);
+
+        await RunOneRound(combat);
+
+        Check("intangible_decays_for_the_player", player.GetStatus(StatusType.Intangible) == 2,
+            $"player intangible={player.GetStatus(StatusType.Intangible)}, expected 2");
+        Check("intangible_decays_for_the_enemy", enemy.GetStatus(StatusType.Intangible) == 2,
+            $"enemy intangible={enemy.GetStatus(StatusType.Intangible)}, expected 2 - a status "
+            + "that decays on one side only means the two decay sites have drifted apart");
+
+        combat.QueueFree();
+    }
+
+    // Plating is Metallicize with a cost, and both halves are worth pinning:
+    // the grant lands after the Block clear (the ordering trap ApplyTurnStartGrants
+    // exists for) and the erosion is charged only for damage that gets through,
+    // not for damage the Block it just granted absorbed. Charging on every hit
+    // would make Plating strictly worse than the Metallicize it sits beside.
+    private async System.Threading.Tasks.Task TestPlatingGrantsBlockAndErodesOnlyOnUnblockedDamage()
+    {
+        var combat = new CombatManager();
+        AddChild(combat);
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 200, CurrentHp = 200,
+            MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(CardDatabase.All),
+        };
+        var enemy = EnemyFactory.Create(EnemyDatabase.Get("cultist"));
+        combat.StartCombat(player, new List<EnemyCombatant> { enemy }, new List<RelicInstance>());
+
+        enemy.AddStatus(StatusType.Plating, 6);
+        await RunOneRound(combat);
+
+        Check("plating_grants_block_after_the_block_clear", enemy.Block == 6,
+            $"block={enemy.Block} - 0 means the grant landed before the clear and was wiped");
+
+        var ctx = new EffectContext
+        {
+            Source = player, Targets = new List<Combatant> { enemy }, Combat = combat,
+        };
+
+        // Eaten entirely by the 6 Block above: no stack spent.
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 4 });
+        Check("plating_survives_a_blocked_hit", enemy.GetStatus(StatusType.Plating) == 6,
+            $"plating={enemy.GetStatus(StatusType.Plating)} after a hit its Block absorbed");
+
+        // Through the remaining 2 Block: one stack spent, and only one however
+        // far past the Block the hit goes.
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 30 });
+        Check("plating_erodes_on_an_unblocked_hit", enemy.GetStatus(StatusType.Plating) == 5,
+            $"plating={enemy.GetStatus(StatusType.Plating)}, expected 5");
 
         combat.QueueFree();
     }

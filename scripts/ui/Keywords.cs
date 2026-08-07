@@ -149,6 +149,32 @@ public static class Keywords
         StatusType.Frail =>
             $"Gains {(int)((1 - BlockMath.FrailMultiplier) * 100)}% less Block. Wears off by 1 each turn.",
 
+        // Artifact is the only status in the roster that is *spent* rather than
+        // decayed, so it says "used up" instead of either "wears off by 1 each
+        // turn" or "does not wear off". Both of those would be a lie in a
+        // different direction, and knowing the ward is finite is the whole read.
+        StatusType.Artifact => amount is { } art
+            ? $"Refuses the next {art} debuff(s) applied to it, using up a stack each time."
+            : "Refuses the next debuff applied to it, using up a stack.",
+
+        // Says "even through Block" because Thorns pays out on the attempt
+        // rather than on damage getting through, which is the one fact a player
+        // cannot work out by watching the numbers.
+        StatusType.Thorns => amount is { } thn
+            ? $"Attackers lose {thn} HP each time they strike it, even through Block. Does not wear off."
+            : "Attackers lose HP each time they strike it, even through Block. Does not wear off.",
+
+        // The floor is read off DamageMath rather than written as "1", for the
+        // same no-drift reason Weak and Vulnerable read their multipliers.
+        StatusType.Intangible =>
+            $"Attacks against it deal {DamageMath.IntangibleDamage} damage. Wears off by 1 each turn.",
+
+        // Phrased against Metallicize word for word: the difference between the
+        // two is the second sentence, and that is what a player is comparing.
+        StatusType.Plating => amount is { } plt
+            ? $"Gains {plt} Block at the start of each turn. Loses 1 for each hit that gets through."
+            : "Gains Block at the start of each turn. Loses 1 for each hit that gets through.",
+
         // Reached only by a StatusType with no arm above. Deliberately useless
         // prose rather than a throw - a missing blurb should be caught by the
         // smoke test at build time, not crash a combat screen at runtime.

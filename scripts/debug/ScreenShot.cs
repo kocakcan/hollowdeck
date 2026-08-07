@@ -382,9 +382,35 @@ public partial class ScreenShot : Node
         // granting both and stopping there left the HUD showing the row it
         // built before either existed.
         combat.Player.AddStatus(StatusType.Ritual, 2);
+
+        // The four Phase 8 statuses, granted rather than played for the same
+        // energy reason Ritual is. They are here because the status row is the
+        // one place four new 20px icons can collide with each other or with the
+        // seven that were already there, and a collision is invisible to every
+        // assertion in the repo - PixelSpecSmokeTest proves each file exists and
+        // conforms, not that the set reads apart at HUD size.
+        //
+        // Artifact goes on the enemy as well as the player: it is the only one
+        // whose interesting case is an enemy holding it, and the enemy row draws
+        // its statuses smaller than the player's HUD does.
+        combat.Player.AddStatus(StatusType.Artifact, 1);
+        combat.Player.AddStatus(StatusType.Thorns, 3);
+        combat.Player.AddStatus(StatusType.Intangible, 2);
+        combat.Player.AddStatus(StatusType.Plating, 4);
+        combat.Enemies.FirstOrDefault()?.AddStatus(StatusType.Artifact, 2);
+
+        // Played, not granted, and it has to be: the status row is rebuilt from
+        // CombatantsChanged, which only a real resolution fires. Granting
+        // everything above and stopping there left the HUD showing the row it
+        // built before any of it existed.
         var metallicize = new CardInstance(CardDatabase.Get("metallicize"));
         combat.Player.Piles.Hand.Add(metallicize);
         combat.TryPlayCard(metallicize);
+
+        // One of the new cards, so the shot carries a frame and a description
+        // built from a status that did not exist last phase.
+        combat.Player.Piles.Hand.Add(new CardInstance(CardDatabase.Get("hollow_form")));
+        combat.Player.Piles.Hand.Add(new CardInstance(CardDatabase.Get("bramble_mail")));
     }
 
     private static void SeedReward()

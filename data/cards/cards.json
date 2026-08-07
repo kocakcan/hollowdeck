@@ -1197,5 +1197,78 @@
 	"effects": [
 	  { "action": "deal_damage", "amount": 5, "perX": true, "scope": "Target" }
 	]
+  },
+  {
+	"id": "ward_sigil",
+	"name": "Ward Sigil",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "apply_status", "status": "Artifact", "amount": 1, "scope": "Self" }
+	]
+  },
+  {
+	"id": "reliquary_seal",
+	"name": "Reliquary Seal",
+	"cost": 2,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "apply_status", "status": "Artifact", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "bramble_mail",
+	"name": "Bramble Mail",
+	"cost": 1,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "apply_status", "status": "Thorns", "amount": 3, "scope": "Self" }
+	]
+  },
+  {
+	"id": "bramble_guard",
+	"name": "Bramble Guard",
+	"cost": 1,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Common",
+	"effects": [
+	  { "action": "gain_block", "amount": 5, "scope": "Self" },
+	  { "action": "apply_status", "status": "Thorns", "amount": 2, "scope": "Self" }
+	]
+  },
+  {
+	"id": "scaled_hide",
+	"name": "Scaled Hide",
+	"cost": 1,
+	"type": "Power",
+	"target": "Self",
+	"exhaust": false,
+	"rarity": "Uncommon",
+	"effects": [
+	  { "action": "apply_status", "status": "Plating", "amount": 4, "scope": "Self" }
+	]
+  },
+  {
+	"id": "hollow_form",
+	"name": "Hollow Form",
+	"cost": 3,
+	"type": "Skill",
+	"target": "Self",
+	"exhaust": true,
+	"rarity": "Rare",
+	"effects": [
+	  { "action": "apply_status", "status": "Intangible", "amount": 1, "scope": "Self" }
+	]
   }
 ]

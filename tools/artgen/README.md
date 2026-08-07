@@ -1,6 +1,6 @@
 # artgen
 
-Hollowdeck's asset tool. It generates the game's 89 icons, snaps every authored
+Hollowdeck's asset tool. It generates the game's 182 icons, snaps every authored
 asset onto the shared palette, and enforces `docs/ART_SPEC.md`.
 
 ```bash
@@ -34,9 +34,10 @@ could not have:
   no way to author an off-ramp pixel, and `validate` catches any that arrive
   from outside.
 - **One shape vocabulary.** `icons/shapes.rs` holds the blade, shield, flask,
-  droplet, flame and fist that the set is composed from, so a blade is the same
-  blade in all eleven icons that use one.
-- **Re-runnable.** Change a ramp entry, re-run, and all 89 icons regenerate
+  droplet, flame and fist that the set is composed from — plus the gem, scale
+  and barb added for the Phase 8 statuses — so a blade is the same blade in all
+  28 icons that use one.
+- **Re-runnable.** Change a ramp entry, re-run, and all 182 icons regenerate
   consistently. That is the property that made the whole pixel-art commitment
   worth making.
 
@@ -49,7 +50,7 @@ could not have:
 | `clamp.rs` | alpha hardening + nearest-ramp snap |
 | `validate.rs` | the ART_SPEC checks and their failure messages |
 | `icons/shapes.rs` | the shared shape vocabulary |
-| `icons/{cards,relics,potions,misc,events}.rs` | the 89 icons themselves |
+| `icons/{cards,relics,potions,misc,events}.rs` | the 182 icons themselves |
 
 ## Two invariants that will bite
 

@@ -448,7 +448,7 @@ public partial class EnemyView : Button
     private static int LiveAttackAmount(int baseAmount, Combatant source, Combatant? target)
     {
         int amount = DamageMath.ComputeOutgoing(baseAmount, source);
-        return target is null ? amount : DamageMath.ApplyVulnerable(amount, target);
+        return target is null ? amount : DamageMath.ApplyIncoming(amount, target);
     }
 
     private static StatusType? IncomingDebuffStatus(EnemyMove? move)

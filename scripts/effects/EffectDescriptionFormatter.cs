@@ -280,7 +280,7 @@ public static class EffectDescriptionFormatter
             return outgoing.ToString();
         }
 
-        var landed = targets.Select(t => DamageMath.ApplyVulnerable(outgoing, t)).ToList();
+        var landed = targets.Select(t => DamageMath.ApplyIncoming(outgoing, t)).ToList();
         int low = landed.Min();
         int high = landed.Max();
 

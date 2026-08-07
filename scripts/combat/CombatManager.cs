@@ -396,9 +396,7 @@ public partial class CombatManager : Node
         foreach (var relic in Relics) relic.Behavior.OnTurnEnd(relicCtx);
 
         Player.Piles.DiscardHand();
-        Player.DecayStatus(StatusType.Vulnerable);
-        Player.DecayStatus(StatusType.Weak);
-        Player.DecayStatus(StatusType.Frail);
+        DecayTurnEndStatuses(Player);
 
         _enemyTurnOrder = new List<EnemyCombatant>(Enemies);
         TransitionTo(CombatState.EnemyTurn);
@@ -463,9 +461,7 @@ public partial class CombatManager : Node
 
             if (!enemy.IsDead)
             {
-                enemy.DecayStatus(StatusType.Vulnerable);
-                enemy.DecayStatus(StatusType.Weak);
-                enemy.DecayStatus(StatusType.Frail);
+                DecayTurnEndStatuses(enemy);
                 AdvanceEnemyIntent(enemy);
                 CombatantsChanged?.Invoke();
             }
@@ -500,10 +496,33 @@ public partial class CombatManager : Node
         if (c == Player) TookDamage = true;
     }
 
+    // The statuses that wear off by 1 when their holder's turn ends, in one
+    // list rather than spelled out at the two sites that decay them (the
+    // player's in TryEndTurn, the enemy's mid-loop in ResolveEnemyTurnAsync).
+    //
+    // It was two hand-written lists until Intangible arrived, and that is
+    // exactly the shape of bug worth spending a field on: a status added to one
+    // site and not the other decays for the player and not the enemy, both
+    // sites keep compiling, and the asymmetry only shows up as a fight that
+    // feels wrong. Poison is deliberately absent - it decays as it ticks, at
+    // the *start* of its holder's turn, which is a different trigger point and
+    // lives in ApplyPoisonTick.
+    private static readonly StatusType[] DecayAtTurnEnd =
+    {
+        StatusType.Vulnerable, StatusType.Weak, StatusType.Frail, StatusType.Intangible,
+    };
+
+    private static void DecayTurnEndStatuses(Combatant c)
+    {
+        foreach (var status in DecayAtTurnEnd) c.DecayStatus(status);
+    }
+
     // What a Power buys: statuses that pay out every turn instead of once.
-    // None of the three decays - Metallicize, Ritual and Regen persist for the
-    // fight, unlike Vulnerable/Weak/Frail (end-of-turn decay) or Poison
-    // (decays as it ticks).
+    // None of the four decays - Metallicize, Ritual, Regen and Plating persist
+    // for the fight, unlike Vulnerable/Weak/Frail/Intangible (end-of-turn
+    // decay) or Poison (decays as it ticks). Plating is the near miss there: it
+    // is spent by taking unblocked damage in DealDamageEffect, never by a
+    // clock, so it belongs with the grants rather than in DecayAtTurnEnd.
     //
     // Kept separate from ApplyPoisonTick and called at a different point on
     // purpose. Both combatants clear Block on their own turn, and Metallicize
@@ -515,6 +534,15 @@ public partial class CombatManager : Node
     {
         int metallicize = c.GetStatus(StatusType.Metallicize);
         if (metallicize > 0) c.Block += metallicize;
+
+        // Plating pays out exactly like Metallicize and sits beside it for that
+        // reason, inheriting the Block-clear ordering above rather than
+        // restating it. What separates the two is the cost: Plating loses a
+        // stack to every hit that gets past the Block it just granted, so it is
+        // a shrinking wall against a big deck and a permanent one against a
+        // small one. That erosion lives in DealDamageEffect, where the hit is.
+        int plating = c.GetStatus(StatusType.Plating);
+        if (plating > 0) c.Block += plating;
 
         // Compounding on purpose: Ritual grants Strength *every* turn, so the
         // Strength total climbs each round. That is the whole reason a Power

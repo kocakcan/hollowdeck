@@ -102,6 +102,14 @@ public static class StatusRow
 
     // Public because EnemyView's incoming-debuff badge asks the same question:
     // one list, so a tenth status can't be a debuff here and not there.
+    //
+    // Since Phase 8 this is no longer only a rendering question. ApplyStatusEffect
+    // reads it to decide what Artifact refuses, so a debuff added to StatusType
+    // and forgotten here does not merely render with the wrong tint - it walks
+    // straight past Artifact, and nothing throws. That is why the list stayed
+    // here rather than being duplicated into the effect layer, and why
+    // EffectSmokeTest.TestArtifactRefusesExactlyTheDebuffs drives it over the
+    // whole enum instead of over a hand-picked few.
     public static bool IsDebuff(StatusType status) =>
         status is StatusType.Weak or StatusType.Vulnerable or StatusType.Poison or StatusType.Frail;
 

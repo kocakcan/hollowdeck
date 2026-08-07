@@ -73,19 +73,49 @@ unable to happen. They are also the only two grants that are player-only: an ene
 pool. Between them they are the pool's strongest upgrade delta, and the first thing the balance
 pass should look at.
 
-**The status roster is eleven, in mirrored pairs.** `Strength`/`Weak` scale damage through
-`DamageMath`; `Dexterity`/`Frail` scale Block through `BlockMath`, which is a deliberate copy of
-`DamageMath`'s shape rather than four more methods on it — nothing applies Strength to Block, and
-keeping them apart is what stops a later edit reaching for the wrong multiplier. `Vulnerable` and
-`Poison` sit on the target side; the five turn-start grants above make up the rest. Buffs
-(`Strength`, `Dexterity`, and the grants) never decay; debuffs (`Weak`, `Vulnerable`, `Frail`)
-wear off by 1 a turn at the two `DecayStatus` sites, and `Poison` decays as it ticks. A new status
-needs an icon in `tools/artgen/src/icons/misc.rs`, an arm in `Keywords.Blurb` (**not**
+**The status roster is fifteen, and it now has three decay rules rather than two.**
+`Strength`/`Weak` scale damage through `DamageMath`; `Dexterity`/`Frail` scale Block through
+`BlockMath`, which is a deliberate copy of `DamageMath`'s shape rather than four more methods on it
+— nothing applies Strength to Block, and keeping them apart is what stops a later edit reaching for
+the wrong multiplier. `Vulnerable` and `Poison` sit on the target side; the five turn-start grants
+above make up the rest of the original eleven.
+
+How a status ends is the axis worth knowing, because the four added in Phase 8 did not all fit the
+two rules that existed. Buffs (`Strength`, `Dexterity`, the grants, plus `Thorns`) never decay;
+debuffs (`Weak`, `Vulnerable`, `Frail`) and `Intangible` wear off by 1 a turn; `Poison` decays as it
+ticks, at the *start* of its holder's turn rather than the end. `Artifact` and `Plating` are the
+third rule: they are **spent, not decayed** — a stack goes when something happens (a debuff refused,
+an unblocked hit landed), never on a clock. A status whose lifetime is event-driven does not belong
+in `DecayAtTurnEnd`, and putting it there would make it wear off twice.
+
+That end-of-turn list is a single `CombatManager.DecayAtTurnEnd` array walked by
+`DecayTurnEndStatuses`, not two hand-written sequences at the player and enemy decay sites. It was
+two until `Intangible` needed adding to both, which is precisely the shape of bug worth a field: a
+status added to one site and not the other decays for the player and not the enemy, both sites keep
+compiling, and the asymmetry surfaces only as a fight that feels wrong.
+
+`Artifact` is the load-bearing addition — before it, stacking `Vulnerable` was unconditionally
+correct and there was no read to make — and it carries a trap with it. It gates on
+`StatusRow.IsDebuff`, so that predicate is no longer a rendering detail but a resolution rule: **a
+new debuff added to `StatusType` and forgotten in `IsDebuff` walks straight past `Artifact`, and
+nothing throws.** `EffectSmokeTest.TestArtifactRefusesExactlyTheDebuffs` drives the whole enum for
+that reason rather than a hand-picked few. Note also that `Artifact` refuses one *application*, not
+one stack: a spec applying `Vulnerable 3` costs one stack and lands nothing.
+
+`DamageMath.ApplyIncoming` (renamed from `ApplyVulnerable`) is the one place target-side modifiers
+belong, which is what makes a new one reach the live damage preview and the enemy telegraph for
+free. Order inside it is a rule, not an accident: Vulnerable amplifies first, `Intangible` floors
+last, because flooring first would let Vulnerable multiply the floor back up.
+
+A new status needs an icon in `tools/artgen/src/icons/misc.rs`, an arm in `Keywords.Blurb` (**not**
 `StatusRow.Describe` — `StatusRow.cs` exists and is the obvious place to reach, but the prose lives
 in `scripts/ui/Keywords.cs`), and — easy to forget, and silent when missed — an entry in
-`CardUpgrade.ShouldScale`, or upgrading a card that grants it produces an identical `+`. That last failure now has a sweep behind it rather than a
-warning: `EffectSmokeTest.TestEveryCardUpgradeChangesSomething` fails any card whose `+` moves no
-number, which is how a missing entry announces itself.
+`CardUpgrade.ShouldScale`, or upgrading a card that grants it produces an identical `+`. That last
+failure now has a sweep behind it rather than a warning:
+`EffectSmokeTest.TestEveryCardUpgradeChangesSomething` fails any card whose `+` moves no number,
+which is how a missing entry announces itself. If it is a *debuff*, it needs a fifth thing —
+`StatusRow.IsDebuff` — and that one is silent in the resolution layer rather than the UI, per
+`Artifact` above. If it decays on a clock, a sixth: `CombatManager.DecayAtTurnEnd`.
 
 **The keyword layer is three bools and three enforcement sites, all in `PileManager`.** `Retain`
 survives `DiscardHand`, `Ethereal` is exhausted by it, `Innate` is promoted to where the opening
@@ -225,10 +255,10 @@ and cosmetic jitter can never desync a deterministic run.
 
 An earlier shard *shop* was removed — don't reintroduce shard-purchase language.
 
-Content stands at **95 cards** — 91 offerable (36 Common / 38 Uncommon / 17 Rare, 10 of them
+Content stands at **101 cards** — 97 offerable (37 Common / 41 Uncommon / 19 Rare, 12 of them
 Powers) plus 4 unplayable (2 Status, 2 Curse) that can only arrive through `add_card` — **15
 events**, 27 relics, 12 potions, **36 enemies** (7 normals + 3 elites per act, plus 6 bosses), 3
-acts. Eleven statuses, eleven effect actions, four effect scopes, three card keywords, four intent
+acts. Fifteen statuses, eleven effect actions, four effect scopes, three card keywords, four intent
 types, sixteen event outcome keys.
 
 Those per-act counts are *enemy ids*, not encounter slots: each act's `eliteEncounters` also fields
@@ -237,7 +267,7 @@ one of its own **normals** as an escort — `rot_hound` (act 1), `ember_wisp` (a
 *across* acts is the thing that is forbidden, and that is the half `ActSmokeTest` asserts.
 
 **Icons are generated; sprites are sourced. Nothing in `assets/` is drawn by hand, and nothing is
-an SVG.** All **172** icons — 95 cards, 27 relics, 15 events, 12 potions, 11 status, 8 map, 4
+an SVG.** All **182** icons — 101 cards, 27 relics, 15 events, 12 potions, 15 status, 8 map, 4
 intents — are original work emitted by `tools/artgen`, one Rust `fn` per icon composing shapes onto
 a 32x32 grid out of the single 43-colour ramp in `docs/ART_SPEC.md` §5. They therefore need **no
 attribution**: the game-icons.net SVG set was retired in Phase 3 when the project committed to pixel
@@ -259,7 +289,7 @@ to catch committed art drifting from its source. The one command, for all three 
 
 ```bash
 cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
-#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 172
+#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 182
 #   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
 #   validate           what run-smoke-tests.sh calls; nonzero exit on failure
 ```
@@ -269,11 +299,11 @@ There is **no `artgen` on `PATH`** and no `tools/artgen` wrapper — the binary 
 above.
 
 `ROADMAP.md` tracks what's genuinely still open. Packaged export, the card and enemy passes, the
-balance retune and now the *card* half of the vocabulary — keywords, per-effect targeting, the
-`add_card` primitive, unplayable card types, X-cost — have all shipped. What's open is the rest of
-that vocabulary: enemy behaviours beyond picking a move, `Artifact` and three more statuses, relic
-tiers, potion rarity and combat drops, the `?` node, an ascension ladder. Don't treat this section
-as a to-do list.
+balance retune, the *card* half of the vocabulary — keywords, per-effect targeting, the `add_card`
+primitive, unplayable card types, X-cost — and now the *status* half — `Artifact`, `Thorns`,
+`Intangible`, `Plating` — have all shipped. What's open is enemy behaviours beyond picking a move,
+relic tiers, potion rarity and combat drops, the `?` node, an ascension ladder. Don't treat this
+section as a to-do list.
 
 Two open items are worth knowing *before* you touch the code they sit in, rather than when the
 roadmap is next read:
@@ -406,7 +436,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 
 | Test | Covers | Run when you touch |
 |---|---|---|
-| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text, rarity coverage *over the offerable pool*, `CardPool` weighting and its unplayable exclusion, Power routing, every playable card's `+` actually changing something | `scripts/effects/`, `PileManager`, `CardPool`, `cards.json` |
+| `EffectSmokeTest` | pile + effect resolution, generated card/potion description text, rarity coverage *over the offerable pool*, `CardPool` weighting and its unplayable exclusion, Power routing, every playable card's `+` actually changing something, and the four Phase 8 statuses: `Artifact` refused-iff-`IsDebuff` over the whole enum, `Thorns` billing a fully-blocked attack but not `lose_hp`, `Intangible` flooring after Vulnerable, `Plating` granting and eroding only on damage that gets through, and turn-end decay reaching both combatants | `scripts/effects/`, `PileManager`, `CardPool`, `cards.json`, `StatusType`, `StatusRow.IsDebuff`, `CombatManager.DecayAtTurnEnd` |
 | `CardKeywordSmokeTest` | the Phase 7 vocabulary: Retain/Innate/Ethereal in `PileManager` (including Ethereal beating Retain, and no card declaring both), `add_card` into all three piles, the unplayable gate leaving the hand unchanged, `AllEnemies`/`RandomEnemy` through a real fight, X-cost spending everything and scaling only `PerX` specs | `PileManager` keywords, `AddCardEffect`, `CardType`, `EffectScope`, X-cost, `cards.json` |
 | `CombatSmokeTest` | `CombatScreen.tscn` boots and wires up | `CombatScreen`, `CombatManager` |
 | `CombatTargetingSmokeTest` | the drag/targeting layer (risk 5): target-lock glow, HUD never painting over an enemy, the intent tooltip staying off the hand, and the `CardView` drag path itself — the rejected-drop round trip, the reparent-before-resolve invariant, `TryPlayCard`'s four rejection gates leaving the hand *unchanged*, `_ExitTree` clearing the glow, the corpse-skipping hit test, potion cancel/click, live description vs a Vulnerable target | `EnemyView`, `CardView` drag/targeting, `CombatManager` targeting sub-state |

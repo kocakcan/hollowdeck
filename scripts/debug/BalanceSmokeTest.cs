@@ -157,10 +157,13 @@ public partial class BalanceSmokeTest : Node
     // Bands rather than exact values, because these are tuning decisions and
     // the point is to catch a *drift out of the tier*, not to freeze numbers.
     // Cost is compared within an act only - see BalanceModel.EncounterCost.
+    //
+    // The numbers live on BalanceModel so this suite and the report that prints
+    // them cannot disagree about what is in tier.
     private void TestEncounterCostsStayInTheirBand()
     {
-        const double eliteLow = 1.0, eliteHigh = 1.9;
-        const double bossLow = 2.2, bossHigh = 3.2;
+        const double eliteLow = BalanceModel.EliteCostLow, eliteHigh = BalanceModel.EliteCostHigh;
+        const double bossLow = BalanceModel.BossCostLow, bossHigh = BalanceModel.BossCostHigh;
 
         foreach (var act in BalanceModel.AllActs())
         {

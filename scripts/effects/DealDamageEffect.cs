@@ -11,11 +11,42 @@ public class DealDamageEffect : IEffect
 
         foreach (var target in ctx.Targets)
         {
-            int targetAmount = DamageMath.ApplyVulnerable(amount, target);
+            int targetAmount = DamageMath.ApplyIncoming(amount, target);
 
             int absorbedByBlock = System.Math.Min(target.Block, targetAmount);
             target.Block -= absorbedByBlock;
-            target.CurrentHp -= targetAmount - absorbedByBlock;
+            int unblocked = targetAmount - absorbedByBlock;
+            target.CurrentHp -= unblocked;
+
+            // Thorns bills the attacker for the hit, and it deliberately fires
+            // on the *attempt* rather than on damage getting through - a hit
+            // fully eaten by Block still gets pricked, which is what makes
+            // Thorns an answer to a multi-hit deck rather than a worse Block.
+            //
+            // It subtracts HP directly and must never route back through
+            // EffectRegistry. That is the same discipline SimpleHookEffectRelic
+            // already documents for the thorned_carapace relic: a retaliation
+            // that resolves as a real deal_damage would re-enter this method and
+            // retaliate against its own retaliation. Direct subtraction cannot,
+            // whatever statuses either side is holding.
+            //
+            // Consequence worth knowing: CombatManager.ExecuteEffect raises
+            // damage popups by diffing CurrentHp over `targets` only, so Thorns
+            // damage to the source shows on the HP bar without a floating
+            // number. Cosmetic, and it belongs with Phase 11's feel work.
+            if (targetAmount > 0)
+            {
+                int thorns = target.GetStatus(StatusType.Thorns);
+                if (thorns > 0) ctx.Source.CurrentHp -= thorns;
+            }
+
+            // Plating spends a stack per hit that actually lands. Gated on
+            // unblocked rather than on targetAmount so the Block it granted at
+            // turn start does not also pay for its own erosion - otherwise a
+            // Plating holder loses a stack to every hit its own Block ate, and
+            // the status would be strictly worse than the Metallicize it sits
+            // beside in ApplyTurnStartGrants.
+            if (unblocked > 0) target.DecayStatus(StatusType.Plating);
         }
     }
 }

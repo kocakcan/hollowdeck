@@ -220,23 +220,41 @@ public static class BalanceModel
     // so a tankier group is a longer fight and absorbs more turns of damage.
     // Compare costs *within* an act: across acts the player's real throughput
     // has grown and this reference has not, which inflates later fights.
+    //
+    // It is a walk rather than a closed form, and that is load-bearing since
+    // Phase 8. Fight length used to be `total HP / throughput` computed up
+    // front, which meant nothing that happened during the fight could change how
+    // long it ran - so the first draft of the Block modelling below was
+    // provably inert: Plating 3, 4 and 5 on the same enemy all produced the
+    // identical cost. Draining HP inside the loop and stopping when the group is
+    // dead is what makes self-granted Block cost the player turns.
     public static double EncounterCost(IReadOnlyList<string> ids, double throughput)
     {
         if (ids.Count == 0 || throughput <= 0) return 0;
 
         var defs = ids.Select(EnemyDatabase.Get).ToList();
-        int turns = Math.Max(1, (int)Math.Ceiling(defs.Sum(d => d.MaxHp) / throughput));
 
         var strength = new double[defs.Count];
         var ritual = new double[defs.Count];
+        // Metallicize and Plating both pay out Block every turn and both
+        // accumulate the way strength does - what matters is the stack held
+        // going into a turn, not what the definition could eventually reach.
+        // They are tracked apart because only one of them lasts: Metallicize is
+        // permanent, Plating loses a stack to every hit that gets through it.
+        var metallicize = new double[defs.Count];
+        var plating = new double[defs.Count];
         var enraged = new bool[defs.Count];
         var hp = defs.Select(d => (double)d.MaxHp).ToArray();
 
         // Player-side state the enemies themselves create.
         double vulnerable = 0, poison = 0, total = 0;
-        double sharedThroughput = throughput / defs.Count;
 
-        for (int turn = 1; turn <= turns; turn++)
+        // A ward that out-paces the reference throughput would otherwise run
+        // forever. Nothing in the content comes close - the cap exists so a
+        // future mis-authored enemy is a bad number rather than a hung suite.
+        const int MaxTurns = 60;
+
+        for (int turn = 1; turn <= MaxTurns && hp.Any(h => h > 0); turn++)
         {
             // Poison bypasses Block and decays as it ticks - see
             // CombatManager.ApplyPoisonTick.
@@ -246,10 +264,40 @@ public static class BalanceModel
                 poison = Math.Max(0, poison - 1);
             }
 
+            // Throughput follows the survivors: a two-enemy group that loses one
+            // halfway does not keep splitting the player's damage two ways, and
+            // the corpse does not keep attacking. Both were true of the old
+            // fixed-length walk and both overstated multi-enemy encounters.
+            int alive = hp.Count(h => h > 0);
+            double sharedThroughput = throughput / alive;
+
             for (int i = 0; i < defs.Count; i++)
             {
+                if (hp[i] <= 0) continue;
                 var def = defs[i];
-                hp[i] -= sharedThroughput;
+
+                // Block the enemy grants itself every turn is throughput that
+                // never reaches its HP, so a Metallicize or Plating enemy is a
+                // longer fight and absorbs more turns of damage than a naked one
+                // of the same size. This went unmodelled until Phase 8: six
+                // enemies carried Metallicize and the analyser drained them as
+                // though they did not, which understated every encounter they
+                // appear in.
+                //
+                // Plating erodes by a count of *hits*, which a throughput number
+                // cannot see. Modelled as one stack a turn, on the reasoning
+                // that a deck landing 16 damage a turn into a 5-Block wall gets
+                // at least one hit through it - flat-forever was the first
+                // draft and read Plating 5 as worth 31% of the player's whole
+                // output for the length of the fight, which is why the elite
+                // carrying it priced out of its own node type.
+                //
+                // Still unmodelled and worth knowing: one-off `gain_block`
+                // moves, i.e. every Defend intent in the game. Folding those in
+                // is a larger retune than this change and is the next thing to
+                // do to this method.
+                hp[i] -= Math.Max(0, sharedThroughput - metallicize[i] - plating[i]);
+                plating[i] = Math.Max(0, plating[i] - 1);
 
                 if (!enraged[i] && def.EnrageHpPercent > 0 && def.EnrageMoves.Count > 0
                     && hp[i] * 100 <= def.MaxHp * def.EnrageHpPercent)
@@ -269,6 +317,8 @@ public static class BalanceModel
 
                     strength[i] += p * SelfStatusGain(move, "Strength");
                     ritual[i] += p * SelfStatusGain(move, "Ritual");
+                    metallicize[i] += p * SelfStatusGain(move, "Metallicize");
+                    plating[i] += p * SelfStatusGain(move, "Plating");
                     poison += p * TargetStatusGain(move, "Poison");
                     vulnerable += p * TargetStatusGain(move, "Vulnerable");
                 }
@@ -318,6 +368,26 @@ public static class BalanceModel
     // put an unmeasured assumption underneath every comparison. Costs are
     // therefore comparable *within* an act and not across one.
     public const double ReferenceThroughput = 16.2;
+
+    // What each node type promises, as a multiple of an average normal fight in
+    // the same act. Bands rather than exact values: these are tuning decisions
+    // and the point is to catch a drift out of the *tier*, not to freeze a
+    // number.
+    //
+    // One copy, because there were three. BalanceReport printed the bands in a
+    // header string and passed them again as literals to two Band() calls,
+    // BalanceSmokeTest held its own pair of consts, and nothing tied any of them
+    // together - so the report could call an encounter in tier while the suite
+    // failed it, or the printed header could disagree with the flag beside the
+    // row it explained.
+    //
+    // The boss ceiling moved 3.2 -> 3.3 in Phase 8. Not a content change: the
+    // act-1 bosses did not get harder, EncounterCost got more accurate (fight
+    // length is now walked rather than assumed, so self-granted Block costs the
+    // player turns) and it prices them at 3.20x and 3.23x where it used to say
+    // 3.14x and 3.16x. Re-measured against the report, not widened to get green.
+    public const double EliteCostLow = 1.0, EliteCostHigh = 1.9;
+    public const double BossCostLow = 2.2, BossCostHigh = 3.3;
 
     public sealed record EncounterProfile(
         IReadOnlyList<string> Ids,
@@ -463,7 +533,7 @@ public static class BalanceModel
     private static int CardDamage(CardDefinition card, Combatant source, Combatant target) =>
         card.Effects
             .Where(e => e.Action == "deal_damage")
-            .Sum(e => DamageMath.ApplyVulnerable(DamageMath.ComputeOutgoing(e.Amount, source), target));
+            .Sum(e => DamageMath.ApplyIncoming(DamageMath.ComputeOutgoing(e.Amount, source), target));
 
     public static double TurnsToKill(int hp, double throughput) => throughput <= 0 ? 0 : hp / throughput;
 
