@@ -21,9 +21,13 @@ namespace Hollowdeck.UI;
 // FocusMode and visibility only, and BaseButton keeps FocusModeEnum.All when
 // disabled - so an inert control takes focus and paints the focus ring on a
 // choice that cannot be made. Excluding one costs an explicit
-// FocusModeEnum.None, which is what MapScreen.BuildButtons now sets on every
-// unreachable node. CanTakeFocus below is the same rule for the *initial*
-// owner, and is why nothing regressed while the belief was wrong.
+// FocusModeEnum.None, which MapScreen.BuildButtons sets on every unreachable
+// node and ShopScreen.RefreshOffers on every offer the player cannot afford.
+// Those are the two screens with illegal-but-present choices; everywhere else
+// every control on screen is a legal one. CanTakeFocus below is the same rule
+// for the *initial* owner, and is why nothing regressed while the belief was
+// wrong - the screens still opened on something legal, they just let the
+// keyboard wander onto something that wasn't.
 //
 // Combat deliberately does NOT use this. Its cards are fanned Panels rather
 // than Buttons and its targeting is a CombatState sub-state, so CombatScreen

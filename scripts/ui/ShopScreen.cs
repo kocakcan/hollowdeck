@@ -321,6 +321,11 @@ public partial class ShopScreen : Control
     private void MarkSold(Button button)
     {
         button.Disabled = true;
+        // Set here as well as in RefreshOffers, not instead of it: this button
+        // is about to leave _offerButtons, so the loop below never sees it
+        // again and would leave a "Sold" offer tabbable for the rest of the
+        // visit. See RefreshOffers for why FocusMode is doing anything here.
+        button.FocusMode = FocusModeEnum.None;
         button.Text = "Sold";
         _offerButtons.RemoveAll(o => o.Button == button);
     }
@@ -330,13 +335,35 @@ public partial class ShopScreen : Control
         ScreenChrome.RefreshRunStatus(this);
         foreach (var (button, price) in _offerButtons)
         {
-            button.Disabled = RunState.Gold < price;
+            bool affordable = RunState.Gold >= price;
+            button.Disabled = !affordable;
+
+            // Disabled alone does not keep the keyboard off an offer you cannot
+            // buy. Measured on 4.7.1: FindNextValidFocus and
+            // FindValidFocusNeighbor filter on FocusMode and visibility, and
+            // BaseButton keeps FocusModeEnum.All when disabled - so tabbing
+            // stopped on a greyed-out Buy button and painted the focus ring on
+            // a purchase the player could not make. Same fix, and same
+            // correction to the same wrong belief, as MapScreen's unreachable
+            // nodes; ScreenKeyboardNav's comment has the details.
+            //
+            // Reversible rather than one-way, because this loop runs on every
+            // refresh: gold cannot go back up inside a shop today, but an offer
+            // that became affordable again must become focusable again, or the
+            // mouse and the keyboard would disagree about what is buyable.
+            button.FocusMode = affordable ? FocusModeEnum.All : FocusModeEnum.None;
         }
 
-        // Buying is what disables buttons, including the one that was just
-        // pressed - and Godot drops focus off a control the moment it becomes
-        // Disabled. Without this, one purchase leaves the shop with no focus
-        // owner and the keyboard stops working mid-screen.
+        // Buying takes offers out of reach, including the one just pressed, so
+        // without this a purchase leaves the shop with no focus owner and the
+        // keyboard stops working mid-screen.
+        //
+        // Must stay *after* the loop. Control.SetFocusMode releases focus when
+        // it is handed FocusModeEnum.None, so the assignment above is what
+        // drops the pressed button - which also means this Regrab is now
+        // load-bearing for a mechanism the older comment here did not name (it
+        // credited Disabled, which on 4.7.1 leaves FocusMode alone; see the
+        // note in ScreenKeyboardNav).
         _keyboardNav?.Regrab();
     }
 

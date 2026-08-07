@@ -61,8 +61,8 @@ public partial class MapScreen : Control
     //
     // FocusMode.None in BuildButtons is what actually closes both routes.
     // ScreenKeyboardNav's own comment and README's keyboard section carried the
-    // same wrong claim and are corrected alongside this; the shop's unaffordable
-    // Buy buttons still rely on the wrong version and are worth the same fix.
+    // same wrong claim and are corrected alongside this; ShopScreen.RefreshOffers
+    // is the other place that was relying on it, and pairs the two the same way.
     private Button? _firstReachableButton;
 
     // Untraversed *and* unreachable: a node the player has neither been to nor

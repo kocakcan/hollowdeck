@@ -56,9 +56,9 @@ path. Bindings are named `hd_*` actions in `project.godot`'s `[input]` section.
 | `D` `Q` `W` `E` | Inspect the deck / draw / discard / exhaust pile; `Esc` closes |
 
 **Everywhere else** — `Tab` and the arrow keys move between controls, `Space`/`Enter` activates,
-`Esc` goes back. Illegal choices can't be activated: unreachable map nodes and unaffordable shop
-offers are disabled, and the map's are skipped by the keyboard entirely. Whatever the keyboard is
-on carries a bright gold ring (a choice card grows slightly instead).
+`Esc` goes back. Only legal choices are reachable: unreachable map nodes and unaffordable or
+sold-out shop offers are disabled *and* skipped by the keyboard. Whatever the keyboard is on
+carries a bright gold ring (a choice card grows slightly instead).
 
 ## Repo layout
 
