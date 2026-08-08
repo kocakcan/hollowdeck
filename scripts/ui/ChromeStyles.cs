@@ -15,6 +15,12 @@ namespace Hollowdeck.UI;
 //     Emphasis is carried by border weight and ramp brightness instead.
 public static class ChromeStyles
 {
+    // Shared dim tint for a locked-but-visible item (a card/relic still
+    // shown so the collection reads as a whole roster, not just what's
+    // unlocked). One definition, so MetaProgressionScreen and LibraryScreen
+    // can't drift into two slightly different greys for the same meaning.
+    public static readonly Color LockedTint = new(0.55f, 0.55f, 0.58f);
+
     public static StyleBoxFlat HpBarBackground()
     {
         var style = new StyleBoxFlat

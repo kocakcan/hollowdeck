@@ -510,7 +510,7 @@ There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Rea
 failure.
 
 ```bash
-tools/run-smoke-tests.sh                 # all 20; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh                 # all 21; builds first, nonzero exit on any failure
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 
@@ -552,6 +552,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `ActSmokeTest` | acts load, act progression, per-act content is distinct, no `summon_enemy` crossing an act | `acts.json`, `ActDefinition`, `RunState.AdvanceAct`, any `summon_enemy` spec |
 | `RunSaveSmokeTest` | in-run save/load round-trip, save v2/v3 tolerance | `RunSaveData`, `RunSaveManager`, `RunState` |
 | `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |
+| `LibrarySmokeTest` | `LibraryScreen` loads with the full card/relic/potion roster (not just what's unlocked), per-category tile counts matching `CardDatabase`/`RelicDatabase`/`PotionDatabase`, locked card/relic dimming reading `MetaProgressionManager` live (a threshold crossed after the screen last opened un-dims on the next open), potions never dimmed, and the three category panes switching | `LibraryScreen`, `MetaProgressionManager`, `CardView`, `ChromeStyles.LockedTint` |
 | `AudioSmokeTest` | stream construction, bus setup, volume round-trip, and a volume change leaving the window mode alone | `scripts/audio/`, `AudioManager`, `SettingsManager` |
 | `TransitionSmokeTest` | cross-screen fade: overlay geometry/layer, the Reduce Motion gate, covered-action firing once | `ScreenFade`, `RunManager.ChangeScreen` |
 | `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, the canvas letterboxing rather than expanding, font pair, palette ramp, icon- *and sprite*-to-definition coverage, every `IntentType`/`MapNodeType` resolving art of its own through `ArtAssets` (landing on the `unknown` fallback counts as uncovered), `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering *and* `[display]` |

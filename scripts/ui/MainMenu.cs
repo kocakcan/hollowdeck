@@ -15,10 +15,12 @@ public partial class MainMenu : Control
         startButton.Pressed += OnStartPressed;
         var unlocksButton = GetNode<Button>("CenterContainer/VBoxContainer/UnlocksButton");
         unlocksButton.Pressed += OnUnlocksPressed;
+        var libraryButton = GetNode<Button>("CenterContainer/VBoxContainer/LibraryButton");
+        libraryButton.Pressed += OnLibraryPressed;
         var settingsButton = GetNode<Button>("CenterContainer/VBoxContainer/SettingsButton");
         settingsButton.Pressed += OnSettingsPressed;
 
-        foreach (var button in new[] { continueButton, startButton, unlocksButton, settingsButton })
+        foreach (var button in new[] { continueButton, startButton, unlocksButton, libraryButton, settingsButton })
         {
             ApplyButtonChrome(button);
             button.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
@@ -65,6 +67,8 @@ public partial class MainMenu : Control
     private void OnStartPressed() => RunManager.Instance.StartNewRun();
 
     private void OnUnlocksPressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.MetaProgression);
+
+    private void OnLibraryPressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.Library);
 
     private void OnSettingsPressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.Settings);
 }
