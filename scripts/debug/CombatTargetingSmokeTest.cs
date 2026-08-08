@@ -652,8 +652,23 @@ public partial class CombatTargetingSmokeTest : Node
         view.Combatant = EnemyFactory.Create(EnemyDatabase.Get(enemyId));
         if (!alive) view.Combatant.CurrentHp = 0;
         AddChild(view);
-        // Straddle the origin, where the headless mouse sits.
-        view.GlobalPosition = new Vector2(-40, -40);
+
+        // Straddle wherever the mouse actually is, asked of the view itself.
+        // This used to be a literal (-40, -40) on the reasoning that a headless
+        // Godot pins the mouse at (0, 0) - true of the *window*, and it was
+        // true of the canvas too for as long as the project stretched with
+        // aspect="expand".
+        //
+        // Letterboxing (ART_SPEC section 4) broke that equality rather than the
+        // hit test: "keep" insets the canvas behind bars whenever the window is
+        // not 16:9, so the window's top-left corner maps to a *negative* point
+        // in canvas space and the mouse sat outside a rect pinned at -40. Both
+        // sides of the comparison in FindEnemyViewUnderMouse are canvas-space
+        // (GetGlobalMousePosition against GetGlobalRect), so asking a
+        // CanvasItem for the position - rather than assuming a value for it -
+        // is right under either setting. The suite's own class is a plain Node
+        // and has no such method, which is why this asks the view.
+        view.GlobalPosition = view.GetGlobalMousePosition() - new Vector2(40, 40);
         return view;
     }
 

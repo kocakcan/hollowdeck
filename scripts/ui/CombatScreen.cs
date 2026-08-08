@@ -97,11 +97,18 @@ public partial class CombatScreen : Control
     private readonly Dictionary<CardInstance, CardView> _cardViews = new();
     private readonly Dictionary<EnemyCombatant, EnemyView> _enemyViews = new();
 
-    // What EnemyView.tscn authors as its own minimum, and what an enemy gets
-    // whenever the row can afford it. Named here rather than read back off the
-    // scene because FitEnemiesToTheRow overwrites that very property, so after
-    // the first call the scene's value is no longer there to read.
-    private const float EnemyViewPreferredWidth = 220f;
+    // The widest an enemy's cell is allowed to get, and what one gets whenever
+    // the row can afford it. Named here rather than read back off the scene
+    // because FitEnemiesToTheRow overwrites that very property, so after the
+    // first call the scene's value is no longer there to read.
+    //
+    // Derived from the longest name in the content, not picked: 20 characters
+    // ("The Emberforge Smith", "The Sable Inquisitor") at Silkscreen-Bold 24 is
+    // ~370px plus the display face's 4px outline. This was EnemyView.tscn's
+    // authored 220 until a playtest screenshotted a lone boss reading
+    // "CROWN REA" - 220 fits about eleven glyphs, so every boss in the game was
+    // being trimmed while 580px of the row sat empty beside it.
+    private const float EnemyViewMaxWidth = 400f;
 
     // Keyboard card-play (Left/Right/number keys to select, Space to play) -
     // a second input path feeding the exact same CombatManager.TryPlayCard
@@ -1042,9 +1049,16 @@ public partial class CombatScreen : Control
     // scene was the second and is worse in the common case, where there are one
     // or two enemies and the space is there.
     //
-    // So the authored 220 is a *maximum* and the real width is whatever the row
-    // can give. Reading it off EnemyRow's own size rather than a literal is also
-    // the shape the non-16:9 layout bug wants everywhere (see CLAUDE.md).
+    // So EnemyViewMaxWidth is a *maximum* and the real width is whatever the row
+    // can give. Note the direction: this is shrink-only, and for a long time the
+    // maximum was 220, which made the sentence above true of four enemies and a
+    // lie about one - a lone boss got 220 of an 800px band. Raising the cap is
+    // what makes it true at every count:
+    //
+    //   1 enemy  -> 400 (the cap)      3 enemies -> 261
+    //   2 enemies -> 396               4 enemies -> 194 (available/count binds,
+    //                                     unchanged, and where TrimChar earns
+    //                                     its keep - see EnemyView.NameLabel)
     private void FitEnemiesToTheRow()
     {
         int count = _enemyRow.GetChildCount();
@@ -1052,12 +1066,15 @@ public partial class CombatScreen : Control
 
         float separation = _enemyRow.GetThemeConstant("separation");
         float available = _enemyRow.Size.X - separation * (count - 1);
-        float width = Mathf.Min(EnemyViewPreferredWidth, available / count);
+        float width = Mathf.Min(EnemyViewMaxWidth, available / count);
 
         foreach (var child in _enemyRow.GetChildren())
         {
-            if (child is not Control view) continue;
-            view.CustomMinimumSize = new Vector2(width, view.CustomMinimumSize.Y);
+            // Through SetCellWidth rather than by assigning CustomMinimumSize
+            // here: the name's font size is a function of this same number, and
+            // EnemyView cannot derive it from its own Size (Refresh runs before
+            // the container sorts).
+            if (child is EnemyView view) view.SetCellWidth(width);
         }
     }
 

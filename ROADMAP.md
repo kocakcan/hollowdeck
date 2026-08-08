@@ -172,9 +172,12 @@ layer itself.
     not five, and two new icons rather than one.
   - **The roster cap is a layout budget and it bit immediately.** `EnemyRow` is bounded by the relic
     bar and the pile counter strip, so widening it to fit a fourth enemy put it under the counters —
-    `DeckViewSmokeTest` caught that. The fix is that `EnemyView`'s 220px minimum is a *maximum* now,
-    with `CombatScreen.FitEnemiesToTheRow` deriving the real width from the row. Which is the shape
-    the non-16:9 bug in Phase 12 wants everywhere, so it is worth copying rather than working around.
+    `DeckViewSmokeTest` caught that. The fix is that `EnemyView`'s 220px minimum became a *maximum*,
+    with `CombatScreen.FitEnemiesToTheRow` deriving the real width from the row.
+    *Later correction:* a shrink-only rule needs a cap set by the widest case, not the narrowest.
+    Carrying 220 over from the scene meant a lone boss got 220 of an 800px band and rendered as
+    "CROWN REA"; the cap is `EnemyViewMaxWidth = 400` now, derived from the longest name in the
+    content, and `TextFit` steps the font down a rung before `TrimChar` gets involved.
   - **`EncounterCost` moved act 1 and nothing else, and that took two measurements to establish.**
     Converting its parallel arrays to a growable list to model summons *also* silently stopped a
     dying enemy taking its last swing, which cost every encounter in the game 8–13% and would have
@@ -333,15 +336,37 @@ every rung, and no rung may make act I unwinnable at starter throughput — plus
 inspection, and a damage preview that resolves live Strength and Weak *and* the aimed enemy's
 Vulnerable. All three are good.
 
+**Also done, from the first real playthrough — four text-and-layout fixes, all of the same shape.**
+Every one was a box sized by a constant that stopped being true, and none was visible from any
+committed screenshot, which is why they survived to a playtest:
+
+- Enemy names cut to "CROWN REA" — a shrink-only width cap carried over from the crowded case
+  (`EnemyViewMaxWidth`, now 400 and derived from the longest name in the content).
+- The act-3 title painted through the gold chip — a centred label overflowing from both ends
+  (`ScreenChrome.AddTitle`, now on the same `TextFit` ladder).
+- Map nodes drawn under the relic grid from the seventh relic on — a band top fixed at one row's
+  clearance (`MapScreen.BandTop`, now derived from the block's measured height).
+- Card names lost in the fan — centred in a banner half of which sits behind the next card, so
+  "Thunderclap" read as "Thunderc". Left-aligned, a name loses its tail rather than its middle.
+
+The generalisable lesson, and the reason this list is here rather than in a commit message: **a
+constant that fits the worst case is not a constant that fits the best one.** Three of the four were
+caps or margins that were correct at the crowded end and silently wrong at the empty end. The
+`mapfull` screenshot fixture and `MapSmokeTest`'s block-overlap check exist so the next one of these
+is caught before a playthrough finds it.
+
 ## Phase 12 — Ship readiness
 
 Deferred by choice, not dropped. Ordered by whether it blocks a player.
 
-- **The non-16:9 layout bug**, filed during the export work and still open.
-  `window/stretch/aspect="expand"` grows the canvas past 1152 units, while `ScreenChrome` centres a
-  fixed 1152-wide panel and `MapScreen.cs:135` lays out against a literal `1152f`. Identical at any
-  16:9 size, so it is invisible on the developer's display and appears the first time anyone
-  maximises on a 16:10 laptop.
+- ~~**The non-16:9 layout bug**~~ — **closed by letterboxing**, not by making the screens
+  responsive. `window/stretch/aspect` is now `keep`, so the canvas is 1152x648 at every window size
+  and every fixed offset in the codebase is right by construction; `docs/ART_SPEC.md` §4 states it
+  and `PixelSpecSmokeTest.TestCanvasIsLetterboxedNotExpanded` pins it. The accepted cost is bars on
+  an odd-shaped window. **Genuinely responsive screens remain open** and are the reason this entry
+  is not simply deleted: they are what would let the game *use* a 16:10 display rather than mask it,
+  and that is a much larger change than the setting was. Pair it with "Resolution and windowed-size
+  options" below if it is ever picked up.
 - **macOS notarization.** The build is ad-hoc signed, so downloaded from anywhere it carries
   `com.apple.quarantine`, and macOS 15 removed the Control-click bypass. Blocked on an Apple
   Developer Program membership — a purchase decision, which is why it sits here rather than earlier.

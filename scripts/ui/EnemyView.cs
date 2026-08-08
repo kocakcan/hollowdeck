@@ -351,9 +351,37 @@ public partial class EnemyView : Button
     // stylebox is installed, not whether one is, since there is always one.
     public bool IsTargetLocked => GetThemeStylebox("normal") is not StyleBoxEmpty;
 
+    // Sizes the name may render at, largest first. Two rungs and no third:
+    // ART_SPEC section 6 puts every rendered size on the 8px design em, so the
+    // only step between Heading and Body is 8, which is unreadable at arm's
+    // length. TrimChar underneath both is the last resort, and it is still
+    // reachable - a 20-character name in a four-enemy group has 194px.
+    private static readonly int[] NameFontSizes = { UiTheme.Fonts.Heading, UiTheme.Fonts.Body };
+
+    // The width CombatScreen.FitEnemiesToTheRow last handed this view, which is
+    // what the name has to fit inside. Tracked rather than read off Size,
+    // because Refresh() runs before the container has sorted (from _Ready, and
+    // from RefreshEnemies ahead of the fit pass) and would measure a zero or a
+    // stale box. Seeded with EnemyView.tscn's own authored minimum so the very
+    // first Refresh has a real number.
+    private float _cellWidth = 220f;
+
+    /// Called by CombatScreen.FitEnemiesToTheRow with the width the row can
+    /// afford this enemy. Refits the name, because "does the name fit" is a
+    /// question about exactly this number.
+    public void SetCellWidth(float width)
+    {
+        _cellWidth = width;
+        CustomMinimumSize = new Vector2(width, CustomMinimumSize.Y);
+        FitNameToCell();
+    }
+
+    private void FitNameToCell() => TextFit.Apply(_nameLabel, _cellWidth, NameFontSizes);
+
     public void Refresh()
     {
         _nameLabel.Text = Combatant.Name;
+        FitNameToCell();
         _hpBar.MaxValue = Combatant.MaxHp;
         _ghostHpBar.MaxValue = Combatant.MaxHp;
         ChromeStyles.TweenHpBar(_hpBar, _ghostHpBar, ref _ghostHpTween, Combatant.CurrentHp);

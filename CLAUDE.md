@@ -259,18 +259,38 @@ while its view slides off the board; one predicate is what keeps a third exit fr
 to remember.
 
 **`CombatManager.MaxEnemies` is a layout budget, not a design one.** `EnemyRow` is an 800px band
-bounded by the relic bar on the left and the pile counter strip on the right, and an `EnemyView`
-authors a 220px minimum — three fit, four do not. Widening the row is the wrong fix and
-`DeckViewSmokeTest.pile_counter_strip_does_not_overlap_enemy_row` catches it; narrowing the scene's
-minimum is worse in the common case of one or two enemies. So 220 is a *maximum* and
-`CombatScreen.FitEnemiesToTheRow` derives the real width from the row's own size each refresh, with
-`NameLabel` set to **`TrimChar`** for the names that no longer fit at four. Not `TrimEllipsis`, which
-was the first choice and is the wrong one here: the pixel font has no usable ellipsis glyph at this
-size, so the three dots render as a solid 19x3 bar that reads at 1x as an underscore or a redaction
-rather than as "there is more name here". A cleanly cut name reads as a layout limit; scaling the
-font instead is not available, because `docs/ART_SPEC.md` allows integer scale only. `BalanceModel` reads the same
-constant rather than keeping a copy — an analyser pricing five enemies the screen will only ever show
-four of is pricing a fight nobody can have.
+bounded by the relic bar on the left and the pile counter strip on the right, and four `EnemyView`s
+have to share it. Widening the row is the wrong fix and
+`DeckViewSmokeTest.pile_counter_strip_does_not_overlap_enemy_row` catches it. So
+`CombatScreen.EnemyViewMaxWidth` is a *maximum* and `CombatScreen.FitEnemiesToTheRow` derives the
+real width from the row's own size each refresh — shrink-only, `Min(max, available/count)`.
+
+That maximum is **400**, and what it is derived from is the content: the longest names in
+`enemies.json` are 20 characters, which is ~370px at Silkscreen-Bold 24 plus the display face's 4px
+outline. It was `EnemyView.tscn`'s authored 220 for three phases, which made "the real width is
+whatever the row can give" true of four enemies and a lie about one — 220 fits about eleven glyphs,
+so a playtest found a lone boss captioned **"CROWN REA"** with 580px of the row empty beside it.
+A cap that only ever binds at the crowded end is the trap; at one enemy the row could always afford
+the whole name and nothing asked for it.
+
+Two things then fit a name that is still too big, in order. `EnemyView` steps the font down a rung
+(`TextFit`, Heading→Body — and there is no third rung, because ART_SPEC §6 puts every size on the
+8px design em). Underneath that, `NameLabel` is set to **`TrimChar`**, still reachable at four
+enemies (194px). Not `TrimEllipsis`, which was the first choice and is the wrong one here: the pixel
+font has no usable ellipsis glyph at this size, so the three dots render as a solid 19x3 bar that
+reads at 1x as an underscore or a redaction rather than as "there is more name here". A cleanly cut
+name reads as a layout limit. Note that *scaling* the font is not available — ART_SPEC allows
+integer scale only — which is why the rung ladder picks a legal size rather than fitting one.
+
+`BalanceModel` reads the same `MaxEnemies` constant rather than keeping a copy — an analyser pricing
+five enemies the screen will only ever show four of is pricing a fight nobody can have.
+
+**`TextFit` is the shared half of that**, and it has a second caller: `ScreenChrome.AddTitle`, where
+the same playtest put `"Act 3 of 3 — The Hollow Throne"` through the gold chip. A title is centred,
+so an overflow spills from *both* ends and the left one is where the run-status block is. The ladder
+is the caller's (what a label may shrink to is a design question per label); what is not is whether
+a rung is legal, which `TextFit` checks itself — `PixelSpecSmokeTest`'s source scan only sees
+literal `AddThemeFontSizeOverride` calls and cannot see a size arriving in a variable.
 
 **Input is two layers, and the game is fully playable without a mouse.** Every binding is a named
 `hd_*` action in `project.godot`'s `[input]` — never a raw `Key.X` switch — so there is one place
@@ -361,18 +381,27 @@ shipped. What's open of the enemy vocabulary is a `wake_on_damage` picker and th
 `WeightedRandomIntentPicker` collapse; after that, relic tiers, potion rarity and combat drops, the
 `?` node, an ascension ladder. Don't treat this section as a to-do list.
 
-Two open items are worth knowing *before* you touch the code they sit in, rather than when the
-roadmap is next read:
+One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap
+is next read:
 
 - **Status tooltips are mouse-only**, a live parity break against this file's own "fully playable
   without a mouse". `StatusRow` sets stock Godot `TooltipText`, while `CardView` and `EnemyView`
   already route through the keyboard-aware `scripts/ui/HoverTooltip.cs`. Route `StatusRow` through
   the same widget rather than adding a second tooltip path.
-- **Non-16:9 windows lay out wrong.** `window/stretch/aspect="expand"` grows the canvas past 1152
-  units, but `ScreenChrome` centres a fixed 1152-wide panel and `MapScreen.cs` lays out against a
-  literal `1152f`. Identical at *any* 16:9 size, so it is invisible on this machine's display and
-  appears the first time anyone maximises on a 16:10 laptop — assume any new screen-layout code
-  inherits the bug unless it derives width from the viewport.
+
+**Non-16:9 windows are no longer a live bug, and the fix is a constraint rather than a repair.**
+`window/stretch/aspect` is **`keep`** (ART_SPEC §4, pinned by
+`PixelSpecSmokeTest.TestCanvasIsLetterboxedNotExpanded`), so the canvas is exactly 1152x648 at every
+window size and the fixed offsets every screen is written against — `ScreenChrome`'s `DesignWidth`,
+`MapScreen`'s `DesignHeight`, `CombatScreen.tscn`'s band offsets — are right by construction. It was
+`expand` until a playtest, which grows the canvas along the window's long axis (1470x956 yields
+1152x749) and left the extra 101px simply dead, invisibly, at any 16:9 size.
+
+So the price is bars on an odd-shaped window, and the thing to *not* do is treat that as a reason to
+reach back for `expand` — making the screens genuinely responsive is the alternative, and it is a
+much larger change than the one-line setting suggests. Two consequences worth carrying: a
+screenshot at the design size is now exactly what a player sees at any window size, and the window's
+top-left corner no longer maps to canvas `(0, 0)` (see the mouse note under Verification).
 
 ## Key files
 
@@ -512,7 +541,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `Phase4ContentSmokeTest` | Poison, `lose_hp`, enrage picker, elite relic, every intent's telegraph against its effects (now including Summon and Escape), no enemy move using a card-only scope or `PerX`, the derived label shapes, turn-start grants on both sides (`Metallicize` for an enemy, `Fervor`/`Foresight` for the player), and the roster-mutating half: every `summon_enemy` naming a real enemy that does not itself summon, a summon arriving telegraphed but not acting that turn, an escape leaving without a kill, `onDeath` firing before the fight is scored | intent pickers, statuses, elite rewards, `EnemyView.FormatIntent`, `BeginPlayerTurn`, `CombatManager.ResolveDeathsAndSettle`/`SummonEnemy`, `enemies.json` |
 | `HandLayoutSmokeTest` | hand fan spacing at 11+ cards, every card's text fits its box | `RefreshHand`, `HandFanLayout`, `CardView` text |
 | `DeckViewSmokeTest` | pile popups, pile counters, combat-end z-order | `PileViewPopup`, `DeckViewButtons`, `PileCounterBar` |
-| `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders, fits *and fills* the canvas | `MapGenerator`, `MapScreen`, `MapNode`, `acts.json` |
+| `MapSmokeTest` | per-act DAG shape, boss pools, `MapScreen` renders, fits *and fills* the canvas, and no node lands under the run-status block at a 13-relic haul | `MapGenerator`, `MapScreen`, `MapNode`, `ScreenChrome` block height, `acts.json` |
 | `EventSmokeTest` | event DB, outcome keys, the `add_card` outcome and its authoring audit, `EventScreen` | `scripts/events/`, `events.json` |
 | `ScreenSmokeTest` | Reward/Shop/Treasure/Rest load, populate and show their art; the shop's card-removal picker opening, hiding the shop beneath it, and cancelling for free; the keyword panel tracking hover and focus independently | any non-combat screen, `ScreenChrome`, `CardView`'s keyword tooltip, or its `.tscn` |
 | `ActSmokeTest` | acts load, act progression, per-act content is distinct, no `summon_enemy` crossing an act | `acts.json`, `ActDefinition`, `RunState.AdvanceAct`, any `summon_enemy` spec |
@@ -520,7 +549,7 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |
 | `AudioSmokeTest` | stream construction, bus setup, volume round-trip, and a volume change leaving the window mode alone | `scripts/audio/`, `AudioManager`, `SettingsManager` |
 | `TransitionSmokeTest` | cross-screen fade: overlay geometry/layer, the Reduce Motion gate, covered-action firing once | `ScreenFade`, `RunManager.ChangeScreen` |
-| `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon- *and sprite*-to-definition coverage, every `IntentType`/`MapNodeType` resolving art of its own through `ArtAssets` (landing on the `unknown` fallback counts as uncovered), `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
+| `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, the canvas letterboxing rather than expanding, font pair, palette ramp, icon- *and sprite*-to-definition coverage, every `IntentType`/`MapNodeType` resolving art of its own through `ArtAssets` (landing on the `unknown` fallback counts as uncovered), `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering *and* `[display]` |
 | `KeyboardSmokeTest` | `hd_*` InputMap coverage and no duplicate keycodes, which control each screen focuses on load, that only `FocusMode` (never `Disabled`) excludes a control from the keyboard, the card picker's grid navigation (down a column, out to Cancel, back in), combat's card/potion keys, potion aiming, Continue at combat end | `project.godot` `[input]`, `ScreenKeyboardNav`, `CardPicker`, any screen's focus wiring, `CombatScreen._UnhandledInput` |
 | `VictorySmokeTest` | the final act's boss win routing to `RunEndScreen` rather than another reward, and that screen reading VICTORY | `CombatScreen.OnContinuePressed`, `RunState.IsFinalAct`/`AdvanceAct`, `RunEndScreen` |
 | `BalanceSmokeTest` | the difficulty curve rising act over act, every elite and boss encounter costing what its node type promises (bands, plus no boss cheaper than the act's costliest elite, **and no normal reaching `BossCostLow`**), every escape move stealing more than the cheapest node it can flee, every enrage phase out-hitting its own normal phase, every `RunScore` threshold being reachable by some seed, upgrade amounts matching the documented formula | `enemies.json`, `acts.json`, `RunScore` thresholds, `CardUpgrade`, `MapGenerator` weights |
@@ -549,10 +578,21 @@ changes scene.
 **A headless Godot pins the mouse at `(0, 0)` and ignores both `Viewport.WarpMouse` and
 `Input.WarpMouse`** — measured, not assumed. So anything hit-tested against
 `GetGlobalMousePosition()` (`CardView.FindEnemyViewUnderMouse` is the one that matters) cannot be
-tested by moving the cursor to the target; move the *target* over the origin instead. Building the
-`EnemyView`s standalone rather than through `CombatScreen` also puts `EnemyView.Instances` order
-under the test's control, which is the whole point of the corpse-skipping check — the corpse has to
-be first in that list to be worth asserting about. See
+tested by moving the cursor to the target; move the *target* over the mouse instead.
+
+**But `(0, 0)` is the *window's* corner, not the canvas's, and those stopped being the same point
+when the project went to `aspect="keep"`.** Letterboxing insets the canvas behind bars on a
+non-16:9 window, so the window origin maps to a *negative* canvas coordinate, and a target pinned at
+a literal `(-40, -40)` no longer has the mouse inside it. That is what it looks like when it breaks:
+three green targeting checks went red on a one-line `project.godot` change, reporting "no enemy
+matched — the setup is wrong, not the code under test", which is exactly what had happened. Ask a
+`CanvasItem` for `GetGlobalMousePosition()` and place the target relative to *that* — both sides of
+the real comparison are canvas-space, so this is correct under either setting. The suite's own class
+is a plain `Node` and has no such method, which is why `SpawnEnemyOverTheMouse` asks the view.
+
+Building the `EnemyView`s standalone rather than through `CombatScreen` also puts
+`EnemyView.Instances` order under the test's control, which is the whole point of the corpse-skipping
+check — the corpse has to be first in that list to be worth asserting about. See
 `CombatTargetingSmokeTest.TestHitTestSkipsCorpsesAndIgnoresUntargetedCards`.
 
 A suite whose last act changes scene must capture `GetTree()` into a local *before* it, and do

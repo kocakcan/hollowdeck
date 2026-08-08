@@ -34,6 +34,7 @@ public partial class MapSmokeTest : Node
         TestMapScreenRendersGraph();
         TestMapScreenNodeStates();
         TestLongestActFitsOnScreen();
+        TestNodesClearTheRunStatusBlock();
 
         GD.Print($"MapSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -347,6 +348,48 @@ public partial class MapSmokeTest : Node
         Check($"{longest.Id}_graph_fills_the_vertical_band", bottom - top > designHeight * 0.6f,
             $"spans {bottom - top:F0}px of {designHeight:F0}");
 
+        RunState.ActIndex = 0;
+        instance.QueueFree();
+    }
+
+    // The run-status block grows downward out of the top-left corner as the run
+    // collects relics (ScreenChrome wraps them 6 to a row), and the node band
+    // used to start at a fixed y=116 regardless. That is one row of relics'
+    // worth of clearance, so from the seventh relic on the grid was drawn over
+    // the top-left nodes - and the relics are drawn second, so the node
+    // underneath was the one that vanished.
+    //
+    // Thirteen relics is three rows, chosen so this fails on a band top nudged
+    // down by a row rather than actually derived. The longest act for the same
+    // reason the shot is act 3: more floors means more of them under the block.
+    private void TestNodesClearTheRunStatusBlock()
+    {
+        var longest = ActDatabase.All.OrderByDescending(a => a.FloorCount).First();
+        RunState.ActIndex = ActDatabase.All.ToList().IndexOf(longest);
+        RunState.MapNodes = MapGenerator.Generate(new Random(11), longest);
+        RunState.CurrentNodeId = "";
+        RunState.VisitedNodeIds = new HashSet<string>();
+        var relicsBefore = RunState.Relics;
+        RunState.Relics = RelicDatabase.All.Take(13).Select(r => new RelicInstance(r)).ToList();
+
+        var instance = GD.Load<PackedScene>("res://scenes/MapScreen.tscn").Instantiate();
+        AddChild(instance);
+
+        // GetCombinedMinimumSize rather than Size for the same reason MapScreen
+        // itself uses it: nothing has sorted this container yet, so Size is
+        // still zero. The node buttons are not container-managed - BuildButtons
+        // assigns Position and Size outright - so their rects are already real.
+        var block = instance.GetNode<Control>("RunStatusBar");
+        var blockRect = new Rect2(block.Position, block.GetCombinedMinimumSize());
+
+        var buried = instance.GetNode<Control>("NodeButtons").GetChildren().OfType<Button>()
+            .Where(b => blockRect.Intersects(new Rect2(b.Position, b.Size)))
+            .Select(b => $"node at {b.Position}")
+            .ToList();
+        Check($"{longest.Id}_no_node_under_the_relic_grid", buried.Count == 0,
+            $"{buried.Count} of them, block is {blockRect}: {string.Join(", ", buried)}");
+
+        RunState.Relics = relicsBefore;
         RunState.ActIndex = 0;
         instance.QueueFree();
     }

@@ -158,10 +158,19 @@ public partial class CardView : Panel
 
         // The name banner gets its own inset with extra left padding. The cost
         // badge is anchored to the card's top-left corner and paints over the
-        // banner, so a centred name had its first character hidden underneath
-        // it ("TWIN STRIKE" read as "WIN STRIKE"). Padding the banner's
-        // content past the badge re-centres the name in the space actually
-        // visible, rather than in the space nominally available.
+        // banner, so a name starting at the banner's own left edge had its
+        // first character hidden underneath it ("TWIN STRIKE" read as "WIN
+        // STRIKE"). This padding is what the name starts after.
+        //
+        // It pairs with NameLabel's left alignment in CardView.tscn, and the
+        // two are one decision. The hand is a fan: each card is drawn over the
+        // right-hand side of the one before it, so only a card's left strip
+        // (about 119px of its 176 at a five-card hand, less as the hand grows)
+        // is ever visible. A name centred in the banner therefore centred
+        // itself in space half of which was behind the next card - a playtest
+        // read "Thunderclap" as "Thunderc". Left-aligned, a name that is too
+        // long loses its tail instead of its middle, and the first characters
+        // - the ones that identify the card - are visible at every hand size.
         var nameInset = ChromeStyles.InsetPanelStyle();
         nameInset.ContentMarginLeft = CostBadgeWidth;
         _nameBanner.AddThemeStyleboxOverride("panel", nameInset);

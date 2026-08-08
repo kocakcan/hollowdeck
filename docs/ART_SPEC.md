@@ -73,6 +73,16 @@ This is the "HD pixel art" arrangement — pixel-perfect art, legible UI.
 Practical consequence: the UI layer works in 1152x648 space and may use any position, but anything
 *textured with a pixel asset* obeys §2 and §3.
 
+**And `stretch/aspect="keep"`, so that space is 1152x648 at every window size.** `expand` was the
+setting until the playtest that produced this paragraph: it grows the canvas along the window's long
+axis (a 1470x956 window yields 1152x749), and since every screen positions against the design size —
+`MapScreen`'s `DesignHeight`, `CombatScreen.tscn`'s `HandArea`/`EnemyRow` offsets, `ScreenChrome`'s
+`DesignWidth` — the extra 101px was simply dead. It is invisible at any 16:9 size, which is why it
+survived to a playthrough. Letterboxing trades bars on an odd-shaped window for every fixed offset
+in the codebase being right by construction; making the screens genuinely responsive is the
+alternative, and a much larger change. `PixelSpecSmokeTest.TestCanvasIsLetterboxedNotExpanded` pins
+both halves.
+
 ## 5. Palette
 
 One shared ramp, 43 colours, seven hue families. Every asset must reduce to these colours;
