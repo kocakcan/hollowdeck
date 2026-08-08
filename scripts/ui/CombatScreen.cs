@@ -13,26 +13,43 @@ public partial class CombatScreen : Control
     private const float CardHeight = 240f;
     // Fan layout: cards overlap by up to ~55% of their width (shrinking
     // further if the hand is too wide to fit), rotate up to MaxFanRotationDeg
-    // at the outer edges, and arc so the outer cards sit higher than the
+    // at the outer edges, and arc so the outer cards sit *lower* than the
     // center one - see RefreshHand() for the actual formula.
     private const float MaxFanRotationDeg = 12f;
-    private const float FanArcHeight = 36f;
+    private const float FanArcHeight = 16f;
     // HandArea's own rect only needs to be wide enough for the fan-width
     // math below; its top edge sits well below where cards actually rest -
     // this pulls the resting fan up so cards stay inside the 648-tall
     // viewport instead of hanging off the bottom edge.
     //
-    // -72 (was -140) is what stops the hand covering the enemies. HandArea's
-    // top is y=460, so a card rests at 460-72=388 and its top edge clears
-    // EnemyRow's bottom (y=330) by 58px. At the old 224x308 size the card top
-    // landed at 320 - *above* the enemy row - which is why a five-card hand
-    // occluded nearly all of the act-3 boss. The arc lifts outer cards by up
-    // to FanArcHeight, so the true worst case is 388-36=352, still clear.
-    private const float FanBaseY = -72f;
+    // Two constraints squeeze these two numbers from opposite ends, and each
+    // one has already been violated once.
+    //
+    // Top: HandArea's top is y=460, so the center card - the highest, since the
+    // arc pushes outward-and-down - rests at 460+FanBaseY=372 and clears
+    // EnemyRow's bottom (y=330). At the old 224x308 card size and FanBaseY=-140
+    // the card top landed at 320, *above* the enemy row, which is why a
+    // five-card hand occluded nearly all of the act-3 boss.
+    //
+    // Bottom: a card is 240 tall and rotated about its own center, so the
+    // outer card's bottom-left corner - where the hotkey badge lives - sits
+    // 88*sin12 + 120*cos12 = 136px below that center, i.e. 256px below its top
+    // edge. FanBaseY=-72 with a 36px arc put the outer card top at 424 and that
+    // corner at y=680, 32px past the canvas: the leftmost card was sliced by
+    // the bottom of the screen and its "1" badge never rendered at all. Lifting
+    // to -88 and flattening the arc to 16 puts the outer top at 388 and the
+    // corner at 644. HandLayoutSmokeTest asserts both ends.
+    private const float FanBaseY = -88f;
     // The highest any card's top edge may reach, asserted by
-    // HandLayoutSmokeTest so this cannot silently regress.
+    // HandLayoutSmokeTest so this cannot silently regress. The arc *adds* to
+    // pos.Y (down the screen), so this is the center card with no arc term -
+    // it used to subtract FanArcHeight, describing a fan curving the other way,
+    // and only passed because guessing too high is the safe direction here.
     public const float EnemyRowBottomY = 330f;
-    public static float HighestCardTopY => 460f + FanBaseY - FanArcHeight;
+    public static float HighestCardTopY => 460f + FanBaseY;
+    // The lowest a card's rotated corner may reach: the design canvas floor.
+    // Paired with the above so one test can bracket the fan from both sides.
+    public const float CanvasBottomY = 648f;
 
     private CombatManager _combat = null!;
     private HBoxContainer _enemyRow = null!;
@@ -962,8 +979,11 @@ public partial class CombatScreen : Control
             cardView.SetHotkeyNumber(i < 10 ? (i + 1) % 10 : null);
 
             // Fan: cards rotate outward from center and the outer cards sit
-            // higher than the center one, like cards spread from a grip
-            // point below the screen - center stays at baseline, edges lift.
+            // lower than the center one, like cards spread from a grip point
+            // below the screen - center rides highest, the edges fall away.
+            // yOffset is positive at both edges and Godot's +y is down, which
+            // is what makes the arc a fall rather than a lift; FanBaseY's
+            // comment carries what that costs at the bottom of the canvas.
             float t = n <= 1 ? 0.5f : (float)i / (n - 1);
             float centered = t - 0.5f;
             float rotationDeg = centered * 2f * MaxFanRotationDeg;

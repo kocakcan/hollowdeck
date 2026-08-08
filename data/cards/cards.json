@@ -491,7 +491,7 @@
   },
   {
 	"id": "dagger_throw",
-	"name": "Dagger Throw",
+	"name": "Dagger Toss",
 	"cost": 0,
 	"type": "Attack",
 	"target": "SingleEnemy",
@@ -633,7 +633,7 @@
   },
   {
 	"id": "scorched_earth",
-	"name": "Scorched Earth",
+	"name": "Wildfire",
 	"cost": 1,
 	"type": "Skill",
 	"target": "Self",

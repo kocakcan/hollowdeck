@@ -469,7 +469,12 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note under Veri
 - `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic
   status block, framed panel, art plinth), attached from `_Ready` like `ScreenBackground` and
   `DeckViewButtons`. Owns those node paths; `ScreenChrome.HpLabelPath` and friends are what the
-  smoke tests address rather than literals.
+  smoke tests address rather than literals. The relic grid wraps 6 to a row by default, which keeps
+  the block clear of the centred title (x=296) — but a screen whose own content comes further left
+  than that overrides it, and `ShopScreen` does: its four-card row starts at x=194, so six columns
+  reaching x=280 painted relic icons over the first card. Trading width for height is the whole
+  lever, and the trade runs the other way on the map, where `MapScreen.BandTop` pays for block
+  height out of the node band
 
 ## Conventions
 

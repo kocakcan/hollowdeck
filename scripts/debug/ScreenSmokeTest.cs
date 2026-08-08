@@ -43,6 +43,7 @@ public partial class ScreenSmokeTest : Node
         TestRewardScreen();
         TestTreasureScreen();
         TestShopScreen();
+        await TestShopOffersClearTheRunStatusBlock();
         TestShopUnaffordableOffersAreUnfocusable();
         TestRestScreen();
 
@@ -398,6 +399,64 @@ public partial class ScreenSmokeTest : Node
             !picker.Visible && RunState.Gold == goldBefore && RunState.Deck.Count == 2,
             $"gold {goldBefore}->{RunState.Gold}, deck={RunState.Deck.Count}");
 
+        screen.QueueFree();
+    }
+
+    // The shop counterpart of MapSmokeTest.TestNodesClearTheRunStatusBlock,
+    // and a shipped bug: CardOffersRow is four 176px cards centred on the
+    // design width, so it starts at x=194, while the run-status block's relic
+    // grid ran to x=280 at the shared six-column default - a playtest
+    // screenshot has relic icons painted straight over the first card's name
+    // banner. ShopScreen asks for three columns now, and this is what says it
+    // still does.
+    //
+    // Thirteen relics for the same reason the map test uses it: three rows at
+    // six columns, five at three, so the block is tall enough to reach the
+    // merchandise row if the narrowing is ever undone by widening instead.
+    private async System.Threading.Tasks.Task TestShopOffersClearTheRunStatusBlock()
+    {
+        RunState.Gold = 200;
+        RunState.Potions = new List<PotionInstance>();
+        var relicsBefore = RunState.Relics;
+        RunState.Relics = RelicDatabase.All.Take(13).Select(r => new RelicInstance(r)).ToList();
+
+        var screen = (Control)LoadScene("res://scenes/ShopScreen.tscn");
+
+        // Real rects, not minimums: both the block and the merchandise are
+        // container-laid-out and every one of these rows is centred inside a
+        // box far wider than its contents (CardOffersRow's own rect is 1080px
+        // for 764px of cards), so measuring the *rows* would report an overlap
+        // that is not on screen. Two frames for the deferred sort pass, the
+        // same wait CombatTargetingSmokeTest takes before it measures the HUD.
+        screen.Size = new Vector2(1152, 648);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        // The block's two rows, not the block: it is a VBoxContainer, so its
+        // own rect is the union of a 280px-wide HP/gold row that ends at y=56
+        // and a relic grid a third that wide running far below it. The union
+        // is a rectangle covering neither, and testing it reports the first
+        // card as buried when nothing is on top of it.
+        var blockRows = screen.GetNode<Control>("RunStatusBar").GetChildren()
+            .OfType<Control>().Select(c => c.GetGlobalRect()).ToList();
+
+        var covered = new List<string>();
+        foreach (string path in new[] { "CardOffersRow", "OffersRow" })
+        {
+            foreach (var child in screen.GetNode<Control>(path).GetChildren().OfType<Control>())
+            {
+                var childRect = child.GetGlobalRect();
+                foreach (var row in blockRows.Where(r => r.Intersects(childRect)))
+                {
+                    covered.Add($"{path} child at {childRect} under the block row at {row}");
+                }
+            }
+        }
+
+        Check("shop_offers_clear_the_relic_grid", covered.Count == 0,
+            string.Join(", ", covered));
+
+        RunState.Relics = relicsBefore;
         screen.QueueFree();
     }
 

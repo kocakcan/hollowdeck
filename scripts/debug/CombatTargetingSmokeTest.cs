@@ -483,6 +483,25 @@ public partial class CombatTargetingSmokeTest : Node
             $"state is {combat.State}");
         Check("aiming_a_potion_shows_the_target_hint", hint.Visible, "TargetHintLabel stayed hidden");
 
+        // Third of the same family as TestHudNeverPaintsOverAnEnemy and the
+        // intent tooltip's keep-off-the-hand check, and the one a playtest
+        // caught: the hint used to sit at y=238..284, inside EnemyRow, so
+        // aiming a potion wrote two lines of instructions across the name and
+        // HP bar of the enemy being aimed at. It lives in the band between the
+        // enemy row and the top of the fan now, which is 36px tall - hence one
+        // line - and both edges of that band are asserted here.
+        var hintRect = hint.GetGlobalRect();
+        var painted = screen.GetNode("EnemyRow").GetChildren().OfType<EnemyView>()
+            .Where(e => e.GetGlobalRect().Intersects(hintRect))
+            .Select(e => e.Combatant.Definition.Name)
+            .ToList();
+        Check("the_target_hint_paints_over_no_enemy", painted.Count == 0,
+            $"hint at {hintRect} covers {string.Join(", ", painted)}");
+        Check("the_target_hint_clears_the_top_of_the_hand",
+            hintRect.End.Y <= CombatScreen.HighestCardTopY,
+            $"hint reaches y={hintRect.End.Y}, past the highest card top " +
+            $"y={CombatScreen.HighestCardTopY}");
+
         combat.CancelTargeting();
 
         Check("cancel_returns_to_the_player_turn", combat.State == CombatState.PlayerTurn,

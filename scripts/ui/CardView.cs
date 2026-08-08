@@ -43,9 +43,13 @@ public partial class CardView : Panel
     // Height: 240 - 8*2 inset - 24 banner - 96 art - 6*2 separation - 2*2 = 88
     private static readonly Vector2 DescriptionBoxSize = new(152, 88);
 
-    // Matches the CostBadge rect in CardView.tscn. Used to pad the name
-    // banner clear of the badge that overlaps it.
-    private const int CostBadgeWidth = 30;
+    // Matches the CostBadge and ExhaustBadge rects in CardView.tscn - they are
+    // the same 30px wide and both paint over the name banner, one at each end.
+    // Used to pad the name clear of whichever of them is actually showing.
+    private const int BadgeWidth = 30;
+    // What the banner pads by at an end no badge is covering: InsetPanelStyle's
+    // own content margin, so the name sits off the frame rather than against it.
+    private const int BannerEdgePad = 4;
     // Body sizes the description may shrink to, largest first - now a single
     // entry, because on Tiny5 (8px design em) the only sizes below 16 that
     // don't resample are 8, which is unreadable.
@@ -95,6 +99,7 @@ public partial class CardView : Panel
     private TextureRect _artIconShadow = null!;
     private RichTextLabel _descriptionLabel = null!;
     private PanelContainer _nameBanner = null!;
+    private StyleBoxFlat _nameInset = null!;
     private Panel _artWindow = null!;
     private PanelContainer _descriptionPanel = null!;
     private PanelContainer _costBadge = null!;
@@ -156,24 +161,11 @@ public partial class CardView : Panel
         var inset = ChromeStyles.InsetPanelStyle();
         _artWindow.AddThemeStyleboxOverride("panel", inset);
 
-        // The name banner gets its own inset with extra left padding. The cost
-        // badge is anchored to the card's top-left corner and paints over the
-        // banner, so a name starting at the banner's own left edge had its
-        // first character hidden underneath it ("TWIN STRIKE" read as "WIN
-        // STRIKE"). This padding is what the name starts after.
-        //
-        // It pairs with NameLabel's left alignment in CardView.tscn, and the
-        // two are one decision. The hand is a fan: each card is drawn over the
-        // right-hand side of the one before it, so only a card's left strip
-        // (about 119px of its 176 at a five-card hand, less as the hand grows)
-        // is ever visible. A name centred in the banner therefore centred
-        // itself in space half of which was behind the next card - a playtest
-        // read "Thunderclap" as "Thunderc". Left-aligned, a name that is too
-        // long loses its tail instead of its middle, and the first characters
-        // - the ones that identify the card - are visible at every hand size.
-        var nameInset = ChromeStyles.InsetPanelStyle();
-        nameInset.ContentMarginLeft = CostBadgeWidth;
-        _nameBanner.AddThemeStyleboxOverride("panel", nameInset);
+        // The name banner gets its own inset, whose left and right margins are
+        // set per card by ApplyNameBannerPadding below rather than authored
+        // here - they depend on which badges that card is showing.
+        _nameInset = ChromeStyles.InsetPanelStyle();
+        _nameBanner.AddThemeStyleboxOverride("panel", _nameInset);
         _descriptionPanel.AddThemeStyleboxOverride("panel", ChromeStyles.InsetPanelStyle());
         _costBadge.AddThemeStyleboxOverride("panel", ChromeStyles.BadgeStyle(UiTheme.Palette.AccentGoldBright, UiTheme.Palette.AccentGold));
         _costLabel.AddThemeColorOverride("font_color", UiTheme.Palette.BgPanel);
@@ -263,6 +255,7 @@ public partial class CardView : Panel
         _costBadge.Visible = def.IsPlayable;
         _costLabel.Text = def.IsXCost ? "X" : def.Cost.ToString();
         _exhaustBadge.Visible = def.Exhaust;
+        ApplyNameBannerPadding();
 
         var icon = ArtAssets.CardIcon(def.Id);
         _artIcon.Texture = icon;
@@ -299,6 +292,34 @@ public partial class CardView : Panel
         // used to show must go too.
         HideKeywordTooltip();
         _activeKeywords = Keywords.Find(described.Text);
+    }
+
+    // Pads the name banner clear of whichever badges this card is actually
+    // showing: the cost badge sits on the banner's left end, the exhaust badge
+    // on its right, both 30px wide and both painted over it. A name that
+    // ignored either lost characters underneath it - "TWIN STRIKE" read as
+    // "WIN STRIKE" before the left pad existed, and "Scorched Earth+" still put
+    // its tail under the X until the right one did.
+    //
+    // Derived per card rather than reserved unconditionally, because both
+    // badges are conditional (a Curse hides the cost badge entirely, most cards
+    // are not Exhaust) and reserving 30px that nothing is covering both wastes
+    // room the name needs and pushes a centred name visibly off-centre.
+    //
+    // The centring itself is NameLabel's alignment in CardView.tscn, and the
+    // two are one decision. It is centred at the player's request, over one
+    // known cost: the hand is a fan, each card drawn over the right-hand strip
+    // of the one before it (about 111px of 176 at a five-card hand, less as the
+    // hand grows), so a centred name loses its tail there - the playtest that
+    // put left alignment here originally read "Thunderclap" as "Thunderc". What
+    // pays for it is that every other surface (shop, reward, card picker, pile
+    // popup) shows the whole card, and that hovering or arrow-keying a hand card
+    // lifts it clear of its neighbours, so the name you are actually reading is
+    // the one fully on show.
+    private void ApplyNameBannerPadding()
+    {
+        _nameInset.ContentMarginLeft = _costBadge.Visible ? BadgeWidth : BannerEdgePad;
+        _nameInset.ContentMarginRight = _exhaustBadge.Visible ? BadgeWidth : BannerEdgePad;
     }
 
     // The enemy this card would currently hit, when that's knowable: the one
