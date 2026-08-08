@@ -754,12 +754,15 @@ public partial class CardView : Panel
         var mousePos = GetGlobalMousePosition();
         foreach (var enemyView in EnemyView.Instances)
         {
-            // A killed enemy keeps its slot in the row, and its rect, for the
-            // 0.35s of PlayDeathTween. Without this check the corpse still
-            // wins the hit test - it is first in Instances - so a drag over
-            // it locked a target that was fading to invisible and appeared to
-            // show no glow at all.
-            if (enemyView.Combatant.IsDead) continue;
+            // An enemy that has left the fight keeps its slot in the row, and
+            // its rect, for the 0.35s of its exit tween. Without this check the
+            // corpse still wins the hit test - it is first in Instances - so a
+            // drag over it locked a target that was fading to invisible and
+            // appeared to show no glow at all.
+            //
+            // IsGone rather than IsDead: an escaped enemy is *alive* and would
+            // walk straight past a death check while sliding off the board.
+            if (enemyView.Combatant.IsGone) continue;
             if (enemyView.GetGlobalRect().HasPoint(mousePos)) return enemyView;
         }
         return null;

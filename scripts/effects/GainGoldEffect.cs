@@ -17,6 +17,11 @@ public class GainGoldEffect : IEffect
 {
     public void Execute(EffectContext ctx, EffectSpec spec)
     {
-        RunState.Gold += ctx.AmountFor(spec);
+        // Clamped at zero because a *negative* amount is now authored content:
+        // an escaping thief's move steals gold with this action rather than
+        // with a second effect that would only differ by a sign. Without the
+        // clamp a purse that cannot pay goes negative and then swallows the
+        // next reward silently.
+        RunState.Gold = System.Math.Max(0, RunState.Gold + ctx.AmountFor(spec));
     }
 }

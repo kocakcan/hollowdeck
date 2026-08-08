@@ -14,8 +14,9 @@ enemies to 36. What neither phase changed is the size of the vocabulary all of t
 and the content had saturated it — which is why the game read as a competent deckbuilder rather
 than as this genre.
 
-**Phase 7 has since closed the card half of that, and Phase 8's status half is now in.** The five
-struck rows below are done; the live ones are what the rest of Phases 8 through 10 own.
+**Phase 7 closed the card half of that, and Phase 8 has since closed both of its own — the status
+roster and the enemy behaviours.** The five struck rows below are done; the live ones are what the
+rest of Phases 8 through 10 own.
 
 ### The diagnosis
 
@@ -26,7 +27,7 @@ struck rows below are done; the live ones are what the rest of Phases 8 through 
 | ~~`EffectRegistry` actions~~ | ~~10, every one of which moves an *existing* card or moves a number~~ | **Closed in Phase 7** — `add_card` is 11 |
 | ~~`CardType`~~ | ~~`{ Attack, Skill, Power }`~~ | **Closed in Phase 7** — `Status` and `Curse`, unplayable |
 | ~~`StatusType`~~ | ~~11~~ | **Closed in Phase 8** — `Artifact`, `Thorns`, `Intangible`, `Plating` make 15 |
-| Enemy AI types | 3, all "pick a move off a list" | No minions, no split, no escape, no on-death |
+| ~~Enemy AI types~~ | ~~3, all "pick a move off a list"~~ | **Mostly closed in Phase 8** — `summon_enemy`, `onDeath` and escape ship; `wake_on_damage` is the picker that remains |
 | `RelicDefinition` | no tier field | A boss grants from the same pool 150 gold buys from |
 | `PotionDefinition` | no rarity field, no combat drop | The three-slot belt is nearly always empty |
 
@@ -103,12 +104,19 @@ Compressed. The decisions worth not relitigating, and nothing else; the full nar
 - **Card removal shipped with the Curses, not after them.** Adding a way to put dead cards in a deck
   without a way to take them out is punishment rather than design.
 
-The curve as of today: encounter HP scales 1.49x then 1.44x per act, incoming damage 2.10x across
-the run, player max HP only 1.32x — so **deck power has to cover 1.59x**, drawn from a mean of 16.6
-three-card rewards. Elites span 1.13x–1.84x of an average normal fight and bosses 2.43x–3.23x, both
+The curve as of today: encounter HP scales 1.43x then 1.44x per act, incoming damage 2.16x across
+the run, player max HP only 1.32x — so **deck power has to cover 1.64x**, drawn from a mean of 16.6
+three-card rewards. Elites span 1.09x–1.84x of an average normal fight and bosses 2.43x–3.06x, both
 asserted as bands by `BalanceSmokeTest` — which reads them from `BalanceModel.EliteCost*`/`BossCost*`
 rather than holding its own copy, so the report's printed header and the suite's flags cannot
 disagree.
+
+`BossCostLow` does a second job as of Phase 8's review pass: it is also the line a *normal*
+encounter may not cross. Elites are banded against the **mean** normal, so a single Combat node
+spiking past the whole elite pool averages away to nothing — which is exactly what shipped and what
+the suite could not see. The costliest normal per act (2.04x / 1.77x / 1.89x) is printed in the
+report for the same reason. Some overlap between the hardest normal and the hardest elite is what a
+spread *is*, and predates Phase 8; a Combat node costing what a Boss node promises is not.
 
 ---
 
@@ -137,20 +145,69 @@ may declare a card-only scope — the telegraph-honesty guard), `EventSmokeTest`
 ## Phase 8 — Enemies that do something other than damage
 
 Phase 6 took the roster 24 → 36 by widening the *telegraph* vocabulary. The behaviour vocabulary was
-never widened: all 36 are a list of moves picked by one of three pickers, and `EnemyDefinition` has
-no hook for anything else. This is why 36 enemies feel like a dozen.
+not: all 36 were a list of moves picked by one of three pickers, and `EnemyDefinition` had no hook
+for anything else, which is why 36 enemies felt like a dozen. Most of that is now closed — an enemy
+can bring in minions, react to its own death and leave a fight alive. What is left is the picker
+layer itself.
 
-- **`summon_enemy`.** Lets a move bring in minions. The effect is the easy part; the real cost is
-  that `CombatManager.Enemies` must grow mid-fight and `CombatScreen` must build an `EnemyView`
-  mid-fight, which touches `EnemyView.Instances` ordering and the corpse-skipping hit test that
-  `CombatTargetingSmokeTest` covers. Expect those assertions to move — that is the alarm working.
-- **`onDeath: [EffectSpec]` on `EnemyDefinition`**, authored as data like relics and Powers rather
-  than a C# class per enemy (risk 1). **Splitting falls out of this** — a split is an `onDeath` that
-  summons two half-HP copies, not a mechanic of its own — and so does "on death, poison whoever
-  killed me".
-- **Escape.** A fifth `IntentType` and a move that removes an enemy *alive*, granting no reward. A
-  thief that leaves with your gold is a fight you can lose by playing correctly but slowly, which is
-  a shape the game currently cannot express.
+- ~~**`summon_enemy`**, **`onDeath: [EffectSpec]`** and **escape.**~~ **Shipped**, as one branch,
+  because all three are the same change: `CombatManager.Enemies` mutating mid-fight. Effect actions
+  11 → 13, intent types 4 → 6, and three re-authored act-1 enemies — `ward_acolyte` opens by calling
+  a slime, `slime` bursts into Poison as it dies, `gaol_rat` steals 40 gold on turn 4 and leaves.
+  Splitting is a capability rather than content: it falls out of `onDeath` + `summon_enemy`, but a
+  half-HP copy needs a new sourced sprite or an HP override on the summon spec, and neither was worth
+  buying to prove a point.
+
+  The forecast held on the shape and missed on four things, all of which cost measurement rather than
+  rework:
+  - **The ordering that mattered was not the one this file named.** It called out `EnemyView`
+    ordering and the hit test — both real, both cheap. The expensive one is that an `onDeath` can
+    kill the player from the *player's* turn, which no resolution site checked: `ResolveCard` and
+    `ResolvePotion` only ever tested for a Win. That is why the four repeated
+    `RemoveDeadEnemies(); CombatantsChanged; if (Enemies.Count == 0) Win` triples collapsed into one
+    `ResolveDeathsAndSettle`, and why **Lose is checked before Win** — the alternative silently
+    no-ops every `onDeath` on the last enemy alive.
+  - **A summon needs an intent type of its own, not a `Buff`.** The telegraph sweep resolves a Buff
+    to a `Self`-scoped `apply_status`/`heal`, which a summon move has neither of. Six intent types,
+    not five, and two new icons rather than one.
+  - **The roster cap is a layout budget and it bit immediately.** `EnemyRow` is bounded by the relic
+    bar and the pile counter strip, so widening it to fit a fourth enemy put it under the counters —
+    `DeckViewSmokeTest` caught that. The fix is that `EnemyView`'s 220px minimum is a *maximum* now,
+    with `CombatScreen.FitEnemiesToTheRow` deriving the real width from the row. Which is the shape
+    the non-16:9 bug in Phase 12 wants everywhere, so it is worth copying rather than working around.
+  - **`EncounterCost` moved act 1 and nothing else, and that took two measurements to establish.**
+    Converting its parallel arrays to a growable list to model summons *also* silently stopped a
+    dying enemy taking its last swing, which cost every encounter in the game 8–13% and would have
+    put the branch's balance delta beyond attribution. Restored deliberately — acts 2 and 3 then came
+    back byte-identical to `main`, and act 1's reference rose 42 → 48 purely from the summon, which
+    is the honest number. The dying-swing question is real and belongs with the unmodelled
+    `gain_block` moves as the next thing to do to that method, measured on its own.
+
+  The review pass then found the thing all of that measuring had been reading past, and it is the
+  fifth and most useful entry in this list:
+
+  - **A moved *denominator* looks exactly like a moved numerator, and only one of them is the bug.**
+    `possessed_armor` falling to 0.99x was read as the armour being too cheap and answered with
+    113 → 120 HP. It was not: the summon had pushed two Combat nodes to 101 and 116 against a
+    costliest elite of 77, which dragged act 1's mean normal cost 42 → 48 and deflated every elite
+    and boss ratio in the act at once. The armour never changed. Every suite was green throughout,
+    because nothing measured a normal encounter against anything — `BalanceReport` printed only
+    elites and bosses, and `BalanceSmokeTest` banded them against the *mean*, which is precisely the
+    statistic a single spike disappears into.
+
+    Fixed at the source: `ward_acolyte` 40 → 24 HP, so the summoner is the genre's fragile caster
+    hiding behind minions and acolyte-plus-slime lands where the acolyte alone used to. Act 1's
+    ceiling returns to 90 — `cultist + cultist`, which held it before Phase 8 — and the 120 HP
+    reverts to 113. Two assertions now stand where the argument was: no Combat node may reach
+    `BossCostLow`, and the costliest normal per act is printed rather than left to be inferred from
+    elites getting quietly cheaper.
+
+    The same pass caught `snatch_and_flee` stealing exactly the 25 gold act 1's solo `gaol_rat` node
+    pays out. Emptying the board scores as a Win however it emptied, so the escape handed over the
+    full reward, cost the player nothing, and skipped 44 HP of fight — and `EncounterCost` is right
+    that it only ever fires against a *below*-reference deck. The move existed to rescue the deck it
+    was written to punish. Theft 25 → 40, and `BalanceSmokeTest` now asserts a theft exceeds the
+    smallest reward any node the thief appears in can pay.
 - **A fourth AI type, `wake_on_damage`** — structurally `PhaseThresholdIntentPicker` inverted
   (transition on damage taken rather than an HP threshold), reusing that file's shape the way
   `BlockMath` reuses `DamageMath`'s.
@@ -184,12 +241,15 @@ no hook for anything else. This is why 36 enemies feel like a dozen.
   is honest at every move count. `BalanceModel`'s stationary-distribution correction has to follow in
   the same change or the analyser silently reports the old chain.
 
-*Proven by:* `Phase4ContentSmokeTest` (every intent still telegraphs what it resolves, now including
-summons and escapes), `CombatTargetingSmokeTest` (mid-fight `EnemyView` creation, hit test with a
-summon appended). Note that summons change `EncounterCost`, so `BalanceSmokeTest`'s act bands need
-**re-measuring, not re-asserting** — as the status half already did.
+*Proven by:* `Phase4ContentSmokeTest` (Summon and Escape telegraphs, every `summon_enemy` naming a
+real enemy that does not itself summon, a summon arriving telegraphed but not acting that turn, an
+escape leaving without a kill, `onDeath` firing before the fight is scored),
+`CombatTargetingSmokeTest` (mid-fight `EnemyView` creation and `Instances` order, hit test skipping a
+runaway as well as a corpse, the HUD clear of a full four-enemy row), `ActSmokeTest` (no summon
+crossing an act), `EffectSmokeTest` (negative `gain_gold`, enemy-only actions off cards).
 
-The status bullet above is done; the five behaviour bullets are what remains of this phase.
+Two of the five bullets remain: `wake_on_damage` and the two-move picker collapse. Both are
+picker-local, and neither shares plumbing with what shipped.
 
 ## Phase 9 — The map, and the run's texture
 

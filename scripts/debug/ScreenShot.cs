@@ -100,6 +100,7 @@ public partial class ScreenShot : Node
         // its enemies attack: a multi-hit count, a non-Strength buff, and a
         // Debuff intent.
         ["combatintents"] = new("res://scenes/CombatScreen.tscn", SeedIntentCombat, ShowNewIntents),
+        ["combatsummon"] = new("res://scenes/CombatScreen.tscn", SeedSummonCombat, ShowFullRoster),
         // The Phase 7 card vocabulary in a hand: both unplayable frames, the
         // three keyword sentences, and an X-cost badge. No AfterReady - these
         // have to read correctly *before* anything is played.
@@ -334,6 +335,55 @@ public partial class ScreenShot : Node
         // Locking is also how keyboard target-cycling raises it, so this is the
         // real path rather than a synthesised mouse event.
         EnemyView.Instances.LastOrDefault()?.SetTargetLocked(true);
+    }
+
+    // The roster at CombatManager.MaxEnemies, which is the widest the enemy row
+    // will ever be asked to hold and a shape no static encounter in acts.json
+    // can produce - it takes a summon to get there. Two things need looking at
+    // and neither is assertable: whether four enemies still read as four
+    // distinct columns once FitEnemiesToTheRow has narrowed them, and whether
+    // the two new intent labels ("Acid Slime", "-25g") fit that narrower share
+    // beside the icon and the debuff badge.
+    //
+    // Carries the full relic bar for the same reason combatfull does: the
+    // leftmost enemy is closest to it at four, not three.
+    private static void SeedSummonCombat()
+    {
+        SeedCrowdedCombat();
+        CombatContext.EnemyDefinitionIds = new List<string> { "ward_acolyte", "gaol_rat", "slime" };
+    }
+
+    private static void ShowFullRoster(Node screen)
+    {
+        var combat = CombatManager.Instance;
+        if (combat is null) return;
+
+        combat.SummonEnemy("slime", 1);
+
+        // SummonEnemy does not raise CombatantsChanged - the resolution site
+        // that calls it does - so the fourth EnemyView only gets built once
+        // something drives a refresh. Playing a card is that something, and it
+        // is the real path rather than a poke at the view layer.
+        var hand = combat.Player.Piles.Hand;
+        if (hand.FirstOrDefault(c => c.Definition.Id == "flex") is { } flex) combat.TryPlayCard(flex);
+
+        // Pinned rather than waited for: call_the_faithful is the acolyte's
+        // opener and would be gone by the time a summon had actually happened,
+        // and snatch_and_flee is four turns away. A fixture whose intents depend
+        // on how far the fight has run is not a regression shot.
+        var pinned = new[] { "call_the_faithful", "snatch_and_flee" };
+        foreach (var view in EnemyView.Instances)
+        {
+            var move = view.Combatant.Definition.Moves.FirstOrDefault(m => pinned.Contains(m.MoveId));
+            if (move is null) continue;
+            view.Combatant.CurrentMove = move;
+            view.Refresh();
+        }
+
+        // The escaping enemy's hover panel, which is where the prose half of
+        // the telegraph lives ("Steals 25 Gold. Flees the fight.").
+        EnemyView.Instances.FirstOrDefault(v => v.Combatant.Definition.Id == "gaol_rat")
+            ?.SetTargetLocked(true);
     }
 
     private static void SeedCrowdedCombat()

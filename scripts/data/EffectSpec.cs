@@ -30,6 +30,11 @@ public class EffectSpec
     public string? CardId { get; set; }
     public CardPile Pile { get; set; } = CardPile.Discard;
 
+    // summon_enemy only. Amount is the number of copies - the same reading
+    // add_card gives it, deliberately, so "how many of these does this make"
+    // is one question with one answer across both primitives.
+    public string? EnemyId { get; set; }
+
     // X-cost opt-in. Amount is then read as "per point of X" - so a card that
     // deals X damage is authored amount 1, and one that deals 3 per X is
     // authored amount 3. Per-spec rather than a blanket override on the

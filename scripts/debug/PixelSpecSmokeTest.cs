@@ -194,6 +194,23 @@ public partial class PixelSpecSmokeTest : Node
         AssertIconsMatch("status",
             System.Enum.GetValues<Combat.StatusType>().Select(s => s.ToString().ToLowerInvariant()));
 
+        // Intents and map nodes are the two categories that were missing here
+        // entirely, and they are the two that cannot be checked by filename:
+        // both go through a switch in ArtAssets that maps an enum member to a
+        // name it does not equal (MapNodeType.Combat -> "fight"), so an
+        // enumerate-and-lowercase sweep like the status one above would just
+        // be wrong. Drive the real lookup instead - that covers the arm and
+        // the file in one assertion, which is what a missing arm needs: the
+        // `_ =>` default swallows it, Load returns null, EnemyView hides the
+        // TextureRect, and the telegraph renders as a bare label with every
+        // suite green. This branch added two IntentTypes by hand and got away
+        // with it; the next two roadmap items (wake_on_damage, and Phase 9's
+        // unknown map node) both walk straight into it.
+        AssertEveryEnumMemberResolvesArt("intents",
+            System.Enum.GetValues<IntentType>(), ArtAssets.IntentIcon);
+        AssertEveryEnumMemberResolvesArt("map",
+            System.Enum.GetValues<Map.MapNodeType>(), ArtAssets.MapIcon);
+
         // Sprites were the hole in all of the above: every category here is
         // under assets/icons, so an enemy shipped with no PNG passed the whole
         // suite and rendered as an empty TextureRect mid-fight. Unlike icons
@@ -203,6 +220,46 @@ public partial class PixelSpecSmokeTest : Node
         AssertArtCovers("enemy_sprites", "res://assets/sprites/enemies",
             EnemyDatabase.All.Select(e => e.Id),
             "source a 32x32 CC0 tile, clamp it with tools/artgen, and record it in CREDITS.md");
+    }
+
+    // Both directions like AssertArtCovers, but driven through the ArtAssets
+    // lookup rather than through a list of ids, because these two categories
+    // do not name their files after their enum members.
+    private void AssertEveryEnumMemberResolvesArt<T>(string category, T[] members,
+        System.Func<T, Texture2D?> lookup) where T : System.Enum
+    {
+        string directory = $"res://assets/icons/{category}";
+        string fallback = $"{directory}/unknown.png";
+
+        var reached = new HashSet<string>();
+        var unresolved = new List<string>();
+        foreach (var member in members)
+        {
+            var texture = lookup(member);
+            // Landing on unknown.png counts as unresolved, not as covered.
+            // The fallback is there so a missed arm still draws *something*
+            // in a build nobody ran this suite against - it is not a licence
+            // to skip the arm. Without this comparison the fallback would
+            // hide the exact bug the check was added for, which is a worse
+            // state than having no check at all.
+            if (texture is null || texture.ResourcePath == fallback)
+                unresolved.Add(member.ToString());
+            else
+                reached.Add(texture.ResourcePath.GetFile().GetBaseName());
+        }
+
+        Check($"{category}_icons_cover_every_definition", unresolved.Count == 0,
+            $"ArtAssets resolves no icon of its own for: {string.Join(", ", unresolved)} - " +
+            "add the switch arm in ArtAssets.cs and the entry in tools/artgen/src/icons/");
+
+        var orphaned = FilesUnder(directory, ".png")
+            .Select(path => path.GetFile().GetBaseName())
+            .Where(name => name != "unknown" && !reached.Contains(name))
+            .OrderBy(x => x)
+            .ToList();
+        Check($"{category}_icons_have_no_orphans", orphaned.Count == 0,
+            $"file(s) no enum member resolves to: {string.Join(", ", orphaned)} - " +
+            "a member was renamed or removed but its icon was not");
     }
 
     private void AssertIconsMatch(string category, System.Collections.Generic.IEnumerable<string> ids) =>

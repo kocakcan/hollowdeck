@@ -232,19 +232,13 @@ public static class BalanceModel
     {
         if (ids.Count == 0 || throughput <= 0) return 0;
 
-        var defs = ids.Select(EnemyDatabase.Get).ToList();
-
-        var strength = new double[defs.Count];
-        var ritual = new double[defs.Count];
-        // Metallicize and Plating both pay out Block every turn and both
-        // accumulate the way strength does - what matters is the stack held
-        // going into a turn, not what the definition could eventually reach.
-        // They are tracked apart because only one of them lasts: Metallicize is
-        // permanent, Plating loses a stack to every hit that gets through it.
-        var metallicize = new double[defs.Count];
-        var plating = new double[defs.Count];
-        var enraged = new bool[defs.Count];
-        var hp = defs.Select(d => (double)d.MaxHp).ToArray();
+        // A list rather than the parallel arrays this used to be, because since
+        // Phase 8 the roster is not fixed for the length of the fight: a
+        // summon appends to it and an escape removes from it. Arrays sized
+        // ids.Count up front cannot represent either, and a summoner priced as
+        // though it fought alone is the same class of error the pre-Phase-8
+        // Metallicize omission was.
+        var fight = ids.Select(id => new WalkEnemy(EnemyDatabase.Get(id), joinedOnTurn: 0)).ToList();
 
         // Player-side state the enemies themselves create.
         double vulnerable = 0, poison = 0, total = 0;
@@ -254,7 +248,7 @@ public static class BalanceModel
         // future mis-authored enemy is a bad number rather than a hung suite.
         const int MaxTurns = 60;
 
-        for (int turn = 1; turn <= MaxTurns && hp.Any(h => h > 0); turn++)
+        for (int turn = 1; turn <= MaxTurns && fight.Any(e => e.Present); turn++)
         {
             // Poison bypasses Block and decays as it ticks - see
             // CombatManager.ApplyPoisonTick.
@@ -268,13 +262,30 @@ public static class BalanceModel
             // halfway does not keep splitting the player's damage two ways, and
             // the corpse does not keep attacking. Both were true of the old
             // fixed-length walk and both overstated multi-enemy encounters.
-            int alive = hp.Count(h => h > 0);
+            int alive = fight.Count(e => e.Present);
             double sharedThroughput = throughput / alive;
 
-            for (int i = 0; i < defs.Count; i++)
+            // Indexed rather than foreach: a summon resolving inside the loop
+            // appends to this list, and the newcomer must not act on the turn
+            // it arrives - which is exactly what CombatManager gets for free
+            // from its _enemyTurnOrder snapshot. Bounding the loop at the
+            // count taken before the turn is this walk's version of that
+            // snapshot.
+            int actingThisTurn = fight.Count;
+            for (int i = 0; i < actingThisTurn; i++)
             {
-                if (hp[i] <= 0) continue;
-                var def = defs[i];
+                var e = fight[i];
+                if (!e.Present) continue;
+
+                // Leaves alive, taking its remaining HP - and everything the
+                // player has already spent on it - out of the fight. Deals no
+                // damage on the way out: the gold an escape steals is a cost,
+                // but it is not damage and does not belong in this total.
+                if (e.EscapesOnOwnTurn is { } escapeTurn && turn - e.JoinedOnTurn >= escapeTurn)
+                {
+                    e.Escaped = true;
+                    continue;
+                }
 
                 // Block the enemy grants itself every turn is throughput that
                 // never reaches its HP, so a Metallicize or Plating enemy is a
@@ -296,31 +307,88 @@ public static class BalanceModel
                 // moves, i.e. every Defend intent in the game. Folding those in
                 // is a larger retune than this change and is the next thing to
                 // do to this method.
-                hp[i] -= Math.Max(0, sharedThroughput - metallicize[i] - plating[i]);
-                plating[i] = Math.Max(0, plating[i] - 1);
+                e.Hp -= Math.Max(0, sharedThroughput - e.Metallicize - e.Plating);
+                e.Plating = Math.Max(0, e.Plating - 1);
 
-                if (!enraged[i] && def.EnrageHpPercent > 0 && def.EnrageMoves.Count > 0
-                    && hp[i] * 100 <= def.MaxHp * def.EnrageHpPercent)
+                // No `continue` after this, and that is deliberate rather than
+                // an oversight: an enemy killed by *this* turn's drain still
+                // takes its move below, which is what the walk has always done
+                // (the liveness check is at the top of the block, so the swing
+                // it gets is exactly one). Skipping it is arguably the more
+                // accurate reading - a dead enemy does not act - and measuring
+                // it costs every encounter in the game 8-13%, which would put
+                // this branch's balance delta beyond attribution to the three
+                // mechanics it adds. Left as it was on purpose; it belongs with
+                // the unmodelled one-off `gain_block` moves below as the next
+                // thing to do to this method, measured on its own.
+                if (e.Hp <= 0)
                 {
-                    enraged[i] = true;
+                    total += ResolveOnDeath(e, fight, turn, ref poison, ref vulnerable,
+                        out int arrivals);
+
+                    // A death-summon acts on the round it lands; a move-summon
+                    // does not. The asymmetry is real rather than a modelling
+                    // choice: an onDeath fires from ResolveCard during the
+                    // *player's* turn, and TryEndTurn snapshots _enemyTurnOrder
+                    // after that, so the replacement is already in the order
+                    // being iterated. A move-summon resolves from inside that
+                    // same iteration and is therefore not.
+                    //
+                    // Widening the bound is this walk's version of the later
+                    // snapshot. Safe because TrySummon appends and `i` has not
+                    // reached the end of the list yet.
+                    actingThisTurn += arrivals;
+                }
+
+                if (!e.Enraged && e.Def.EnrageHpPercent > 0 && e.Def.EnrageMoves.Count > 0
+                    && e.Hp * 100 <= e.Def.MaxHp * e.Def.EnrageHpPercent)
+                {
+                    e.Enraged = true;
                 }
 
                 // Ritual re-grants Strength at the start of every turn, the
                 // way CombatManager.ApplyTurnStartGrants does.
-                strength[i] += ritual[i];
+                e.Strength += e.Ritual;
 
-                foreach (var (move, p) in Cadence(def, turn, enraged[i]))
+                // Its own turn count, not the fight's: a minion summoned on
+                // turn 4 is on move 1 of its list, not move 4.
+                foreach (var (move, p) in Cadence(e.Def, turn - e.JoinedOnTurn, e.Enraged))
                 {
-                    double raw = MoveDamage(move) + MoveHits(move) * strength[i];
+                    double raw = MoveDamage(move) + MoveHits(move) * e.Strength;
                     if (vulnerable > 0) raw *= DamageMath.VulnerableMultiplier;
                     total += p * raw;
 
-                    strength[i] += p * SelfStatusGain(move, "Strength");
-                    ritual[i] += p * SelfStatusGain(move, "Ritual");
-                    metallicize[i] += p * SelfStatusGain(move, "Metallicize");
-                    plating[i] += p * SelfStatusGain(move, "Plating");
+                    e.Strength += p * SelfStatusGain(move, "Strength");
+                    e.Ritual += p * SelfStatusGain(move, "Ritual");
+                    e.Metallicize += p * SelfStatusGain(move, "Metallicize");
+                    e.Plating += p * SelfStatusGain(move, "Plating");
                     poison += p * TargetStatusGain(move, "Poison");
                     vulnerable += p * TargetStatusGain(move, "Vulnerable");
+
+                    // Summons arrive whole or not at all. A fractional enemy is
+                    // not representable, so the expected count accumulates and
+                    // spends itself the turn it crosses one - which for a
+                    // sequential summoner (the only kind authored) is exactly
+                    // the turn the move actually comes round.
+                    //
+                    // Accumulated per summoned id rather than as one number,
+                    // because an enemy may have two summon moves calling two
+                    // different creatures and a single counter cannot say which
+                    // one crossed.
+                    foreach (var (id, count) in SummonsIn(move))
+                    {
+                        e.PendingSummons.TryGetValue(id, out double pending);
+                        e.PendingSummons[id] = pending + p * count;
+                    }
+                }
+
+                foreach (var id in e.PendingSummons.Keys.ToList())
+                {
+                    while (e.PendingSummons[id] >= 1)
+                    {
+                        e.PendingSummons[id] -= 1;
+                        TrySummon(fight, EnemyDatabase.Find(id), joinedOnTurn: turn);
+                    }
                 }
             }
 
@@ -328,6 +396,133 @@ public static class BalanceModel
         }
 
         return total;
+    }
+
+    // One enemy's state inside the walk. A class rather than a struct because
+    // the loop mutates entries in place and appends to the list while doing it.
+    private sealed class WalkEnemy
+    {
+        public WalkEnemy(EnemyDefinition def, int joinedOnTurn)
+        {
+            Def = def;
+            Hp = def.MaxHp;
+            JoinedOnTurn = joinedOnTurn;
+            EscapesOnOwnTurn = EscapeTurn(def);
+        }
+
+        public readonly EnemyDefinition Def;
+        public double Hp;
+        // Metallicize and Plating both pay out Block every turn and both
+        // accumulate the way Strength does - what matters is the stack held
+        // going into a turn, not what the definition could eventually reach.
+        // They are tracked apart because only one of them lasts: Metallicize is
+        // permanent, Plating loses a stack to every hit that gets through it.
+        public double Strength, Ritual, Metallicize, Plating;
+        public bool Enraged;
+        public bool Escaped;
+        public bool OnDeathFired;
+        // Expected summons not yet whole, keyed by the id being summoned.
+        public readonly Dictionary<string, double> PendingSummons = new();
+
+        // Which fight turn this enemy arrived on. Zero for the starting roster,
+        // so `turn - JoinedOnTurn` is 1 on turn 1 and the arithmetic is the same
+        // for both.
+        public readonly int JoinedOnTurn;
+        public readonly int? EscapesOnOwnTurn;
+
+        public bool Present => !Escaped && Hp > 0;
+    }
+
+    // Damage an enemy's onDeath adds as it dies, plus any status or summon it
+    // leaves behind. Returns the direct damage so the caller can fold it into
+    // the running total; poison and vulnerable are player-side accumulators and
+    // go back by ref.
+    //
+    // Fires once, guarded the same way CombatManager.ResolveDeaths guards it -
+    // and for the same reason: an onDeath that summons can produce another
+    // corpse in the same pass.
+    //
+    // `arrivals` is how many enemies it brought in, so the caller can let them
+    // act this round - see the widening of actingThisTurn at the call site.
+    private static double ResolveOnDeath(
+        WalkEnemy dying, List<WalkEnemy> fight, int turn, ref double poison, ref double vulnerable,
+        out int arrivals)
+    {
+        arrivals = 0;
+        if (dying.OnDeathFired) return 0;
+        dying.OnDeathFired = true;
+
+        double damage = 0;
+        foreach (var spec in dying.Def.OnDeath)
+        {
+            switch (spec.Action)
+            {
+                case "deal_damage":
+                case "lose_hp":
+                    damage += spec.Amount;
+                    break;
+                case "apply_status" when spec.Scope == EffectScope.Target:
+                    if (spec.Status == "Poison") poison += spec.Amount;
+                    else if (spec.Status == "Vulnerable") vulnerable += spec.Amount;
+                    break;
+                case "summon_enemy":
+                    for (int i = 0; i < spec.Amount; i++)
+                    {
+                        // turn - 1, not turn: a death-summon takes its *first*
+                        // move on the round it arrives, and the cadence index
+                        // is `turn - JoinedOnTurn`. A move-summon passes `turn`
+                        // and so opens on the following round instead.
+                        if (TrySummon(fight,
+                                spec.EnemyId is { Length: > 0 } id ? EnemyDatabase.Find(id) : null,
+                                turn - 1))
+                        {
+                            arrivals++;
+                        }
+                    }
+                    break;
+            }
+        }
+
+        return damage;
+    }
+
+    // Refused past the same cap the game refuses it past, read off
+    // CombatManager rather than restated - an analyser modelling five enemies
+    // the screen will only ever show four of is pricing a fight nobody can have.
+    private static bool TrySummon(List<WalkEnemy> fight, EnemyDefinition? def, int joinedOnTurn)
+    {
+        if (def is null) return false;
+        if (fight.Count(e => e.Present) >= CombatManager.MaxEnemies) return false;
+        fight.Add(new WalkEnemy(def, joinedOnTurn));
+        return true;
+    }
+
+    // Every summon spec in a move, paired with what it brings in. Read off the
+    // move rather than off the definition: an enemy with two summon moves that
+    // call different creatures was previously modelled summoning whichever the
+    // first move named, for both.
+    private static IEnumerable<(string Id, int Count)> SummonsIn(EnemyMove move) =>
+        move.Effects
+            .Where(e => e.Action == "summon_enemy" && e.EnemyId is { Length: > 0 })
+            .Select(e => (e.EnemyId!, e.Amount));
+
+    // Which of its own turns an enemy leaves on, or null if it never does.
+    //
+    // Exact for a sequential picker, which is the only kind that carries an
+    // escape today: the move's index in the list *is* the turn it comes round,
+    // because a sequential enemy plays its openers once in order. For a
+    // weighted picker there is no such turn, so the expected wait 1/P stands in
+    // - stated rather than hidden, because it is the one number in this method
+    // that is an approximation rather than a reading.
+    private static int? EscapeTurn(EnemyDefinition def)
+    {
+        int index = def.Moves.FindIndex(m => m.Effects.Any(e => e.Action == "escape"));
+        if (index < 0) return null;
+
+        if (def.AiType != "weighted_random") return index + 1;
+
+        double p = SteadyState(def).Where(s => s.Move == def.Moves[index]).Sum(s => s.P);
+        return p <= 0 ? null : (int)Math.Ceiling(1 / p);
     }
 
     // What the enemy is expected to do on a given turn. Mirrors the three
@@ -381,32 +576,87 @@ public static class BalanceModel
     // failed it, or the printed header could disagree with the flag beside the
     // row it explained.
     //
-    // The boss ceiling moved 3.2 -> 3.3 in Phase 8. Not a content change: the
-    // act-1 bosses did not get harder, EncounterCost got more accurate (fight
-    // length is now walked rather than assumed, so self-granted Block costs the
-    // player turns) and it prices them at 3.20x and 3.23x where it used to say
-    // 3.14x and 3.16x. Re-measured against the report, not widened to get green.
+    // The boss ceiling moved 3.2 -> 3.3 in Phase 8's status half. Not a content
+    // change: the act-1 bosses did not get harder, EncounterCost got more
+    // accurate (fight length is now walked rather than assumed, so self-granted
+    // Block costs the player turns). Re-measured against the report, not
+    // widened to get green.
+    //
+    // Where the six bosses sit today, after the behaviour half: 3.06x / 3.04x
+    // (act 1), 2.85x / 2.43x (act 2), 2.68x / 2.60x (act 3). Act 1 rides near
+    // the ceiling because MeanNormalCost is the denominator and act 1's normal
+    // pool is the cheapest in the game, not because its bosses are outliers.
+    //
+    // BossCostLow is doing a second job since the behaviour half, and it is not
+    // a band edge there: BalanceSmokeTest reads it as the line a *normal*
+    // encounter may not cross, on the rule that a Combat node must never cost
+    // what a Boss node promises. Lowering it therefore tightens two different
+    // checks at once - the boss floor and the Combat-node ceiling.
     public const double EliteCostLow = 1.0, EliteCostHigh = 1.9;
     public const double BossCostLow = 2.2, BossCostHigh = 3.3;
 
     public sealed record EncounterProfile(
         IReadOnlyList<string> Ids,
+        IReadOnlyList<string> Summoned,
         int TotalHp,
         double FlatDpt,
         double Cost)
     {
-        public string Label => string.Join(" + ", Ids);
+        // Summoned members are shown in parentheses rather than folded in
+        // silently, so a row that reads 72 hp against two authored ids still
+        // says where the third body came from - and so a report line can still
+        // be matched back to its acts.json entry by its leading ids.
+        public string Label => Summoned.Count == 0
+            ? string.Join(" + ", Ids)
+            : $"{string.Join(" + ", Ids)} (+{string.Join(" +", Summoned)})";
     }
 
     public static EncounterProfile Encounter(IEnumerable<string> ids)
     {
         var list = ids.ToList();
         var defs = list.Select(EnemyDatabase.Get).ToList();
+        var summoned = SummonedIds(defs);
+        var all = defs.Concat(summoned.Select(EnemyDatabase.Get)).ToList();
         return new EncounterProfile(
             list,
-            defs.Sum(d => d.MaxHp),
-            defs.Sum(FlatDpt),
+            summoned,
+            all.Sum(d => d.MaxHp),
+            all.Sum(FlatDpt),
             EncounterCost(list, ReferenceThroughput));
+    }
+
+    // What a group can bring in, capped at the same live roster limit the fight
+    // is. TotalHp and FlatDpt were built from the authored id list alone while
+    // Cost walked a roster that grows, so the report contradicted itself: it
+    // named ward_acolyte act 1's *softest* fight at "2.8 dpt, 40 hp" while
+    // EncounterCost priced the same group at nearly three times what it used to.
+    // Those two fields feed MeanNormalHp/MeanNormalDpt and from there
+    // BalanceSmokeTest's curve assertions, so the curve was being checked
+    // against a fight the game no longer runs.
+    //
+    // Deliberately ignores *when* a summon lands and whether the fight lasts
+    // long enough to see it - this is the static profile, and Cost is the
+    // number that models timing. One level deep is enough because
+    // Phase4ContentSmokeTest refuses a summon that summons.
+    private static List<string> SummonedIds(IReadOnlyList<EnemyDefinition> defs)
+    {
+        var summoned = new List<string>();
+        foreach (var def in defs)
+        {
+            var specs = def.Moves.Concat(def.EnrageMoves).SelectMany(m => m.Effects)
+                .Concat(def.OnDeath)
+                .Where(s => s.Action == "summon_enemy" && s.EnemyId is { Length: > 0 });
+            foreach (var spec in specs)
+            {
+                for (int i = 0; i < spec.Amount; i++)
+                {
+                    if (defs.Count + summoned.Count >= CombatManager.MaxEnemies) return summoned;
+                    if (EnemyDatabase.Find(spec.EnemyId!) is not null) summoned.Add(spec.EnemyId!);
+                }
+            }
+        }
+
+        return summoned;
     }
 
     // ------------------------------------------------------------------- acts
@@ -426,6 +676,18 @@ public static class BalanceModel
         // The yardstick every other encounter in the act is measured against:
         // what an average normal fight takes out of you.
         public double MeanNormalCost => Mean(Normals.Select(e => e.Cost));
+
+        // The two ends the *mean* hides, and the reason they are here: banding
+        // elites and bosses against MeanNormalCost cannot see a single normal
+        // group spiking past them. Phase 8 shipped exactly that - a summoner
+        // took two Combat nodes to 101 and 116 against a costliest elite of 77
+        // - with the whole suite green, because averaging four other cheap
+        // groups in put the mean back where it started.
+        public EncounterProfile? CostliestNormal =>
+            Normals.OrderByDescending(e => e.Cost).FirstOrDefault();
+
+        public EncounterProfile? CheapestElite =>
+            Elites.OrderBy(e => e.Cost).FirstOrDefault();
 
         public double CostRatio(EncounterProfile e) =>
             MeanNormalCost <= 0 ? 0 : e.Cost / MeanNormalCost;

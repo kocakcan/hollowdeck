@@ -20,6 +20,11 @@ public static class EffectRegistry
         ["exhaust_hand"] = new ExhaustHandEffect(),
         ["gain_gold"] = new GainGoldEffect(),
         ["add_card"] = new AddCardEffect(),
+        // The two that change who is in the fight rather than a number on
+        // someone in it. Enemy-move-only in practice, and EffectSmokeTest
+        // refuses a card, potion or relic authoring either.
+        ["summon_enemy"] = new SummonEnemyEffect(),
+        ["escape"] = new EscapeEffect(),
     };
 
     // Single dispatch point for gameplay SFX - every card/potion/enemy-move
@@ -42,6 +47,10 @@ public static class EffectRegistry
         // Same argument: add_card moves a card into a pile, which is what
         // card_draw already sounds like.
         ["add_card"] = "card_draw",
+        // summon_enemy and escape are deliberately absent. AudioCues has ten
+        // cues, one per category, and none of them reads as a creature
+        // arriving or fleeing - borrowing an unrelated one would land as a bug
+        // rather than as atmosphere. Same call GainGoldEffect already makes.
     };
 
     public static void Execute(EffectContext ctx, EffectSpec spec)

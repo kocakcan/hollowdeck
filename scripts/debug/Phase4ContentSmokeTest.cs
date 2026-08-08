@@ -40,7 +40,12 @@ public partial class Phase4ContentSmokeTest : Node
         TestEnragePickerSwitchesAtThreshold();
         TestEveryIntentTelegraphsWhatItResolves();
         TestNoEnemyMoveUsesACardOnlyScope();
+        TestEverySummonNamesARealEnemyAndTerminates();
         TestIntentLabelsAreReadFromTheMove();
+        await TestSummonJoinsTheFightWithoutActingThisTurn();
+        await TestEscapeRemovesAnEnemyWithoutCountingAKill();
+        await TestDeathBeatsEscapeWhenBothLandInOneMove();
+        await TestOnDeathResolvesBeforeTheFightIsScored();
         TestEveryMoveDescribesItselfInTheEnemyVoice();
         await TestEnemyPowersPayOutEachTurn();
         await TestFervorAndForesightPayOutEachTurn();
@@ -154,14 +159,35 @@ public partial class Phase4ContentSmokeTest : Node
                         e.Scope == EffectScope.Self && (e.Action == "apply_status" || e.Action == "heal")),
                     IntentType.Debuff => move.Effects.FirstOrDefault(e =>
                         e.Scope == EffectScope.Target && e.Action == "apply_status"),
+                    // The authored number is the copy count, the same reading
+                    // add_card's Amount has.
+                    IntentType.Summon => move.Effects.FirstOrDefault(e => e.Action == "summon_enemy"),
+                    // An escape's number is the gold it takes, which is
+                    // authored *negative* on the spec (gain_gold is one action
+                    // rather than one per sign) and shown positive on the row.
+                    // A theft-free escape falls back to the escape spec itself,
+                    // whose Amount is 0 - which is then what it must telegraph.
+                    IntentType.Escape => move.Effects.FirstOrDefault(e => e.Action == "gain_gold")
+                        ?? move.Effects.FirstOrDefault(e => e.Action == "escape"),
                     _ => null,
                 };
 
                 if (backing is null)
                 {
                     problems.Add($"{def.Id}/{move.MoveId}: {move.Intent.Type} intent with no effect behind it");
+                    continue;
                 }
-                else if (backing.Amount != move.Intent.DisplayAmount)
+
+                // Escape is the one intent whose spec and label legitimately
+                // differ by a sign - the theft is authored as the player losing
+                // gold and displayed as the amount lost. Every other intent
+                // compares raw, so an Attack authored -5 stays a failure rather
+                // than being waved through by a blanket Abs.
+                int resolves = move.Intent.Type == IntentType.Escape
+                    ? System.Math.Abs(backing.Amount)
+                    : backing.Amount;
+
+                if (resolves != move.Intent.DisplayAmount)
                 {
                     problems.Add($"{def.Id}/{move.MoveId}: telegraphs {move.Intent.DisplayAmount}, resolves {backing.Amount}");
                 }
@@ -206,6 +232,54 @@ public partial class Phase4ContentSmokeTest : Node
         Check("no_enemy_move_uses_a_card_only_scope", problems.Count == 0,
             string.Join("; ", problems) + " - EnemyView cannot telegraph these, "
             + "so the move would resolve as something other than its label");
+    }
+
+    // summon_enemy is the first effect whose id is resolved against a database
+    // *during* an enemy turn rather than at load, so a typo in it is silent:
+    // SummonEnemyEffect logs and returns, the move plays, and the fight is
+    // simply one enemy lighter than it was authored to be. This is the sweep
+    // that turns that into a red suite.
+    //
+    // The second half is a termination guard, and it is the more important one.
+    // A summons B and B summons A is a fight that never ends: the roster cap
+    // stops it filling memory but not from being unwinnable, and the cap is
+    // there to hold a layout, not to catch an authoring loop. Refusing a summon
+    // whose target itself summons keeps the chain one deep by construction.
+    private void TestEverySummonNamesARealEnemyAndTerminates()
+    {
+        var problems = new List<string>();
+        foreach (var def in EnemyDatabase.All)
+        {
+            foreach (var move in def.Moves.Concat(def.EnrageMoves))
+            {
+                foreach (var spec in move.Effects.Concat(def.OnDeath).Where(e => e.Action == "summon_enemy"))
+                {
+                    if (spec.EnemyId is not { Length: > 0 } id)
+                    {
+                        problems.Add($"{def.Id}/{move.MoveId}: summon_enemy with no enemyId");
+                        continue;
+                    }
+
+                    var summoned = EnemyDatabase.Find(id);
+                    if (summoned is null)
+                    {
+                        problems.Add($"{def.Id}/{move.MoveId}: summons unknown enemy '{id}'");
+                        continue;
+                    }
+
+                    if (spec.Amount < 1) problems.Add($"{def.Id}/{move.MoveId}: summons {spec.Amount} of '{id}'");
+
+                    bool summonsBack = summoned.Moves.Concat(summoned.EnrageMoves)
+                        .SelectMany(m => m.Effects)
+                        .Concat(summoned.OnDeath)
+                        .Any(e => e.Action == "summon_enemy");
+                    if (summonsBack) problems.Add($"{def.Id}/{move.MoveId}: summons '{id}', which itself summons");
+                }
+            }
+        }
+
+        Check("every_summon_names_a_real_enemy_and_terminates", problems.Count == 0,
+            string.Join("; ", problems));
     }
 
     // The label's *other* half is derived rather than authored - how many hits
@@ -374,6 +448,239 @@ public partial class Phase4ContentSmokeTest : Node
             player.GetStatus(StatusType.Fervor) == 1 && player.GetStatus(StatusType.Foresight) == 2,
             $"fervor={player.GetStatus(StatusType.Fervor)}, foresight={player.GetStatus(StatusType.Foresight)}");
         combat.QueueFree();
+    }
+
+    // ward_acolyte opens on call_the_faithful, so one ended turn is the whole
+    // setup. Two things are being pinned, and the second is the one that would
+    // ship broken quietly:
+    //
+    //  - the roster actually grows, and the newcomer arrives already
+    //    telegraphing rather than sitting on a blank intent for a turn;
+    //  - it does *not* act on the turn it lands. That is a property of
+    //    ResolveEnemyTurnAsync iterating the _enemyTurnOrder snapshot taken in
+    //    TryEndTurn, not of anything in SummonEnemy, so a well-meaning edit
+    //    that walks Enemies directly would hit the player with a move they
+    //    were never shown and no other assertion would notice.
+    private async Task TestSummonJoinsTheFightWithoutActingThisTurn()
+    {
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 90, CurrentHp = 90, MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(new List<CardDefinition> { CardDatabase.Get("defend") }),
+        };
+        var acolyte = EnemyFactory.Create(EnemyDatabase.Get("ward_acolyte"));
+
+        var combat = new CombatManager();
+        AddChild(combat);
+        combat.StartCombat(player, new List<EnemyCombatant> { acolyte }, new List<RelicInstance>());
+
+        Check("summoner_telegraphs_the_summon_before_it_happens",
+            acolyte.CurrentMove?.Intent.Type == IntentType.Summon,
+            $"opening intent was {acolyte.CurrentMove?.Intent.Type}");
+
+        int hpBefore = player.CurrentHp;
+        combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
+
+        Check("summon_grows_the_roster_mid_fight", combat.Enemies.Count == 2,
+            $"{combat.Enemies.Count} enemies after the summon");
+
+        var minion = combat.Enemies.FirstOrDefault(e => e != acolyte);
+        Check("the_summoned_enemy_is_what_the_move_named",
+            minion?.Definition.Id == "slime", $"summoned {minion?.Definition.Id}");
+        Check("the_summoned_enemy_arrives_already_telegraphing",
+            minion?.CurrentMove is not null,
+            "a blank intent panel is the telegraph bug in its most literal form");
+        Check("the_summoned_enemy_does_not_act_on_the_turn_it_lands",
+            player.CurrentHp == hpBefore,
+            $"player took {hpBefore - player.CurrentHp} damage on the summon turn - the "
+            + "_enemyTurnOrder snapshot in TryEndTurn is what prevents this");
+
+        combat.QueueFree();
+    }
+
+    // gaol_rat's fourth move is snatch_and_flee. Driving four turns costs four
+    // enemy-turn waits, which is cheap next to what the alternative would be:
+    // asserting EscapeEffect sets a bool, which proves nothing about the two
+    // things that actually matter - that the enemy leaves, and that leaving is
+    // not scored as a kill.
+    private async Task TestEscapeRemovesAnEnemyWithoutCountingAKill()
+    {
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 200, CurrentHp = 200, MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(new List<CardDefinition> { CardDatabase.Get("defend") }),
+        };
+        var rat = EnemyFactory.Create(EnemyDatabase.Get("gaol_rat"));
+
+        var combat = new CombatManager();
+        AddChild(combat);
+        combat.StartCombat(player, new List<EnemyCombatant> { rat }, new List<RelicInstance>());
+
+        int goldBefore = RunState.Gold = 100;
+
+        // bristle, gnaw, filth_bite, then snatch_and_flee.
+        for (int turn = 0; turn < 4 && combat.State != CombatState.CombatEnd; turn++)
+        {
+            combat.TryEndTurn();
+            await WaitForEnemyTurnToResolve(combat);
+        }
+
+        Check("an_escaping_enemy_leaves_the_fight", combat.Enemies.Count == 0,
+            $"{combat.Enemies.Count} enemies still present");
+        Check("an_escaped_enemy_is_alive_not_dead", !rat.IsDead && rat.HasEscaped,
+            $"hp={rat.CurrentHp}, hasEscaped={rat.HasEscaped}");
+        Check("escaping_is_not_scored_as_a_kill", combat.EnemiesKilled == 0,
+            $"EnemiesKilled={combat.EnemiesKilled} - the tally feeds RunScore, and a fight "
+            + "you failed to finish must not pay out as one you did");
+        // Read off the move rather than restated, so retuning the theft is one
+        // edit in enemies.json. It was a literal 25 and the retune to 40 broke
+        // this check, which is the drift a derived number cannot have.
+        int stolen = -EnemyDatabase.Get("gaol_rat").Moves
+            .First(m => m.MoveId == "snatch_and_flee").Effects
+            .Where(e => e.Action == "gain_gold" && e.Amount < 0)
+            .Sum(e => e.Amount);
+        Check("the_thief_leaves_with_the_gold", RunState.Gold == goldBefore - stolen,
+            $"gold={RunState.Gold}, expected {goldBefore - stolen} (theft of {stolen})");
+        Check("an_emptied_board_still_ends_the_fight", combat.Outcome == CombatOutcome.Win,
+            $"outcome={combat.Outcome}");
+
+        combat.QueueFree();
+    }
+
+    // Death wins over escape, driven through the one arrangement that can
+    // produce both flags on one enemy in one move: a hit-and-run thief that
+    // deals damage before it flees, against a player holding Thorns. The
+    // retaliation resolves inside ExecuteEffect for the damage spec and kills
+    // the thief, and the escape spec then runs on a corpse.
+    //
+    // Synthetic because nothing authors it yet - snatch_and_flee deals no
+    // damage, so today this is latent. A rule that only holds while the content
+    // happens not to reach it is not a rule, and the obvious next thief is
+    // exactly this move.
+    //
+    // What the guard buys, concretely: without it the HasEscaped sweep in
+    // ResolveDeaths claims the body before the IsDead sweep, so a kill the
+    // player earned never reaches EnemiesKilled - and from there RunScore -
+    // while CombatScreen plays the runaway tween over a death.
+    private async Task TestDeathBeatsEscapeWhenBothLandInOneMove()
+    {
+        var thief = new EnemyDefinition
+        {
+            Id = "test_hit_and_run",
+            Name = "Test Thief",
+            MaxHp = 3,
+            Moves =
+            {
+                new EnemyMove
+                {
+                    MoveId = "snatch",
+                    Intent = new EnemyIntent { Type = IntentType.Escape, DisplayAmount = 0 },
+                    Effects =
+                    {
+                        new EffectSpec { Action = "deal_damage", Amount = 1, Scope = EffectScope.Target },
+                        new EffectSpec { Action = "escape", Scope = EffectScope.Self },
+                    },
+                },
+            },
+        };
+
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 50, CurrentHp = 50, MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(new List<CardDefinition> { CardDatabase.Get("defend") }),
+        };
+        // More Thorns than the thief has HP, so the retaliation is lethal on the
+        // damage spec - i.e. before the escape spec in the same move runs.
+        player.AddStatus(StatusType.Thorns, 5);
+
+        var combat = new CombatManager();
+        AddChild(combat);
+        combat.StartCombat(player, new List<EnemyCombatant> { EnemyFactory.Create(thief) },
+            new List<RelicInstance>());
+        var runaway = combat.Enemies[0];
+
+        combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
+
+        Check("thorns_kills_the_thief_mid_move", runaway.IsDead,
+            $"hp={runaway.CurrentHp} - the test is meaningless unless the retaliation "
+            + "actually lands before the escape spec resolves");
+        Check("a_corpse_cannot_escape", !runaway.HasEscaped,
+            "EscapeEffect flagged an enemy that was already dead - the guard is what "
+            + "keeps the two RemoveAll sweeps in ResolveDeaths disjoint");
+        Check("a_thorns_kill_still_counts_as_a_kill", combat.EnemiesKilled == 1,
+            $"EnemiesKilled={combat.EnemiesKilled} - the escape sweep runs first, so an "
+            + "enemy flagged both ways is removed without ever reaching the kill tally, "
+            + "and RunScore silently loses the points");
+
+        combat.QueueFree();
+    }
+
+    // The ordering rule in ResolveDeathsAndSettle, driven rather than asserted
+    // about: a slime bursts into Poison as it dies, and if the burst is what
+    // finishes the player then the fight is a loss even though the board is
+    // empty. Win-first would have made that onDeath a silent no-op on the one
+    // enemy it matters most on - the last one alive.
+    private async Task TestOnDeathResolvesBeforeTheFightIsScored()
+    {
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 50, CurrentHp = 50, MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(new List<CardDefinition> { CardDatabase.Get("strike") }),
+        };
+        var slime = EnemyFactory.Create(EnemyDatabase.Get("slime"));
+        slime.CurrentHp = 1;
+
+        var combat = new CombatManager();
+        AddChild(combat);
+        combat.StartCombat(player, new List<EnemyCombatant> { slime }, new List<RelicInstance>());
+
+        var strike = player.Piles.Hand.First(c => c.Definition.Id == "strike");
+        combat.TryPlayCard(strike, slime);
+
+        Check("killing_the_last_enemy_still_fires_its_on_death",
+            player.GetStatus(StatusType.Poison) == 2,
+            $"poison={player.GetStatus(StatusType.Poison)} - a Win checked before onDeath "
+            + "would leave this at 0 and nothing would throw");
+        Check("the_fight_is_still_won_when_the_on_death_is_survivable",
+            combat.Outcome == CombatOutcome.Win, $"outcome={combat.Outcome}");
+        combat.QueueFree();
+
+        // The ordering itself, which the authored content deliberately cannot
+        // reach: every onDeath in enemies.json is a Poison the player still
+        // gets a turn to answer. A synthetic definition is the honest way to
+        // pin the *rule* without authoring a parting blow nobody can play
+        // around - the rule has to hold whether or not content uses it.
+        var lethalBurst = new EnemyDefinition
+        {
+            Id = "test_lethal_burst",
+            Name = "Test Burst",
+            MaxHp = 1,
+            Moves = { new EnemyMove { MoveId = "wait", Intent = new EnemyIntent() } },
+            OnDeath = { new EffectSpec { Action = "lose_hp", Amount = 99, Scope = EffectScope.Target } },
+        };
+
+        var dying = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 50, CurrentHp = 4, MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(new List<CardDefinition> { CardDatabase.Get("strike") }),
+        };
+        var second = new CombatManager();
+        AddChild(second);
+        second.StartCombat(dying, new List<EnemyCombatant> { EnemyFactory.Create(lethalBurst) },
+            new List<RelicInstance>());
+
+        second.TryPlayCard(dying.Piles.Hand.First(c => c.Definition.Id == "strike"),
+            second.Enemies[0]);
+
+        Check("a_lethal_on_death_loses_the_fight_the_kill_would_have_won",
+            second.Outcome == CombatOutcome.Lose,
+            $"outcome={second.Outcome}, playerHp={dying.CurrentHp} - the board was emptied and "
+            + "the player died in the same pass; ResolveDeathsAndSettle checks Lose first");
+        second.QueueFree();
+
+        await Task.CompletedTask;
     }
 
     private async Task TestEliteRewardGrantsGuaranteedRelic()

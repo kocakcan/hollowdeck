@@ -127,18 +127,22 @@ public class SimpleHookEffectRelic : RelicBehavior
         {
             case RelicTarget.Attacker:
                 return attacker is null ? new List<Combatant>() : new List<Combatant> { attacker };
+            // IsGone rather than IsDead at all three sites below: an enemy that
+            // has escaped is still in Enemies until the next settle pass, and
+            // is *alive*, so a death check would let a relic retaliate against
+            // something already on its way off the board.
             case RelicTarget.FirstEnemy:
-                var first = ctx.Combat.Enemies.FirstOrDefault(e => !e.IsDead);
+                var first = ctx.Combat.Enemies.FirstOrDefault(e => !e.IsGone);
                 return first is null ? new List<Combatant>() : new List<Combatant> { first };
             case RelicTarget.RandomEnemy:
-                var alive = ctx.Combat.Enemies.Where(e => !e.IsDead).ToList();
+                var alive = ctx.Combat.Enemies.Where(e => !e.IsGone).ToList();
                 // RngStreams.Combat, never a fresh Random - risk 2, a relic
                 // that borrowed its own stream would desync seeded runs.
                 return alive.Count == 0
                     ? new List<Combatant>()
                     : new List<Combatant> { alive[RngStreams.Combat.Next(alive.Count)] };
             case RelicTarget.AllEnemies:
-                return ctx.Combat.Enemies.Where(e => !e.IsDead).Cast<Combatant>().ToList();
+                return ctx.Combat.Enemies.Where(e => !e.IsGone).Cast<Combatant>().ToList();
             default:
                 return new List<Combatant> { ctx.Player };
         }

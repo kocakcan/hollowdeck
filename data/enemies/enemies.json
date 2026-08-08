@@ -46,6 +46,9 @@
         ],
         "weight": 40
       }
+    ],
+    "onDeath": [
+      { "action": "apply_status", "status": "Poison", "amount": 2, "scope": "Target" }
     ]
   },
   {
@@ -253,10 +256,17 @@
   {
     "id": "ward_acolyte",
     "name": "Ward Acolyte",
-    "maxHp": 40,
+    "maxHp": 24,
     "aiType": "sequential",
-    "loopFromIndex": 0,
+    "loopFromIndex": 1,
     "moves": [
+      {
+        "moveId": "call_the_faithful",
+        "intent": { "type": "Summon", "displayAmount": 1 },
+        "effects": [
+          { "action": "summon_enemy", "enemyId": "slime", "amount": 1 }
+        ]
+      },
       {
         "moveId": "raise_ward",
         "intent": { "type": "Defend", "displayAmount": 8 },
@@ -365,6 +375,14 @@
         "effects": [
           { "action": "deal_damage", "amount": 5, "scope": "Target" },
           { "action": "apply_status", "status": "Poison", "amount": 2, "scope": "Target" }
+        ]
+      },
+      {
+        "moveId": "snatch_and_flee",
+        "intent": { "type": "Escape", "displayAmount": 40 },
+        "effects": [
+          { "action": "gain_gold", "amount": -40, "scope": "Self" },
+          { "action": "escape", "scope": "Self" }
         ]
       }
     ]
