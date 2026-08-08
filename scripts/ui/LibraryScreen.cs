@@ -161,6 +161,7 @@ public partial class LibraryScreen : Control
             column.AddChild(view);
             view.Interactive = false;
             view.SetCardInstance(new CardInstance(def));
+            view.Clicked += instance => LibraryInspectPopup.OpenCard(this, instance.Definition);
 
             // SetCardInstance sets its own Modulate (affordability tint,
             // always White here since Interactive is false) - the lock tint
@@ -194,7 +195,8 @@ public partial class LibraryScreen : Control
                 : MetaProgressionManager.UnlockTrack
                     .First(e => e.Kind == UnlockKind.Relic && e.Id == def.Id).Threshold;
 
-            var tile = BuildInfoTile(def.Name, ArtAssets.RelicIcon(def.Id), def.Description, unlocked, threshold);
+            var tile = BuildInfoTile(def.Name, ArtAssets.RelicIcon(def.Id), def.Description, unlocked, threshold,
+                () => LibraryInspectPopup.OpenItem(this, def.Name, ArtAssets.RelicIcon(def.Id), def.Description));
             _relicsGrid.AddChild(tile);
             _relicTiles.Add(tile);
         }
@@ -214,7 +216,8 @@ public partial class LibraryScreen : Control
         {
             string description = EffectDescriptionFormatter.Describe(
                 def.Effects, new DescribeContext(TargetType: def.Target));
-            var tile = BuildInfoTile(def.Name, ArtAssets.PotionIcon(def.Id), description, unlocked: true, threshold: null);
+            var tile = BuildInfoTile(def.Name, ArtAssets.PotionIcon(def.Id), description, unlocked: true, threshold: null,
+                () => LibraryInspectPopup.OpenItem(this, def.Name, ArtAssets.PotionIcon(def.Id), description));
             _potionsGrid.AddChild(tile);
             _potionTiles.Add(tile);
         }
@@ -223,16 +226,15 @@ public partial class LibraryScreen : Control
         LinkCategoryButton(_potionsButton, _potionTiles);
     }
 
-    private static Control BuildInfoTile(string name, Texture2D? icon, string description, bool unlocked, int? threshold)
+    private static Control BuildInfoTile(string name, Texture2D? icon, string description, bool unlocked, int? threshold,
+        Action onActivated)
     {
         var column = new VBoxContainer { CustomMinimumSize = new Vector2(TileWidth, 0) };
         column.AddThemeConstantOverride("separation", (int)UiTheme.Spacing.Xs);
 
         if (icon is not null)
         {
-            var slot = new CenterContainer();
-            slot.AddChild(ScreenChrome.PixelIcon(icon, 2));
-            column.AddChild(slot);
+            column.AddChild(ScreenChrome.ArtPlinth(icon, PixelSpec.CardArtScale));
         }
 
         column.AddChild(ScreenChrome.Heading(name, UiTheme.Fonts.Body));
@@ -240,6 +242,7 @@ public partial class LibraryScreen : Control
         if (threshold is { } t) column.AddChild(LockCaption(t, TileWidth));
 
         var tile = BuildFocusableFrame(column);
+        tile.Activated += onActivated;
         if (!unlocked) tile.Modulate = ChromeStyles.LockedTint;
         return tile;
     }
@@ -251,13 +254,15 @@ public partial class LibraryScreen : Control
         return label;
     }
 
-    // PanelContainer, not Button: a Button doesn't propagate a child's
-    // minimum size upward (it's not a Container), so arbitrary icon/heading/
-    // description content would get clipped to the button's own near-zero
-    // natural size. Focus/hover visuals are done by hand instead - the same
-    // idiom ChromeStyles.ApplyFocusableSliderStyle uses for HSlider, which
-    // has the identical problem (no built-in focus stylebox on a non-Button).
-    private static PanelContainer BuildFocusableFrame(Control content, float padding = UiTheme.Spacing.Md)
+    // ActivatablePanel (a PanelContainer), not Button: a Button doesn't
+    // propagate a child's minimum size upward (it's not a Container), so
+    // arbitrary icon/heading/description content would get clipped to the
+    // button's own near-zero natural size. Focus/hover visuals are done by
+    // hand instead - the same idiom ChromeStyles.ApplyFocusableSliderStyle
+    // uses for HSlider, which has the identical problem (no built-in focus
+    // stylebox on a non-Button) - and click/ui_accept activation comes from
+    // ActivatablePanel for the same reason CardView hand-rolls its own.
+    private static ActivatablePanel BuildFocusableFrame(Control content, float padding = UiTheme.Spacing.Md)
     {
         StyleBoxFlat NormalStyle()
         {
@@ -269,7 +274,7 @@ public partial class LibraryScreen : Control
             return style;
         }
 
-        var panel = new PanelContainer { FocusMode = FocusModeEnum.All };
+        var panel = new ActivatablePanel { FocusMode = FocusModeEnum.All };
         panel.AddThemeStyleboxOverride("panel", NormalStyle());
         panel.AddChild(content);
 
