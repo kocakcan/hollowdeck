@@ -298,8 +298,9 @@ public partial class CardView : Panel
     // showing: the cost badge sits on the banner's left end, the exhaust badge
     // on its right, both 30px wide and both painted over it. A name that
     // ignored either lost characters underneath it - "TWIN STRIKE" read as
-    // "WIN STRIKE" before the left pad existed, and "Scorched Earth+" still put
-    // its tail under the X until the right one did.
+    // "WIN STRIKE" before the left pad existed, and the card then called
+    // "Scorched Earth" still put its tail under the X until the right one did -
+    // it is "Wildfire" now precisely because the right pad left it no room.
     //
     // Derived per card rather than reserved unconditionally, because both
     // badges are conditional (a Curse hides the cost badge entirely, most cards

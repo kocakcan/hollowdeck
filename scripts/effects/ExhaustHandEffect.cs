@@ -7,8 +7,8 @@ using Hollowdeck.Run;
 namespace Hollowdeck.Effects;
 
 // Exhausts every card left in hand. The payoff half of the pair with
-// DiscardCardsEffect: Scorched Earth trades the hand for cards, All In trades
-// it for damage.
+// DiscardCardsEffect: Wildfire trades the hand for cards, All In trades it for
+// damage.
 //
 // The card being played is already out of hand by the time this runs -
 // CombatManager removes it from Hand before resolving its EffectSpecs - so a
