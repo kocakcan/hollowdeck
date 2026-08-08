@@ -81,6 +81,15 @@ public partial class ScreenShot : Node
         // at is whether the grid wraps inside its ScrollContainer rather than
         // pushing the Cancel button off the bottom of the screen.
         ["shopremove"] = new("res://scenes/ShopScreen.tscn", SeedShopRemoval, OpenShopRemoval),
+        // The shop's worst case, which plain "shop" (one relic) cannot show,
+        // and a bug that shipped: this screen's card row is four 176px cards
+        // centred on the design width, so it starts at x=194, while the
+        // run-status block's relic grid ran to x=280 at ScreenChrome's shared
+        // six-column default - the relic icons were painted over the first
+        // card's name banner, and a playtest screenshot is how it was found.
+        // The shop asks for three columns now. Same 13 relics as mapfull, for
+        // the same reason: it is the haul that wraps the grid to its tallest.
+        ["shopfull"] = new("res://scenes/ShopScreen.tscn", SeedCrowdedShop),
         ["map"] = new("res://scenes/MapScreen.tscn", SeedMap),
         // One map + one boss fight per later act: each act has its own title,
         // backdrop tint, boss sprites and floor count, and none of that is
@@ -108,6 +117,14 @@ public partial class ScreenShot : Node
         // Debuff intent.
         ["combatintents"] = new("res://scenes/CombatScreen.tscn", SeedIntentCombat, ShowNewIntents),
         ["combatsummon"] = new("res://scenes/CombatScreen.tscn", SeedSummonCombat, ShowFullRoster),
+        // AwaitingTarget, which no other combat shot enters and which is the
+        // only state TargetHintLabel is visible in. The hint used to be pinned
+        // inside the enemy row, so aiming a potion wrote its instructions
+        // across the name and HP bar of the enemy being aimed at - i.e. the
+        // one thing the player was looking at. Its band is narrow (between the
+        // enemy row's bottom and the top of the fan), so this is the shot that
+        // says whether one line still fits it.
+        ["combattarget"] = new("res://scenes/CombatScreen.tscn", SeedTargetingCombat, AimAPotion),
         // The Phase 7 card vocabulary in a hand: both unplayable frames, the
         // three keyword sentences, and an X-cost badge. No AfterReady - these
         // have to read correctly *before* anything is played.
@@ -507,6 +524,43 @@ public partial class ScreenShot : Node
     // (150g) so the shot also exercises the affordability greying - the exact
     // state that was misread as a bug.
     private static void SeedShop() => RunState.Gold = 129;
+
+    private static void SeedCrowdedShop()
+    {
+        SeedShop();
+        RunState.Relics = RelicDatabase.All.Take(13).Select(r => new RelicInstance(r)).ToList();
+    }
+
+    // A boss, so the enemy row holds one wide column and the hint has the most
+    // room to land on something it should not. The potion is aimed rather than
+    // a card dragged because dragging needs a mouse the harness does not have,
+    // and both paths enter the same AwaitingTarget sub-state.
+    private static void SeedTargetingCombat()
+    {
+        SeedCombat();
+        CombatContext.EnemyDefinitionIds = new List<string> { "crown_reaver" };
+        CombatContext.IsBoss = true;
+        RunState.Potions = new List<PotionInstance> { new(PotionDatabase.Get("fire_potion")) };
+    }
+
+    private static void AimAPotion(Node screen)
+    {
+        var combat = CombatManager.Instance;
+        if (combat is null || RunState.Potions.Count == 0) return;
+        // Returns false and parks in AwaitingTarget: a SingleEnemy potion
+        // cannot resolve without a target, which is exactly the state wanted.
+        combat.TryUsePotion(RunState.Potions[0]);
+
+        // And lift the centre card, because the resting fan is not the worst
+        // case for the band the hint sits in - a hovered or arrow-key-selected
+        // card scales 1.15x about its own centre and paints at ZIndex 100, so
+        // it reaches 18px above where it rests. Reaching the enemy with the
+        // mouse after aiming means crossing the fan, so this is the ordinary
+        // path through this state rather than a contrived one. SetHighlighted
+        // is the same call CombatScreen's arrow keys make.
+        var cards = screen.GetNode<Control>("HandArea").GetChildren().OfType<CardView>().ToList();
+        if (cards.Count > 0) cards[cards.Count / 2].SetHighlighted(true);
+    }
 
     private static void SeedShopRemoval()
     {

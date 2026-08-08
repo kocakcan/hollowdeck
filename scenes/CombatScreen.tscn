@@ -150,12 +150,12 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -280.0
-offset_top = -86.0
+offset_top = 8.0
 offset_right = 280.0
-offset_bottom = -40.0
+offset_bottom = 28.0
 horizontal_alignment = 1
-text = "Choose a target
-Click it, or Left/Right to aim and Space to confirm - Esc cancels"
+vertical_alignment = 1
+text = "Choose a target - click it, or Left/Right and Space to confirm (Esc cancels)"
 visible = false
 
 [node name="TurnBannerPanel" type="PanelContainer" parent="."]

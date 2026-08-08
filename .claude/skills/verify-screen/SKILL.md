@@ -23,9 +23,10 @@ With no screen names it shoots all of them. Unknown names exit 1 and list the va
 
 ## Screens
 
-`combat` `combatfull` `combatintents` `combat2` `combat3` `reward` `rewardactclear` `shop` `map`
-`map2` `map3` `mapfull` `rest` `restupgrade` `treasure` `event` `eventpicker` `unlocks` `runend`
-`mainmenu` `settings` `deckpopup` `fade`
+`combat` `combatfull` `combatintents` `combatsummon` `combattarget` `combatvocab` `combat2`
+`combat3` `reward` `rewardactclear` `shop` `shopfull` `shopremove` `map` `map2` `map3` `mapfull`
+`rest` `restupgrade` `treasure` `event` `eventpicker` `unlocks` `runend` `mainmenu` `settings`
+`deckpopup` `fade`
 
 `map2`/`map3` and `combat2`/`combat3` are the later acts — each has its own backdrop tint, title,
 boss sprites and floor count, none of which act 1's shots show. `map3` is also the longest map (10
@@ -41,6 +42,16 @@ it for anything touching `MapScreen` layout or `ScreenChrome`'s block.
 enemies and 1 relic, so it cannot show top-left chrome colliding with the enemy row — which is a
 real bug that shipped, the relic bar growing rightward across the leftmost enemy and painting over
 its target-lock glow. Reach for this one for any HUD or enemy-row layout change.
+
+`shopfull` is the same idea for the shop: 13 relics against a card row that starts at x=194. The
+relic grid ran to x=280 at `ScreenChrome`'s six-column default and painted over the first card's
+name banner, which is why `ShopScreen` asks for three columns. Reach for it for anything touching
+that screen's layout or `ScreenChrome`'s block.
+
+`combattarget` is the only shot in `AwaitingTarget`, the one state `TargetHintLabel` is visible in.
+The hint used to sit inside the enemy row, writing its instructions across the name and HP bar of
+the enemy being aimed at; its band between the enemy row and the top of the fan is narrow enough
+that a second line does not fit, so shoot this after touching either boundary.
 
 `combatintents` is the only shot carrying an enemy's intent hover panel: it pins three telegraph
 shapes plain `combat` can't roll and target-locks the last enemy, which is how a keyboard player

@@ -278,7 +278,7 @@ fn crippling_blow() -> Canvas {
     canvas
 }
 
-/// Reckless Charge: horns, head-down. The one Attack with no weapon at all,
+/// Reckless Blow (id `reckless_charge`): horns, head-down. The one Attack with no weapon at all,
 /// which is exactly what "reckless" means here.
 fn reckless_charge() -> Canvas {
     let mut canvas = new_icon();
@@ -1097,7 +1097,8 @@ fn intimidate() -> Canvas {
     canvas
 }
 
-/// A hand of cards burning. Scorched Earth exhausts everything you hold to
+/// A hand of cards burning. Wildfire (id `scorched_earth`, which is what this
+/// icon is keyed by) exhausts everything you hold to
 /// draw three fresh, and this is the other half of the pair with All In — the
 /// same cost drawn the same way, so the two read as siblings, but with no
 /// weapon in it because the payoff is cards rather than damage.

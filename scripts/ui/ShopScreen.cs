@@ -83,7 +83,19 @@ public partial class ShopScreen : Control
         ScreenBackground.Attach(this, "cobble", new Color(0.7f, 0.7f, 0.75f));
         DeckViewButtons.Attach(this);
         ScreenChrome.AddTitle(this, "Shop");
-        ScreenChrome.AddRunStatus(this);
+        // Three relic columns rather than the default six, the same 3-wide grid
+        // CombatScreen's RelicBar uses and for the same reason: this screen's
+        // content comes further left than the centred title does. CardOffersRow
+        // is four 176px cards centred on the design width, so it starts at
+        // x=194, and a six-column block reaches x=280 - a playtest screenshot
+        // has the relic grid painted straight over the first card's name
+        // banner. Three columns is 3*40 + 2*4 = 128, ending at x=148.
+        //
+        // Narrowing is what there is: vertically the shop is full (cards
+        // 64..348, merchandise 360..580, buttons 596..634), so there is nothing
+        // to push down. ScreenSmokeTest asserts the clearance at a 13-relic
+        // haul, which is five rows and still ends well above the tile row.
+        ScreenChrome.AddRunStatus(this, relicColumns: 3);
 
         _offersRow = GetNode<HBoxContainer>("OffersRow");
         _cardOffersRow = GetNode<HBoxContainer>("CardOffersRow");

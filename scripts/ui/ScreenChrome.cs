@@ -34,10 +34,14 @@ public static class ScreenChrome
     private const int HpBarWidth = 128;
     private const int HpBarHeight = 10;
 
-    // Relics wrap after this many per row. Out of combat there is more
-    // horizontal room than CombatScreen's 3-column bar has, but the block
-    // still must not run under the centred title.
-    private const int RelicColumns = 6;
+    // Relics wrap after this many per row by default. Out of combat there is
+    // more horizontal room than CombatScreen's 3-column bar has, but the block
+    // still must not run under the centred title (which starts at x=296).
+    //
+    // A screen whose own content reaches further left than that overrides it -
+    // see AddRunStatus's relicColumns. Six columns is 6*40 + 5*4 = 260px of
+    // slots from x=20, so the block ends at x=280.
+    public const int RelicColumns = 6;
 
     // Sizes a title may render at, largest first. Heading is what every screen
     // whose title is a fixed word ("Shop", "Rest Site") gets and the only size
@@ -85,7 +89,14 @@ public static class ScreenChrome
     /// `showRelics: false` is for screens where the relic row would duplicate
     /// something the screen itself is already about - TreasureScreen, whose
     /// entire content is the relic you just picked up.
-    public static Control AddRunStatus(Control screen, bool showRelics = true)
+    ///
+    /// `relicColumns` narrows the grid for a screen whose content comes further
+    /// left than the centred title does. The block trades width for height, so
+    /// this is not free and the default stays 6: MapScreen pays for block
+    /// height out of its node band (see MapScreen.BandTop), and act 3's ten
+    /// floors have none to spare.
+    public static Control AddRunStatus(Control screen, bool showRelics = true,
+        int relicColumns = RelicColumns)
     {
         var column = new VBoxContainer
         {
@@ -103,7 +114,7 @@ public static class ScreenChrome
         topRow.AddChild(BuildHpPanel());
         topRow.AddChild(BuildGoldPanel());
 
-        if (showRelics) column.AddChild(BuildRelicRow());
+        if (showRelics) column.AddChild(BuildRelicRow(relicColumns));
         return column;
     }
 
@@ -203,9 +214,20 @@ public static class ScreenChrome
     // builds them. MapScreen used to draw this as a bare 30x30 TextureRect row
     // pinned to y=570 - off the 32px grid, unframed, and stranded in the dead
     // space under the graph.
-    private static Control BuildRelicRow()
+    private static Control BuildRelicRow(int columns)
     {
-        var grid = new GridContainer { Name = "RelicRow", Columns = RelicColumns };
+        var grid = new GridContainer
+        {
+            Name = "RelicRow",
+            Columns = columns,
+            // ShrinkBegin like the HP and gold panels beside it: a GridContainer
+            // stretches to its parent VBox's width otherwise, which is set by
+            // the wider HP/gold row above. Nothing renders in the difference -
+            // the grid has no background - but the node's rect then claims
+            // 280px of screen it does not occupy, and a layout test asking
+            // "does anything sit under the relic grid" gets the wrong answer.
+            SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin,
+        };
         grid.AddThemeConstantOverride("h_separation", (int)UiTheme.Spacing.Xs);
         grid.AddThemeConstantOverride("v_separation", (int)UiTheme.Spacing.Xs);
 

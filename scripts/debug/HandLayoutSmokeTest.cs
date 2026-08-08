@@ -30,6 +30,7 @@ public partial class HandLayoutSmokeTest : Node
         TestCombatScreenLayoutStaysInBoundsAtFifteenCards();
         TestEveryCardDescriptionFitsWithoutTruncation();
         TestHandNeverReachesTheEnemyRow();
+        TestNoCardHangsOffTheBottomOfTheCanvas();
         TestEveryCardNameFitsItsBanner();
 
         GD.Print($"HandLayoutSmokeTest: {_pass} passed, {_fail} failed");
@@ -105,7 +106,10 @@ public partial class HandLayoutSmokeTest : Node
     // during the pixel-art move - first when Silkscreen (much wider than the
     // serif face it replaced) overflowed the banner at 24px, then again when
     // the card narrowed to 176px. Longest name in the data is
-    // "Reckless Charge+" at 16 characters.
+    // "Reckless Blow+" at 14 characters, and it is 14 because the symmetric
+    // badge reservation left 116px rather than the 126 an asymmetric one did.
+    //
+    // The budget is per card, not per screen - see inside the loop.
     private void TestEveryCardNameFitsItsBanner()
     {
         var cardView = GD.Load<PackedScene>("res://scenes/CardView.tscn").Instantiate<CardView>();
@@ -119,18 +123,23 @@ public partial class HandLayoutSmokeTest : Node
             .GetField("_nameBanner", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(cardView)!;
 
-        // Space actually visible: the banner minus the cost badge painted
-        // over its left end.
-        var bannerStyle = nameBanner.GetThemeStylebox("panel");
-        float available = cardView.CustomMinimumSize.X - 16f - bannerStyle.ContentMarginLeft
-                          - bannerStyle.ContentMarginRight;
-
         var overflowing = new List<string>();
         foreach (var card in CardDatabase.All)
         {
             foreach (var variant in new[] { card, CardUpgrade.Apply(card) })
             {
                 cardView.SetCardInstance(new CardInstance(variant));
+
+                // Read back *inside* the loop: the banner's padding is a
+                // function of whether this card shows a badge at all (CardView's
+                // ApplyNameBannerPadding), so an unplayable card - which has no
+                // cost badge - is measured against 36px more than the rest.
+                // Hoisted out of the loop this budgeted every card the widest
+                // case, and never saw a name running under a badge.
+                var bannerStyle = nameBanner.GetThemeStylebox("panel");
+                float available = cardView.CustomMinimumSize.X - 16f - bannerStyle.ContentMarginLeft
+                                  - bannerStyle.ContentMarginRight;
+
                 var font = nameLabel.GetThemeFont("font");
                 int size = nameLabel.GetThemeFontSize("font_size");
                 float width = font.GetStringSize(nameLabel.Text, fontSize: size).X;
@@ -142,6 +151,84 @@ public partial class HandLayoutSmokeTest : Node
             $"overflowing: {string.Join(", ", overflowing)}");
 
         cardView.QueueFree();
+    }
+
+    // The other end of the fan from TestHandNeverReachesTheEnemyRow, and the
+    // one nothing was watching. A card is 240 tall and rotates about its own
+    // center, so an outer card's *corners* reach further down than its rect
+    // does: at 12 degrees the bottom-left one sits 136px below the center,
+    // 16px more than half the card. With FanBaseY=-72 and a 36px arc that
+    // corner landed at y=680 on a 648px canvas - the leftmost card was cut off
+    // by the bottom of the screen and the hotkey badge that lives in exactly
+    // that corner never rendered, so the first card in hand had no visible
+    // number while every other card did.
+    //
+    // Measured off the real screen rather than recomputed from the constants,
+    // so it fails if the fan formula changes shape and not just if a number
+    // moves. All four corners, because which one is lowest depends on the sign
+    // of the rotation.
+    private void TestNoCardHangsOffTheBottomOfTheCanvas()
+    {
+        RunState.PlayerMaxHp = 50;
+        RunState.PlayerCurrentHp = 50;
+        RunState.Deck = new List<CardDefinition>(CardDatabase.All);
+        RunState.Relics = new List<RelicInstance>();
+        RunState.Potions = new List<PotionInstance>();
+
+        Hollowdeck.Combat.CombatContext.EnemyDefinitionIds = new List<string> { "cultist" };
+        Hollowdeck.Combat.CombatContext.IsBoss = false;
+
+        var instance = GD.Load<PackedScene>("res://scenes/CombatScreen.tscn").Instantiate();
+        AddChild(instance);
+
+        var combat = instance.GetNode<Hollowdeck.Combat.CombatManager>("CombatManager");
+        var refreshHand = instance.GetType().GetMethod("RefreshHand", BindingFlags.NonPublic | BindingFlags.Instance);
+        var handArea = instance.GetNode<Control>("HandArea");
+        // The layout target, not the live Position: cards are still tweening
+        // toward their slot when this runs (same reason as the fifteen-card
+        // test above).
+        var homePositionField = typeof(CardView).GetField("_homePosition", BindingFlags.NonPublic | BindingFlags.Instance);
+        var homeRotationField = typeof(CardView).GetField("_homeRotation", BindingFlags.NonPublic | BindingFlags.Instance);
+
+        // Two sizes rather than one: a lone card sits at the fan's center with
+        // no rotation, and everything past two cards puts one at each extreme,
+        // so these bracket every hand the game can deal.
+        foreach (int target in new[] { 2, 10 })
+        {
+            int missing = target - combat.Player.Piles.Hand.Count;
+            if (missing > 0) combat.Player.Piles.DrawHand(missing);
+            refreshHand!.Invoke(instance, null);
+
+            float lowest = 0f;
+            string worst = "";
+            foreach (var child in handArea.GetChildren())
+            {
+                if (child is not CardView cardView) continue;
+                var home = (Vector2)homePositionField!.GetValue(cardView)!;
+                float rotation = Mathf.DegToRad((float)homeRotationField!.GetValue(cardView)!);
+                var size = cardView.CustomMinimumSize;
+                var center = handArea.Position + home + size / 2f;
+
+                foreach (var corner in new[]
+                         {
+                             new Vector2(-size.X, -size.Y) / 2f, new Vector2(size.X, -size.Y) / 2f,
+                             new Vector2(-size.X, size.Y) / 2f, new Vector2(size.X, size.Y) / 2f,
+                         })
+                {
+                    float y = (center + corner.Rotated(rotation)).Y;
+                    if (y <= lowest) continue;
+                    lowest = y;
+                    worst = $"{cardView.CardInstance?.Definition.Id} corner at y={y:F0}";
+                }
+            }
+
+            Check($"no_card_corner_below_the_canvas_at_{target}_cards",
+                lowest <= CombatScreen.CanvasBottomY + 0.01f,
+                $"{worst}, past the {CombatScreen.CanvasBottomY} canvas floor - the hotkey badge " +
+                "sits in that corner and would be off screen");
+        }
+
+        instance.QueueFree();
     }
 
     private void TestCombatScreenLayoutStaysInBoundsAtFifteenCards()

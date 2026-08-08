@@ -200,7 +200,7 @@
   },
   {
 	"id": "reckless_charge",
-	"name": "Reckless Charge",
+	"name": "Reckless Blow",
 	"cost": 1,
 	"type": "Attack",
 	"target": "SingleEnemy",

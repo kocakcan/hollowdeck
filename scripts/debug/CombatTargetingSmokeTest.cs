@@ -483,6 +483,32 @@ public partial class CombatTargetingSmokeTest : Node
             $"state is {combat.State}");
         Check("aiming_a_potion_shows_the_target_hint", hint.Visible, "TargetHintLabel stayed hidden");
 
+        // Third of the same family as TestHudNeverPaintsOverAnEnemy and the
+        // intent tooltip's keep-off-the-hand check, and the one a playtest
+        // caught: the hint used to sit at y=238..284, inside EnemyRow, so
+        // aiming a potion wrote two lines of instructions across the name and
+        // HP bar of the enemy being aimed at. It lives in the band between the
+        // enemy row and the top of the fan now, which is 24px tall - hence one
+        // line - and both edges of that band are asserted here.
+        //
+        // HighestHoveredCardTopY, not HighestCardTopY: the lower edge of that
+        // band is not where a card rests but where it reaches when the player
+        // looks at it, 18px higher and painted at ZIndex 100 over anything
+        // underneath. Aiming a potion and then moving the mouse to the enemy
+        // crosses the fan on the way, so a card lifting is not a corner case -
+        // it is the ordinary path through this state.
+        var hintRect = hint.GetGlobalRect();
+        var painted = screen.GetNode("EnemyRow").GetChildren().OfType<EnemyView>()
+            .Where(e => e.GetGlobalRect().Intersects(hintRect))
+            .Select(e => e.Combatant.Definition.Name)
+            .ToList();
+        Check("the_target_hint_paints_over_no_enemy", painted.Count == 0,
+            $"hint at {hintRect} covers {string.Join(", ", painted)}");
+        Check("the_target_hint_clears_the_top_of_a_hovered_card",
+            hintRect.End.Y <= CombatScreen.HighestHoveredCardTopY,
+            $"hint reaches y={hintRect.End.Y}, past the top a hovered card reaches " +
+            $"y={CombatScreen.HighestHoveredCardTopY}");
+
         combat.CancelTargeting();
 
         Check("cancel_returns_to_the_player_turn", combat.State == CombatState.PlayerTurn,
