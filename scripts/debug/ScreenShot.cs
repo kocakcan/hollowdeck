@@ -156,6 +156,10 @@ public partial class ScreenShot : Node
         // rest site's Smith and the shop's card-removal grid, unreachable
         // without the click.
         ["libraryrelics"] = new("res://scenes/LibraryScreen.tscn", SeedNothing, OpenLibraryRelics),
+        // The click-to-inspect popup, unreachable without the click - same
+        // shape as restupgrade/libraryrelics above.
+        ["libraryinspectcard"] = new("res://scenes/LibraryScreen.tscn", SeedNothing, OpenLibraryInspectCard),
+        ["libraryinspectrelic"] = new("res://scenes/LibraryScreen.tscn", SeedNothing, OpenLibraryInspectRelic),
         ["runend"] = new("res://scenes/RunEndScreen.tscn", SeedRunEnd),
         ["mainmenu"] = new("res://scenes/MainMenu.tscn", SeedNothing),
         ["settings"] = new("res://scenes/SettingsScreen.tscn", SeedNothing),
@@ -674,6 +678,20 @@ public partial class ScreenShot : Node
 
     private static void OpenLibraryRelics(Node screen) =>
         screen.GetNode<Button>("Content/CategoryRow/Relics").EmitSignal(Button.SignalName.Pressed);
+
+    private static void OpenLibraryInspectCard(Node screen)
+    {
+        var grid = screen.GetNode<GridContainer>("Content/CardsPane/Center/CardsGrid");
+        var view = grid.GetChild(0).GetChild<CardView>(0);
+        view._GuiInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+    }
+
+    private static void OpenLibraryInspectRelic(Node screen)
+    {
+        OpenLibraryRelics(screen);
+        var tile = screen.GetNode<GridContainer>("Content/RelicsPane/Center/RelicsGrid").GetChild<ActivatablePanel>(0);
+        tile._GuiInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+    }
 
     private static void SeedTreasure() => RunState.Relics = new List<RelicInstance>();
 
