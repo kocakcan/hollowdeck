@@ -323,7 +323,21 @@ public static class BalanceModel
                 // thing to do to this method, measured on its own.
                 if (e.Hp <= 0)
                 {
-                    total += ResolveOnDeath(e, fight, turn, ref poison, ref vulnerable);
+                    total += ResolveOnDeath(e, fight, turn, ref poison, ref vulnerable,
+                        out int arrivals);
+
+                    // A death-summon acts on the round it lands; a move-summon
+                    // does not. The asymmetry is real rather than a modelling
+                    // choice: an onDeath fires from ResolveCard during the
+                    // *player's* turn, and TryEndTurn snapshots _enemyTurnOrder
+                    // after that, so the replacement is already in the order
+                    // being iterated. A move-summon resolves from inside that
+                    // same iteration and is therefore not.
+                    //
+                    // Widening the bound is this walk's version of the later
+                    // snapshot. Safe because TrySummon appends and `i` has not
+                    // reached the end of the list yet.
+                    actingThisTurn += arrivals;
                 }
 
                 if (!e.Enraged && e.Def.EnrageHpPercent > 0 && e.Def.EnrageMoves.Count > 0
@@ -356,13 +370,25 @@ public static class BalanceModel
                     // spends itself the turn it crosses one - which for a
                     // sequential summoner (the only kind authored) is exactly
                     // the turn the move actually comes round.
-                    e.PendingSummons += p * SummonCount(move);
+                    //
+                    // Accumulated per summoned id rather than as one number,
+                    // because an enemy may have two summon moves calling two
+                    // different creatures and a single counter cannot say which
+                    // one crossed.
+                    foreach (var (id, count) in SummonsIn(move))
+                    {
+                        e.PendingSummons.TryGetValue(id, out double pending);
+                        e.PendingSummons[id] = pending + p * count;
+                    }
                 }
 
-                while (e.PendingSummons >= 1)
+                foreach (var id in e.PendingSummons.Keys.ToList())
                 {
-                    e.PendingSummons -= 1;
-                    TrySummon(fight, SummonedDef(e.Def), turn);
+                    while (e.PendingSummons[id] >= 1)
+                    {
+                        e.PendingSummons[id] -= 1;
+                        TrySummon(fight, EnemyDatabase.Find(id), joinedOnTurn: turn);
+                    }
                 }
             }
 
@@ -395,7 +421,8 @@ public static class BalanceModel
         public bool Enraged;
         public bool Escaped;
         public bool OnDeathFired;
-        public double PendingSummons;
+        // Expected summons not yet whole, keyed by the id being summoned.
+        public readonly Dictionary<string, double> PendingSummons = new();
 
         // Which fight turn this enemy arrived on. Zero for the starting roster,
         // so `turn - JoinedOnTurn` is 1 on turn 1 and the arithmetic is the same
@@ -414,9 +441,14 @@ public static class BalanceModel
     // Fires once, guarded the same way CombatManager.ResolveDeaths guards it -
     // and for the same reason: an onDeath that summons can produce another
     // corpse in the same pass.
+    //
+    // `arrivals` is how many enemies it brought in, so the caller can let them
+    // act this round - see the widening of actingThisTurn at the call site.
     private static double ResolveOnDeath(
-        WalkEnemy dying, List<WalkEnemy> fight, int turn, ref double poison, ref double vulnerable)
+        WalkEnemy dying, List<WalkEnemy> fight, int turn, ref double poison, ref double vulnerable,
+        out int arrivals)
     {
+        arrivals = 0;
         if (dying.OnDeathFired) return 0;
         dying.OnDeathFired = true;
 
@@ -436,7 +468,16 @@ public static class BalanceModel
                 case "summon_enemy":
                     for (int i = 0; i < spec.Amount; i++)
                     {
-                        TrySummon(fight, spec.EnemyId is { Length: > 0 } id ? EnemyDatabase.Find(id) : null, turn);
+                        // turn - 1, not turn: a death-summon takes its *first*
+                        // move on the round it arrives, and the cadence index
+                        // is `turn - JoinedOnTurn`. A move-summon passes `turn`
+                        // and so opens on the following round instead.
+                        if (TrySummon(fight,
+                                spec.EnemyId is { Length: > 0 } id ? EnemyDatabase.Find(id) : null,
+                                turn - 1))
+                        {
+                            arrivals++;
+                        }
                     }
                     break;
             }
@@ -448,22 +489,22 @@ public static class BalanceModel
     // Refused past the same cap the game refuses it past, read off
     // CombatManager rather than restated - an analyser modelling five enemies
     // the screen will only ever show four of is pricing a fight nobody can have.
-    private static void TrySummon(List<WalkEnemy> fight, EnemyDefinition? def, int turn)
+    private static bool TrySummon(List<WalkEnemy> fight, EnemyDefinition? def, int joinedOnTurn)
     {
-        if (def is null) return;
-        if (fight.Count(e => e.Present) >= CombatManager.MaxEnemies) return;
-        fight.Add(new WalkEnemy(def, joinedOnTurn: turn));
+        if (def is null) return false;
+        if (fight.Count(e => e.Present) >= CombatManager.MaxEnemies) return false;
+        fight.Add(new WalkEnemy(def, joinedOnTurn));
+        return true;
     }
 
-    private static int SummonCount(EnemyMove move) =>
-        move.Effects.Where(e => e.Action == "summon_enemy").Sum(e => e.Amount);
-
-    private static EnemyDefinition? SummonedDef(EnemyDefinition def) =>
-        def.Moves.Concat(def.EnrageMoves)
-            .SelectMany(m => m.Effects)
+    // Every summon spec in a move, paired with what it brings in. Read off the
+    // move rather than off the definition: an enemy with two summon moves that
+    // call different creatures was previously modelled summoning whichever the
+    // first move named, for both.
+    private static IEnumerable<(string Id, int Count)> SummonsIn(EnemyMove move) =>
+        move.Effects
             .Where(e => e.Action == "summon_enemy" && e.EnemyId is { Length: > 0 })
-            .Select(e => EnemyDatabase.Find(e.EnemyId!))
-            .FirstOrDefault();
+            .Select(e => (e.EnemyId!, e.Amount));
 
     // Which of its own turns an enemy leaves on, or null if it never does.
     //
@@ -535,32 +576,87 @@ public static class BalanceModel
     // failed it, or the printed header could disagree with the flag beside the
     // row it explained.
     //
-    // The boss ceiling moved 3.2 -> 3.3 in Phase 8. Not a content change: the
-    // act-1 bosses did not get harder, EncounterCost got more accurate (fight
-    // length is now walked rather than assumed, so self-granted Block costs the
-    // player turns) and it prices them at 3.20x and 3.23x where it used to say
-    // 3.14x and 3.16x. Re-measured against the report, not widened to get green.
+    // The boss ceiling moved 3.2 -> 3.3 in Phase 8's status half. Not a content
+    // change: the act-1 bosses did not get harder, EncounterCost got more
+    // accurate (fight length is now walked rather than assumed, so self-granted
+    // Block costs the player turns). Re-measured against the report, not
+    // widened to get green.
+    //
+    // Where the six bosses sit today, after the behaviour half: 3.06x / 3.04x
+    // (act 1), 2.85x / 2.43x (act 2), 2.68x / 2.60x (act 3). Act 1 rides near
+    // the ceiling because MeanNormalCost is the denominator and act 1's normal
+    // pool is the cheapest in the game, not because its bosses are outliers.
+    //
+    // BossCostLow is doing a second job since the behaviour half, and it is not
+    // a band edge there: BalanceSmokeTest reads it as the line a *normal*
+    // encounter may not cross, on the rule that a Combat node must never cost
+    // what a Boss node promises. Lowering it therefore tightens two different
+    // checks at once - the boss floor and the Combat-node ceiling.
     public const double EliteCostLow = 1.0, EliteCostHigh = 1.9;
     public const double BossCostLow = 2.2, BossCostHigh = 3.3;
 
     public sealed record EncounterProfile(
         IReadOnlyList<string> Ids,
+        IReadOnlyList<string> Summoned,
         int TotalHp,
         double FlatDpt,
         double Cost)
     {
-        public string Label => string.Join(" + ", Ids);
+        // Summoned members are shown in parentheses rather than folded in
+        // silently, so a row that reads 72 hp against two authored ids still
+        // says where the third body came from - and so a report line can still
+        // be matched back to its acts.json entry by its leading ids.
+        public string Label => Summoned.Count == 0
+            ? string.Join(" + ", Ids)
+            : $"{string.Join(" + ", Ids)} (+{string.Join(" +", Summoned)})";
     }
 
     public static EncounterProfile Encounter(IEnumerable<string> ids)
     {
         var list = ids.ToList();
         var defs = list.Select(EnemyDatabase.Get).ToList();
+        var summoned = SummonedIds(defs);
+        var all = defs.Concat(summoned.Select(EnemyDatabase.Get)).ToList();
         return new EncounterProfile(
             list,
-            defs.Sum(d => d.MaxHp),
-            defs.Sum(FlatDpt),
+            summoned,
+            all.Sum(d => d.MaxHp),
+            all.Sum(FlatDpt),
             EncounterCost(list, ReferenceThroughput));
+    }
+
+    // What a group can bring in, capped at the same live roster limit the fight
+    // is. TotalHp and FlatDpt were built from the authored id list alone while
+    // Cost walked a roster that grows, so the report contradicted itself: it
+    // named ward_acolyte act 1's *softest* fight at "2.8 dpt, 40 hp" while
+    // EncounterCost priced the same group at nearly three times what it used to.
+    // Those two fields feed MeanNormalHp/MeanNormalDpt and from there
+    // BalanceSmokeTest's curve assertions, so the curve was being checked
+    // against a fight the game no longer runs.
+    //
+    // Deliberately ignores *when* a summon lands and whether the fight lasts
+    // long enough to see it - this is the static profile, and Cost is the
+    // number that models timing. One level deep is enough because
+    // Phase4ContentSmokeTest refuses a summon that summons.
+    private static List<string> SummonedIds(IReadOnlyList<EnemyDefinition> defs)
+    {
+        var summoned = new List<string>();
+        foreach (var def in defs)
+        {
+            var specs = def.Moves.Concat(def.EnrageMoves).SelectMany(m => m.Effects)
+                .Concat(def.OnDeath)
+                .Where(s => s.Action == "summon_enemy" && s.EnemyId is { Length: > 0 });
+            foreach (var spec in specs)
+            {
+                for (int i = 0; i < spec.Amount; i++)
+                {
+                    if (defs.Count + summoned.Count >= CombatManager.MaxEnemies) return summoned;
+                    if (EnemyDatabase.Find(spec.EnemyId!) is not null) summoned.Add(spec.EnemyId!);
+                }
+            }
+        }
+
+        return summoned;
     }
 
     // ------------------------------------------------------------------- acts
@@ -580,6 +676,18 @@ public static class BalanceModel
         // The yardstick every other encounter in the act is measured against:
         // what an average normal fight takes out of you.
         public double MeanNormalCost => Mean(Normals.Select(e => e.Cost));
+
+        // The two ends the *mean* hides, and the reason they are here: banding
+        // elites and bosses against MeanNormalCost cannot see a single normal
+        // group spiking past them. Phase 8 shipped exactly that - a summoner
+        // took two Combat nodes to 101 and 116 against a costliest elite of 77
+        // - with the whole suite green, because averaging four other cheap
+        // groups in put the mean back where it started.
+        public EncounterProfile? CostliestNormal =>
+            Normals.OrderByDescending(e => e.Cost).FirstOrDefault();
+
+        public EncounterProfile? CheapestElite =>
+            Elites.OrderBy(e => e.Cost).FirstOrDefault();
 
         public double CostRatio(EncounterProfile e) =>
             MeanNormalCost <= 0 ? 0 : e.Cost / MeanNormalCost;

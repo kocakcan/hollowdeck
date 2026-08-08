@@ -58,8 +58,13 @@ public partial class CombatManager : Node
 
     // How many enemies can be on screen at once, and therefore what a summon
     // is refused past. This is a *layout* budget rather than a design one:
-    // EnemyRow is 900px wide and an EnemyView has a 220px minimum, so four fit
-    // and five overflow the band into the relic bar. Named and public because
+    // EnemyRow is 800px wide and an EnemyView authors a 220px minimum, so four
+    // do NOT fit at that minimum - 4x220 plus separation needs 892. Four fit
+    // because CombatScreen.FitEnemiesToTheRow derives the real width from the
+    // row each refresh and treats 220 as a maximum; widening the row instead
+    // runs it into the pile counter strip, which DeckViewSmokeTest catches.
+    // Five would be under 160px each, past what the sprite and HP bar read at.
+    // Named and public because
     // BalanceModel's encounter walk has to cap its roster at the same number -
     // an analyser that models five enemies the game will never show is
     // reporting a fight nobody can have.
@@ -648,6 +653,10 @@ public partial class CombatManager : Node
             }
         }
 
+        // Order is not load-bearing and must not become so: EscapeEffect
+        // refuses to flag a corpse, so no enemy can satisfy both predicates
+        // and whichever sweep runs first claims a disjoint set. The guard is
+        // where the death-wins-over-escape rule lives.
         Enemies.RemoveAll(e => e.HasEscaped);
         EnemiesKilled += Enemies.RemoveAll(e => e.IsDead);
     }

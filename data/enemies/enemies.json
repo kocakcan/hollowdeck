@@ -84,7 +84,7 @@
   {
     "id": "possessed_armor",
     "name": "Possessed Armor",
-    "maxHp": 120,
+    "maxHp": 113,
     "aiType": "weighted_random",
     "loopFromIndex": 0,
     "moves": [
@@ -256,7 +256,7 @@
   {
     "id": "ward_acolyte",
     "name": "Ward Acolyte",
-    "maxHp": 40,
+    "maxHp": 24,
     "aiType": "sequential",
     "loopFromIndex": 1,
     "moves": [
@@ -379,9 +379,9 @@
       },
       {
         "moveId": "snatch_and_flee",
-        "intent": { "type": "Escape", "displayAmount": 25 },
+        "intent": { "type": "Escape", "displayAmount": 40 },
         "effects": [
-          { "action": "gain_gold", "amount": -25, "scope": "Self" },
+          { "action": "gain_gold", "amount": -40, "scope": "Self" },
           { "action": "escape", "scope": "Self" }
         ]
       }

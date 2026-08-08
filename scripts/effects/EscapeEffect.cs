@@ -29,6 +29,18 @@ public class EscapeEffect : IEffect
             return;
         }
 
+        // Death wins over escape, and the rule is stated here rather than left
+        // to the order of the two RemoveAll lines in ResolveDeaths. An escape
+        // move that also deals damage - the obvious hit-and-run thief, which
+        // nothing authors yet - can be killed by the player's Thorns *inside*
+        // ExecuteEffect for its own damage spec, and this spec then runs on a
+        // corpse. Without the guard, the HasEscaped sweep claims the body
+        // before the IsDead sweep does: EnemiesKilled never counts a kill the
+        // player earned, RunScore loses the points, and CombatScreen plays the
+        // runaway tween over a death. Ordering alone would fix it today and
+        // silently un-fix it the next time those two lines are reordered.
+        if (enemy.IsDead) return;
+
         enemy.HasEscaped = true;
     }
 }

@@ -96,11 +96,12 @@ public partial class CombatTargetingSmokeTest : Node
     //
     // The widest encounter is four since summons: three is what the encounter
     // *table* fields, but a summon takes a three-enemy group to
-    // CombatManager.MaxEnemies, and the extra column is what pushed EnemyRow's
-    // right edge out to 1076 - which moves every enemy left, back toward the
-    // relic bar this is measuring against. Built from four rather than three
-    // for exactly that reason; a summon is not reproducible from a static
-    // encounter id, so the group is authored at the cap directly.
+    // CombatManager.MaxEnemies. EnemyRow's own band did not move for that
+    // (still x 176-976); FitEnemiesToTheRow narrows the columns inside it
+    // instead, which packs the leftmost enemy tighter against the relic bar
+    // this is measuring. Built from four rather than three for exactly that
+    // reason; a summon is not reproducible from a static encounter id, so the
+    // group is authored at the cap directly.
     private async System.Threading.Tasks.Task TestHudNeverPaintsOverAnEnemy()
     {
         RunState.Relics = new List<RelicInstance>();

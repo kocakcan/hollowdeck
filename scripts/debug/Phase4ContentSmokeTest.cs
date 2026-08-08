@@ -44,6 +44,7 @@ public partial class Phase4ContentSmokeTest : Node
         TestIntentLabelsAreReadFromTheMove();
         await TestSummonJoinsTheFightWithoutActingThisTurn();
         await TestEscapeRemovesAnEnemyWithoutCountingAKill();
+        await TestDeathBeatsEscapeWhenBothLandInOneMove();
         await TestOnDeathResolvesBeforeTheFightIsScored();
         TestEveryMoveDescribesItselfInTheEnemyVoice();
         await TestEnemyPowersPayOutEachTurn();
@@ -532,10 +533,86 @@ public partial class Phase4ContentSmokeTest : Node
         Check("escaping_is_not_scored_as_a_kill", combat.EnemiesKilled == 0,
             $"EnemiesKilled={combat.EnemiesKilled} - the tally feeds RunScore, and a fight "
             + "you failed to finish must not pay out as one you did");
-        Check("the_thief_leaves_with_the_gold", RunState.Gold == goldBefore - 25,
-            $"gold={RunState.Gold}, expected {goldBefore - 25}");
+        // Read off the move rather than restated, so retuning the theft is one
+        // edit in enemies.json. It was a literal 25 and the retune to 40 broke
+        // this check, which is the drift a derived number cannot have.
+        int stolen = -EnemyDatabase.Get("gaol_rat").Moves
+            .First(m => m.MoveId == "snatch_and_flee").Effects
+            .Where(e => e.Action == "gain_gold" && e.Amount < 0)
+            .Sum(e => e.Amount);
+        Check("the_thief_leaves_with_the_gold", RunState.Gold == goldBefore - stolen,
+            $"gold={RunState.Gold}, expected {goldBefore - stolen} (theft of {stolen})");
         Check("an_emptied_board_still_ends_the_fight", combat.Outcome == CombatOutcome.Win,
             $"outcome={combat.Outcome}");
+
+        combat.QueueFree();
+    }
+
+    // Death wins over escape, driven through the one arrangement that can
+    // produce both flags on one enemy in one move: a hit-and-run thief that
+    // deals damage before it flees, against a player holding Thorns. The
+    // retaliation resolves inside ExecuteEffect for the damage spec and kills
+    // the thief, and the escape spec then runs on a corpse.
+    //
+    // Synthetic because nothing authors it yet - snatch_and_flee deals no
+    // damage, so today this is latent. A rule that only holds while the content
+    // happens not to reach it is not a rule, and the obvious next thief is
+    // exactly this move.
+    //
+    // What the guard buys, concretely: without it the HasEscaped sweep in
+    // ResolveDeaths claims the body before the IsDead sweep, so a kill the
+    // player earned never reaches EnemiesKilled - and from there RunScore -
+    // while CombatScreen plays the runaway tween over a death.
+    private async Task TestDeathBeatsEscapeWhenBothLandInOneMove()
+    {
+        var thief = new EnemyDefinition
+        {
+            Id = "test_hit_and_run",
+            Name = "Test Thief",
+            MaxHp = 3,
+            Moves =
+            {
+                new EnemyMove
+                {
+                    MoveId = "snatch",
+                    Intent = new EnemyIntent { Type = IntentType.Escape, DisplayAmount = 0 },
+                    Effects =
+                    {
+                        new EffectSpec { Action = "deal_damage", Amount = 1, Scope = EffectScope.Target },
+                        new EffectSpec { Action = "escape", Scope = EffectScope.Self },
+                    },
+                },
+            },
+        };
+
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 50, CurrentHp = 50, MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(new List<CardDefinition> { CardDatabase.Get("defend") }),
+        };
+        // More Thorns than the thief has HP, so the retaliation is lethal on the
+        // damage spec - i.e. before the escape spec in the same move runs.
+        player.AddStatus(StatusType.Thorns, 5);
+
+        var combat = new CombatManager();
+        AddChild(combat);
+        combat.StartCombat(player, new List<EnemyCombatant> { EnemyFactory.Create(thief) },
+            new List<RelicInstance>());
+        var runaway = combat.Enemies[0];
+
+        combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
+
+        Check("thorns_kills_the_thief_mid_move", runaway.IsDead,
+            $"hp={runaway.CurrentHp} - the test is meaningless unless the retaliation "
+            + "actually lands before the escape spec resolves");
+        Check("a_corpse_cannot_escape", !runaway.HasEscaped,
+            "EscapeEffect flagged an enemy that was already dead - the guard is what "
+            + "keeps the two RemoveAll sweeps in ResolveDeaths disjoint");
+        Check("a_thorns_kill_still_counts_as_a_kill", combat.EnemiesKilled == 1,
+            $"EnemiesKilled={combat.EnemiesKilled} - the escape sweep runs first, so an "
+            + "enemy flagged both ways is removed without ever reaching the kill tally, "
+            + "and RunScore silently loses the points");
 
         combat.QueueFree();
     }

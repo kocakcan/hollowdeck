@@ -264,7 +264,11 @@ authors a 220px minimum — three fit, four do not. Widening the row is the wron
 `DeckViewSmokeTest.pile_counter_strip_does_not_overlap_enemy_row` catches it; narrowing the scene's
 minimum is worse in the common case of one or two enemies. So 220 is a *maximum* and
 `CombatScreen.FitEnemiesToTheRow` derives the real width from the row's own size each refresh, with
-`NameLabel` set to ellipsis for the names that no longer fit at four. `BalanceModel` reads the same
+`NameLabel` set to **`TrimChar`** for the names that no longer fit at four. Not `TrimEllipsis`, which
+was the first choice and is the wrong one here: the pixel font has no usable ellipsis glyph at this
+size, so the three dots render as a solid 19x3 bar that reads at 1x as an underscore or a redaction
+rather than as "there is more name here". A cleanly cut name reads as a layout limit; scaling the
+font instead is not available, because `docs/ART_SPEC.md` allows integer scale only. `BalanceModel` reads the same
 constant rather than keeping a copy — an analyser pricing five enemies the screen will only ever show
 four of is pricing a fight nobody can have.
 
@@ -318,7 +322,7 @@ entirely — `ActSmokeTest.TestNoSummonCrossesAnAct` is what stops it being the 
 turns up in an act 1 room.
 
 **Icons are generated; sprites are sourced. Nothing in `assets/` is drawn by hand, and nothing is
-an SVG.** All **184** icons — 101 cards, 27 relics, 15 events, 12 potions, 15 status, 8 map, 6
+an SVG.** All **185** icons — 101 cards, 27 relics, 15 events, 12 potions, 15 status, 8 map, 7
 intents — are original work emitted by `tools/artgen`, one Rust `fn` per icon composing shapes onto
 a 32x32 grid out of the single 43-colour ramp in `docs/ART_SPEC.md` §5. They therefore need **no
 attribution**: the game-icons.net SVG set was retired in Phase 3 when the project committed to pixel
@@ -340,7 +344,7 @@ to catch committed art drifting from its source. The one command, for all three 
 
 ```bash
 cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
-#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 184
+#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 185
 #   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
 #   validate           what run-smoke-tests.sh calls; nonzero exit on failure
 ```
@@ -419,7 +423,19 @@ roadmap is next read:
   misleading, because it cannot see Poison (six enemies carry it, and Poison 5 is 15 damage over its
   life), an enemy's own Vulnerable amplifying its later hits, or Strength accumulating through an
   enrage phase. Costs compare *within* an act — the reference throughput does not grow act over act
-  and a real deck does
+  and a real deck does.
+
+  **A ratio in this report has a denominator, and it is `MeanNormalCost`.** Every elite and boss row
+  is a multiple of an average normal fight, so a *normal* encounter getting more expensive makes
+  every elite and boss in that act look cheaper — and the suite reports that as the elite drifting
+  out of band. Phase 8 shipped that exact misreading: a summon took two act-1 Combat nodes to 101 and
+  116, the act's mean went 42 → 48, and `possessed_armor` was given 7 HP it did not need. Before
+  moving a number an elite or boss row points at, check `EncounterProfile.Summoned` and the
+  costliest-normal line for the same act. Two assertions now stand where that argument was: no normal
+  encounter may reach `BossCostLow` (elites are banded against the *mean*, which is exactly the
+  statistic one spiking group vanishes into), and an escape move must steal more than the cheapest
+  node it can flee — otherwise emptying the board scores as a Win, pays out in full, and rewards the
+  slow deck the move was written to punish
 - `scenes/CombatScreen.tscn` — card drag/hover/targeting
 - `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic
   status block, framed panel, art plinth), attached from `_Ready` like `ScreenBackground` and
@@ -504,10 +520,10 @@ Run these after touching anything under `scripts/` or any `.tscn`, before report
 | `MetaProgressionSmokeTest` | meta save, v1→v2 migration, unlock gating, `RunScore` | `MetaProgressionManager`, `RunScore`, the unlock track |
 | `AudioSmokeTest` | stream construction, bus setup, volume round-trip, and a volume change leaving the window mode alone | `scripts/audio/`, `AudioManager`, `SettingsManager` |
 | `TransitionSmokeTest` | cross-screen fade: overlay geometry/layer, the Reduce Motion gate, covered-action firing once | `ScreenFade`, `RunManager.ChangeScreen` |
-| `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon- *and sprite*-to-definition coverage, `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
+| `PixelSpecSmokeTest` | asset grids, integer sprite scale, Nearest filter, font pair, palette ramp, icon- *and sprite*-to-definition coverage, every `IntentType`/`MapNodeType` resolving art of its own through `ArtAssets` (landing on the `unknown` fallback counts as uncovered), `artgen`'s ramp mirror | `docs/ART_SPEC.md`, `PixelSpec`, any sprite/tile/icon/font, `tools/artgen`, `project.godot` rendering |
 | `KeyboardSmokeTest` | `hd_*` InputMap coverage and no duplicate keycodes, which control each screen focuses on load, that only `FocusMode` (never `Disabled`) excludes a control from the keyboard, the card picker's grid navigation (down a column, out to Cancel, back in), combat's card/potion keys, potion aiming, Continue at combat end | `project.godot` `[input]`, `ScreenKeyboardNav`, `CardPicker`, any screen's focus wiring, `CombatScreen._UnhandledInput` |
 | `VictorySmokeTest` | the final act's boss win routing to `RunEndScreen` rather than another reward, and that screen reading VICTORY | `CombatScreen.OnContinuePressed`, `RunState.IsFinalAct`/`AdvanceAct`, `RunEndScreen` |
-| `BalanceSmokeTest` | the difficulty curve rising act over act, every elite and boss encounter costing what its node type promises (bands, plus no boss cheaper than the act's costliest elite), every enrage phase out-hitting its own normal phase, every `RunScore` threshold being reachable by some seed, upgrade amounts matching the documented formula | `enemies.json`, `acts.json`, `RunScore` thresholds, `CardUpgrade`, `MapGenerator` weights |
+| `BalanceSmokeTest` | the difficulty curve rising act over act, every elite and boss encounter costing what its node type promises (bands, plus no boss cheaper than the act's costliest elite, **and no normal reaching `BossCostLow`**), every escape move stealing more than the cheapest node it can flee, every enrage phase out-hitting its own normal phase, every `RunScore` threshold being reachable by some seed, upgrade amounts matching the documented formula | `enemies.json`, `acts.json`, `RunScore` thresholds, `CardUpgrade`, `MapGenerator` weights |
 
 When in doubt run everything — the full sweep takes well under a minute. Restructuring a
 `.tscn` will break tests that assert on `GetNode` paths, on purpose — that's the alarm working;

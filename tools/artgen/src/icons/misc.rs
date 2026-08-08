@@ -44,6 +44,12 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "intents", name: "debuff", draw: intent_debuff },
         Icon { category: "intents", name: "summon", draw: intent_summon },
         Icon { category: "intents", name: "escape", draw: intent_escape },
+        // Deliberately the same `?` the map uses, under a second category.
+        // ArtAssets.IntentIcon and MapIcon both fall back to "unknown", and
+        // only map/ had the file - so an IntentType with no arm rendered as
+        // no icon at all rather than as an unresolved one. The shape is
+        // shared rather than redrawn because the meaning is identical.
+        Icon { category: "intents", name: "unknown", draw: unknown },
     ]
 }
 
@@ -148,8 +154,10 @@ fn event() -> Canvas {
     canvas
 }
 
-/// The `?` of an unresolved node type. Built from rectangles rather than
-/// typeset: the bitmap face's glyph is 8px tall and this has to fill 32.
+/// The `?` of an unresolved node type - and, emitted a second time under
+/// `intents`, of an intent type nothing has drawn yet. Built from rectangles
+/// rather than typeset: the bitmap face's glyph is 8px tall and this has to
+/// fill 32.
 fn unknown() -> Canvas {
     let mut canvas = new_icon();
     canvas.disc(16, 16, 14, P2);

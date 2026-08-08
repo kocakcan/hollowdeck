@@ -104,12 +104,19 @@ Compressed. The decisions worth not relitigating, and nothing else; the full nar
 - **Card removal shipped with the Curses, not after them.** Adding a way to put dead cards in a deck
   without a way to take them out is punishment rather than design.
 
-The curve as of today: encounter HP scales 1.49x then 1.44x per act, incoming damage 2.16x across
+The curve as of today: encounter HP scales 1.43x then 1.44x per act, incoming damage 2.16x across
 the run, player max HP only 1.32x — so **deck power has to cover 1.64x**, drawn from a mean of 16.6
-three-card rewards. Elites span 1.13x–1.84x of an average normal fight and bosses 2.43x–2.85x, both
+three-card rewards. Elites span 1.09x–1.84x of an average normal fight and bosses 2.43x–3.06x, both
 asserted as bands by `BalanceSmokeTest` — which reads them from `BalanceModel.EliteCost*`/`BossCost*`
 rather than holding its own copy, so the report's printed header and the suite's flags cannot
 disagree.
+
+`BossCostLow` does a second job as of Phase 8's review pass: it is also the line a *normal*
+encounter may not cross. Elites are banded against the **mean** normal, so a single Combat node
+spiking past the whole elite pool averages away to nothing — which is exactly what shipped and what
+the suite could not see. The costliest normal per act (2.04x / 1.77x / 1.89x) is printed in the
+report for the same reason. Some overlap between the hardest normal and the hardest elite is what a
+spread *is*, and predates Phase 8; a Combat node costing what a Boss node promises is not.
 
 ---
 
@@ -146,7 +153,7 @@ layer itself.
 - ~~**`summon_enemy`**, **`onDeath: [EffectSpec]`** and **escape.**~~ **Shipped**, as one branch,
   because all three are the same change: `CombatManager.Enemies` mutating mid-fight. Effect actions
   11 → 13, intent types 4 → 6, and three re-authored act-1 enemies — `ward_acolyte` opens by calling
-  a slime, `slime` bursts into Poison as it dies, `gaol_rat` steals 25 gold on turn 4 and leaves.
+  a slime, `slime` bursts into Poison as it dies, `gaol_rat` steals 40 gold on turn 4 and leaves.
   Splitting is a capability rather than content: it falls out of `onDeath` + `summon_enemy`, but a
   half-HP copy needs a new sourced sprite or an HP override on the summon spec, and neither was worth
   buying to prove a point.
@@ -173,10 +180,34 @@ layer itself.
     dying enemy taking its last swing, which cost every encounter in the game 8–13% and would have
     put the branch's balance delta beyond attribution. Restored deliberately — acts 2 and 3 then came
     back byte-identical to `main`, and act 1's reference rose 42 → 48 purely from the summon, which
-    is the honest number. Knock-on: `possessed_armor` fell out of the elite band at 0.99x and went
-    113 → 120 HP to sit at 1.16x, exactly where it was before. The dying-swing question is real and
-    belongs with the unmodelled `gain_block` moves as the next thing to do to that method, measured
-    on its own.
+    is the honest number. The dying-swing question is real and belongs with the unmodelled
+    `gain_block` moves as the next thing to do to that method, measured on its own.
+
+  The review pass then found the thing all of that measuring had been reading past, and it is the
+  fifth and most useful entry in this list:
+
+  - **A moved *denominator* looks exactly like a moved numerator, and only one of them is the bug.**
+    `possessed_armor` falling to 0.99x was read as the armour being too cheap and answered with
+    113 → 120 HP. It was not: the summon had pushed two Combat nodes to 101 and 116 against a
+    costliest elite of 77, which dragged act 1's mean normal cost 42 → 48 and deflated every elite
+    and boss ratio in the act at once. The armour never changed. Every suite was green throughout,
+    because nothing measured a normal encounter against anything — `BalanceReport` printed only
+    elites and bosses, and `BalanceSmokeTest` banded them against the *mean*, which is precisely the
+    statistic a single spike disappears into.
+
+    Fixed at the source: `ward_acolyte` 40 → 24 HP, so the summoner is the genre's fragile caster
+    hiding behind minions and acolyte-plus-slime lands where the acolyte alone used to. Act 1's
+    ceiling returns to 90 — `cultist + cultist`, which held it before Phase 8 — and the 120 HP
+    reverts to 113. Two assertions now stand where the argument was: no Combat node may reach
+    `BossCostLow`, and the costliest normal per act is printed rather than left to be inferred from
+    elites getting quietly cheaper.
+
+    The same pass caught `snatch_and_flee` stealing exactly the 25 gold act 1's solo `gaol_rat` node
+    pays out. Emptying the board scores as a Win however it emptied, so the escape handed over the
+    full reward, cost the player nothing, and skipped 44 HP of fight — and `EncounterCost` is right
+    that it only ever fires against a *below*-reference deck. The move existed to rescue the deck it
+    was written to punish. Theft 25 → 40, and `BalanceSmokeTest` now asserts a theft exceeds the
+    smallest reward any node the thief appears in can pay.
 - **A fourth AI type, `wake_on_damage`** — structurally `PhaseThresholdIntentPicker` inverted
   (transition on damage taken rather than an HP threshold), reusing that file's shape the way
   `BlockMath` reuses `DamageMath`'s.

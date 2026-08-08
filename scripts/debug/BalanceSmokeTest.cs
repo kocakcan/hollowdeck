@@ -43,6 +43,7 @@ public partial class BalanceSmokeTest : Node
         TestEnrageIsAnEscalation();
         TestBossesOutweighTheirAct();
         TestEncounterCostsStayInTheirBand();
+        TestAnEscapeCostsMoreThanTheNodeItLeaves();
         TestScoreThresholdsAreReachable();
         TestUpgradeGrantsAreWhatTheDocsClaim();
 
@@ -194,6 +195,85 @@ public partial class BalanceSmokeTest : Node
                 act.BossEncounters.All(b => b.Cost > dearestElite),
                 $"costliest elite is {dearestElite:F0}, cheapest boss "
                 + $"{act.BossEncounters.Min(b => b.Cost):F0}");
+
+            // The end of that ordering the bands above genuinely cannot see.
+            // They measure each *elite* against the *mean* normal, so a single
+            // Combat node spiking past the whole elite pool averages away to
+            // nothing: the four cheap groups beside it pull the mean back and
+            // every check in this file stays green.
+            //
+            // Not hypothetical. Phase 8's summoner took two act-1 Combat nodes
+            // to 101 and 116 against a costliest elite of 77, and the suite
+            // said nothing - the elite rows just quietly got cheaper as the
+            // denominator moved under them.
+            //
+            // BossCostLow rather than a threshold invented for this check, and
+            // not "no normal above any elite" either. Measured: the costliest
+            // normal has always run a little past the costliest elite (act 1
+            // 1.17x, act 3 1.10x, both predating Phase 8), because the hardest
+            // pair in a normal pool overlapping the softest elite is what a
+            // spread *is*. What is never acceptable is a Combat node - the one
+            // the map hands you on the way past, with no relic for it - costing
+            // what a Boss node promises. The summoner group hit 2.42x, inside
+            // the boss band; the act's own ceiling before and after is ~2.05x.
+            var bossPriced = act.Normals.Where(n => act.CostRatio(n) >= bossLow).ToList();
+            Check($"{act.Act.Id}_no_normal_costs_boss_money",
+                bossPriced.Count == 0,
+                $"a Boss node starts at {bossLow}x an average normal fight; these Combat "
+                + "nodes reach it: "
+                + Join(bossPriced.OrderByDescending(n => n.Cost)
+                    .Select(n => $"{n.Label} {n.Cost:F0} ({act.CostRatio(n):F2}x)")));
+        }
+    }
+
+    // An escape has to be a loss, and nothing was checking that it was.
+    //
+    // Emptying the board scores as a Win however it happened, so a fight the
+    // player failed to finish still pays out its node's full gold and card
+    // reward. The only price is the theft on the way out - so if a thief steals
+    // less than the node pays, escaping is *profit*: the same reward, less
+    // damage taken, and the enemy's HP never had to be chewed through.
+    //
+    // Shipped exactly that. Act 1 pays 20 + 5/enemy, so the solo ['gaol_rat']
+    // node pays 25 and snatch_and_flee stole 25 - a net gold change of zero.
+    // Worse, EncounterCost is right that the escape only ever fires against a
+    // *below*-reference deck (a deck at 16.2 dpt kills the rat on turn 3 and
+    // never sees turn 4), so the move existed solely to rescue the deck it was
+    // written to punish. ROADMAP's stated intent - "a fight you can lose by
+    // playing correctly but slowly" - ran exactly backwards.
+    //
+    // Checked against the *smallest* reward any node the thief appears in can
+    // pay, because that is the node where the margin is thinnest.
+    private void TestAnEscapeCostsMoreThanTheNodeItLeaves()
+    {
+        foreach (var act in ActDatabase.All)
+        {
+            foreach (var group in act.NormalEncounters)
+            {
+                int reward = act.NormalGoldBase + group.Count * act.GoldPerEnemy;
+
+                foreach (var id in group)
+                {
+                    var def = EnemyDatabase.Get(id);
+                    foreach (var move in def.Moves.Concat(def.EnrageMoves))
+                    {
+                        if (move.Effects.All(e => e.Action != "escape")) continue;
+
+                        // Authored negative and shown positive - EnemyView
+                        // .StolenGold is the one place that sign is turned back
+                        // around, so read it the same way here.
+                        int stolen = -move.Effects
+                            .Where(e => e.Action == "gain_gold" && e.Amount < 0)
+                            .Sum(e => e.Amount);
+
+                        Check($"{act.Id}_{move.MoveId}_escape_costs_more_than_{Slug(string.Join(" + ", group))}",
+                            stolen > reward,
+                            $"{def.Id}'s {move.MoveId} steals {stolen} from a node that pays "
+                            + $"{reward} - escaping is worth {reward - stolen:+#;-#;0} gold to the "
+                            + "player, so the fight they failed to finish rewards them for it");
+                    }
+                }
+            }
         }
     }
 

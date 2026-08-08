@@ -107,6 +107,25 @@ public partial class BalanceReport : Node
             GD.Print("");
             GD.Print($"  {a.Act.Name} - an average normal fight costs {a.MeanNormalCost:F0}");
 
+            // The costliest normal, printed because only the *mean* fed the
+            // rows below it and a single spiking Combat node is invisible in a
+            // mean. Phase 8 shipped two act-1 normals costing more than every
+            // elite in the act and nothing in this report said so - the elite
+            // rows just quietly got cheaper as the denominator moved.
+            if (a.CostliestNormal is { } worst)
+            {
+                // Flagged against the *costliest* elite, not the cheapest. Some
+                // overlap with the elite pool is what a spread is; outrunning
+                // the whole of it means no opt-in detour in the act is as
+                // expensive as a fight the map hands you for free.
+                double dearestElite = a.Elites.Count == 0 ? 0 : a.Elites.Max(e => e.Cost);
+                GD.Print($"    normal {worst.Cost,6:F0} ({a.CostRatio(worst),4:F2}x) hp={worst.TotalHp,4}"
+                         + $"  {worst.Label}   <-- costliest normal"
+                         + (worst.Cost > dearestElite
+                             ? $", above every elite in the act ({dearestElite:F0})"
+                             : ""));
+            }
+
             foreach (var e in a.Elites.OrderBy(e => a.CostRatio(e)))
             {
                 Band("elite", e.Cost, a.CostRatio(e), BalanceModel.EliteCostLow, BalanceModel.EliteCostHigh, e.Label, e.TotalHp);
