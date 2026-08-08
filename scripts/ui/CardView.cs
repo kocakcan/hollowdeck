@@ -25,7 +25,13 @@ namespace Hollowdeck.UI;
 // to reparent itself out of the hand area first.
 public partial class CardView : Panel
 {
-    private static readonly Vector2 HoverScale = new(1.15f, 1.15f);
+    // How much a hovered (or arrow-key selected) card grows, about its own
+    // centre. Public because it is not only a visual: it decides how far above
+    // its resting top a hand card can reach, which is what anything laying
+    // something out in the band above the fan has to clear. CombatScreen's
+    // HighestHoveredCardTopY is the one place that sum is written down.
+    public const float HoverScaleFactor = 1.15f;
+    private static readonly Vector2 HoverScale = new(HoverScaleFactor, HoverScaleFactor);
     private static readonly Vector2 NormalScale = Vector2.One;
     private static readonly Color UnaffordableTint = new(0.55f, 0.55f, 0.55f);
 
@@ -45,9 +51,12 @@ public partial class CardView : Panel
 
     // Matches the CostBadge and ExhaustBadge rects in CardView.tscn - they are
     // the same 30px wide and both paint over the name banner, one at each end.
-    // Used to pad the name clear of whichever of them is actually showing.
+    // The banner itself is inset 8px inside the card (VBox), so clearing a
+    // badge costs the banner only the remaining 22.
     private const int BadgeWidth = 30;
-    // What the banner pads by at an end no badge is covering: InsetPanelStyle's
+    private const int BannerInset = 8;
+    private const int BadgePad = BadgeWidth - BannerInset;
+    // What the banner pads by when no badge is in the way: InsetPanelStyle's
     // own content margin, so the name sits off the frame rather than against it.
     private const int BannerEdgePad = 4;
     // Body sizes the description may shrink to, largest first - now a single
@@ -294,18 +303,27 @@ public partial class CardView : Panel
         _activeKeywords = Keywords.Find(described.Text);
     }
 
-    // Pads the name banner clear of whichever badges this card is actually
-    // showing: the cost badge sits on the banner's left end, the exhaust badge
-    // on its right, both 30px wide and both painted over it. A name that
-    // ignored either lost characters underneath it - "TWIN STRIKE" read as
-    // "WIN STRIKE" before the left pad existed, and the card then called
-    // "Scorched Earth" still put its tail under the X until the right one did -
-    // it is "Wildfire" now precisely because the right pad left it no room.
+    // Pads the name banner clear of the badges painted over its two ends: the
+    // cost badge on the left, the exhaust badge on the right, both 30px. A name
+    // that ignored either lost characters underneath it - "TWIN STRIKE" read as
+    // "WIN STRIKE" before the left pad existed, and "Scorched Earth+" put its
+    // tail under the X for as long as only the left one existed.
     //
-    // Derived per card rather than reserved unconditionally, because both
-    // badges are conditional (a Curse hides the cost badge entirely, most cards
-    // are not Exhaust) and reserving 30px that nothing is covering both wastes
-    // room the name needs and pushes a centred name visibly off-centre.
+    // **The same pad goes on both ends, whichever badge is showing**, and that
+    // is the whole of what makes the name centred rather than merely
+    // centre-aligned. A Label centres inside its content box, so an asymmetric
+    // box centres the text on the box and not on the card: reserving 30 left
+    // and 4 right puts the midpoint at card x=101 against a card centre of 88,
+    // and every playable non-Exhaust card - 79 of 101 - renders 12px right of
+    // where it looks like it should be. Measured off a shop screenshot, which
+    // is the only place a 12px offset is visible at all.
+    //
+    // It costs nothing to pair them here. The reservation is 22 rather than 30
+    // because the banner is already inset 8px inside the card, so the symmetric
+    // box is card x 30..146 - 116px, which is *wider* than the 100px a naive
+    // 30/30 would leave and enough for every name in the data. Only a card
+    // showing no badge at all (an unplayable one, which has no cost) drops to
+    // the 4px edge pad, and that is symmetric too.
     //
     // The centring itself is NameLabel's alignment in CardView.tscn, and the
     // two are one decision. It is centred at the player's request, over one
@@ -319,8 +337,9 @@ public partial class CardView : Panel
     // the one fully on show.
     private void ApplyNameBannerPadding()
     {
-        _nameInset.ContentMarginLeft = _costBadge.Visible ? BadgeWidth : BannerEdgePad;
-        _nameInset.ContentMarginRight = _exhaustBadge.Visible ? BadgeWidth : BannerEdgePad;
+        int pad = _costBadge.Visible || _exhaustBadge.Visible ? BadgePad : BannerEdgePad;
+        _nameInset.ContentMarginLeft = pad;
+        _nameInset.ContentMarginRight = pad;
     }
 
     // The enemy this card would currently hit, when that's knowable: the one

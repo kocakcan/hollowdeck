@@ -106,7 +106,8 @@ public partial class HandLayoutSmokeTest : Node
     // during the pixel-art move - first when Silkscreen (much wider than the
     // serif face it replaced) overflowed the banner at 24px, then again when
     // the card narrowed to 176px. Longest name in the data is
-    // "Reckless Charge+" at 16 characters.
+    // "Reckless Blow+" at 14 characters, and it is 14 because the symmetric
+    // badge reservation left 116px rather than the 126 an asymmetric one did.
     //
     // The budget is per card, not per screen - see inside the loop.
     private void TestEveryCardNameFitsItsBanner()
@@ -130,11 +131,11 @@ public partial class HandLayoutSmokeTest : Node
                 cardView.SetCardInstance(new CardInstance(variant));
 
                 // Read back *inside* the loop: the banner's padding is a
-                // function of which badges this card shows (CardView's
-                // ApplyNameBannerPadding), so an Exhaust card is measured
-                // against 30px less than a plain one. Hoisted out of the loop
-                // this check budgeted every card the widest case and never saw
-                // a name running under the X badge.
+                // function of whether this card shows a badge at all (CardView's
+                // ApplyNameBannerPadding), so an unplayable card - which has no
+                // cost badge - is measured against 36px more than the rest.
+                // Hoisted out of the loop this budgeted every card the widest
+                // case, and never saw a name running under a badge.
                 var bannerStyle = nameBanner.GetThemeStylebox("panel");
                 float available = cardView.CustomMinimumSize.X - 16f - bannerStyle.ContentMarginLeft
                                   - bannerStyle.ContentMarginRight;

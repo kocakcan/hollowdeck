@@ -47,6 +47,15 @@ public partial class CombatScreen : Control
     // and only passed because guessing too high is the safe direction here.
     public const float EnemyRowBottomY = 330f;
     public static float HighestCardTopY => 460f + FanBaseY;
+    // The same edge for a card the player is *looking at*, which is the one
+    // that matters to anything sharing the band above the fan. A hovered or
+    // arrow-key-selected card scales about its own centre and jumps to
+    // ZIndex 100, so it reaches half the growth above its resting top - 18px -
+    // and paints over whatever is there. TargetHintLabel sits in that band and
+    // was measured against the resting top, which is 18px of clearance that
+    // does not exist.
+    public static float HighestHoveredCardTopY =>
+        HighestCardTopY - CardHeight * (CardView.HoverScaleFactor - 1f) / 2f;
     // The lowest a card's rotated corner may reach: the design canvas floor.
     // Paired with the above so one test can bracket the fan from both sides.
     public const float CanvasBottomY = 648f;

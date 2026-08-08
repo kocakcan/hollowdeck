@@ -278,7 +278,7 @@ fn crippling_blow() -> Canvas {
     canvas
 }
 
-/// Reckless Charge: horns, head-down. The one Attack with no weapon at all,
+/// Reckless Blow (id `reckless_charge`): horns, head-down. The one Attack with no weapon at all,
 /// which is exactly what "reckless" means here.
 fn reckless_charge() -> Canvas {
     let mut canvas = new_icon();

@@ -550,6 +550,16 @@ public partial class ScreenShot : Node
         // Returns false and parks in AwaitingTarget: a SingleEnemy potion
         // cannot resolve without a target, which is exactly the state wanted.
         combat.TryUsePotion(RunState.Potions[0]);
+
+        // And lift the centre card, because the resting fan is not the worst
+        // case for the band the hint sits in - a hovered or arrow-key-selected
+        // card scales 1.15x about its own centre and paints at ZIndex 100, so
+        // it reaches 18px above where it rests. Reaching the enemy with the
+        // mouse after aiming means crossing the fan, so this is the ordinary
+        // path through this state rather than a contrived one. SetHighlighted
+        // is the same call CombatScreen's arrow keys make.
+        var cards = screen.GetNode<Control>("HandArea").GetChildren().OfType<CardView>().ToList();
+        if (cards.Count > 0) cards[cards.Count / 2].SetHighlighted(true);
     }
 
     private static void SeedShopRemoval()

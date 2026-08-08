@@ -299,7 +299,7 @@ public partial class CombatManager : Node
     {
         // Snapshotted around EVERY effect, not just deal_damage, so the
         // no-damage-taken scoring bonus (RunScore's Champion/Perfect) also
-        // counts self-inflicted lose_hp (Reckless Charge, Last Stand) and
+        // counts self-inflicted lose_hp (Reckless Blow, Last Stand) and
         // anything a future effect does to the player's HP.
         int playerHpBefore = Player.CurrentHp;
 
