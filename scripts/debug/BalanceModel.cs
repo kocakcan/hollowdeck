@@ -587,6 +587,16 @@ public static class BalanceModel
     // the ceiling because MeanNormalCost is the denominator and act 1's normal
     // pool is the cheapest in the game, not because its bosses are outliers.
     //
+    // BossCostHigh stays at 3.3 rather than tightening onto that 3.06x, and the
+    // decision is deliberate. These ratios move when the *denominator* moves,
+    // and MeanNormalCost is the most volatile number in this model - the last
+    // two branches both shifted act 1's by re-authoring a normal enemy, which
+    // is a thing content work does routinely. A ceiling at 3.1 or 3.2 would
+    // fire on the next normal-pool edit, i.e. it would be a tripwire for the
+    // wrong file. The check that catches a boss genuinely drifting is the band
+    // ordering below it (no boss cheaper than the act's costliest elite), which
+    // shares the denominator and so cannot be fooled by it.
+    //
     // BossCostLow is doing a second job since the behaviour half, and it is not
     // a band edge there: BalanceSmokeTest reads it as the line a *normal*
     // encounter may not cross, on the rule that a Combat node must never cost
@@ -677,17 +687,14 @@ public static class BalanceModel
         // what an average normal fight takes out of you.
         public double MeanNormalCost => Mean(Normals.Select(e => e.Cost));
 
-        // The two ends the *mean* hides, and the reason they are here: banding
-        // elites and bosses against MeanNormalCost cannot see a single normal
-        // group spiking past them. Phase 8 shipped exactly that - a summoner
-        // took two Combat nodes to 101 and 116 against a costliest elite of 77
-        // - with the whole suite green, because averaging four other cheap
-        // groups in put the mean back where it started.
+        // The end the *mean* hides, and the reason it is here: banding elites
+        // and bosses against MeanNormalCost cannot see a single normal group
+        // spiking past them. Phase 8 shipped exactly that - a summoner took two
+        // Combat nodes to 101 and 116 against a costliest elite of 77 - with
+        // the whole suite green, because averaging four other cheap groups in
+        // put the mean back where it started.
         public EncounterProfile? CostliestNormal =>
             Normals.OrderByDescending(e => e.Cost).FirstOrDefault();
-
-        public EncounterProfile? CheapestElite =>
-            Elites.OrderBy(e => e.Cost).FirstOrDefault();
 
         public double CostRatio(EncounterProfile e) =>
             MeanNormalCost <= 0 ? 0 : e.Cost / MeanNormalCost;
