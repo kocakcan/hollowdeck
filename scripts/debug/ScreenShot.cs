@@ -88,6 +88,13 @@ public partial class ScreenShot : Node
         // floors), which is where node layout runs out of horizontal room first.
         ["map2"] = new("res://scenes/MapScreen.tscn", () => SeedActMap(1)),
         ["map3"] = new("res://scenes/MapScreen.tscn", () => SeedActMap(2)),
+        // The map's worst case, which none of the three above can show because
+        // none of them carries a relic: ScreenChrome wraps the relic grid 6 to
+        // a row, and the block grows downward out of the corner into the node
+        // band. Act 3 for the same reason map3 is act 3 - the longest map puts
+        // the most floors under the block. MapScreen.BandTop is what keeps them
+        // apart, and this is the only shot that can tell whether it worked.
+        ["mapfull"] = new("res://scenes/MapScreen.tscn", SeedCrowdedMap),
         ["combat2"] = new("res://scenes/CombatScreen.tscn", () => SeedActBossCombat(1)),
         ["combat3"] = new("res://scenes/CombatScreen.tscn", () => SeedActBossCombat(2)),
         // The HUD's worst case, which "combat" (2 enemies, 1 relic) can't
@@ -556,6 +563,23 @@ public partial class ScreenShot : Node
         RunState.PlayerMaxHp = 50 + 8 * actIndex;
         RunState.PlayerCurrentHp = RunState.PlayerMaxHp - 19;
         RunState.Gold = 180 + 66 * actIndex;
+    }
+
+    // Thirteen relics, which is three rows of the six-wide grid and a
+    // believable act-3 haul out of the 27 that exist. Two rows is already
+    // enough to reach the nodes; a third is what proves the band top tracks the
+    // block rather than having been nudged down by one row's worth.
+    //
+    // Taken in file order rather than named the way SeedCrowdedCombat names
+    // its eight, because what this fixture is about is the *count*: the icons
+    // themselves get looked at in that shot, at the same 1x, already.
+    // No potions seeded alongside: ScreenChrome's block is HP, gold and relics
+    // only, so out of combat a potion is not drawn at all and seeding some here
+    // would suggest this shot covers something it does not.
+    private static void SeedCrowdedMap()
+    {
+        SeedActMap(2);
+        RunState.Relics = RelicDatabase.All.Take(13).Select(r => new RelicInstance(r)).ToList();
     }
 
     private static void SeedActMap(int actIndex)

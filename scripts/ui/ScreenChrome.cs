@@ -39,6 +39,13 @@ public static class ScreenChrome
     // still must not run under the centred title.
     private const int RelicColumns = 6;
 
+    // Sizes a title may render at, largest first. Heading is what every screen
+    // whose title is a fixed word ("Shop", "Rest Site") gets and the only size
+    // this used to have; Body is the rung underneath, and there is nothing
+    // between them because ART_SPEC section 6 puts every rendered size on the
+    // 8px design em.
+    private static readonly int[] TitleFontSizes = { UiTheme.Fonts.Heading, UiTheme.Fonts.Body };
+
     /// The screen's name, in the display face, centred at the top. Returns the
     /// label so a caller that animates it (or reads it back in a test) can.
     public static Label AddTitle(Control screen, string text, Color? color = null)
@@ -53,9 +60,21 @@ public static class ScreenChrome
             MouseFilter = Control.MouseFilterEnum.Ignore,
             ThemeTypeVariation = "CombatDisplayLabel",
         };
-        label.AddThemeFontSizeOverride("font_size", UiTheme.Fonts.Heading);
         label.AddThemeColorOverride("font_color", color ?? UiTheme.Palette.AccentGoldBright);
         screen.AddChild(label);
+
+        // After AddChild, not before: TextFit measures through the label's own
+        // theme, and the ThemeTypeVariation above only resolves to the display
+        // face once the label is in the tree - measured against the default
+        // theme, every title "fits" and this does nothing.
+        //
+        // The overflow direction is what makes this worth doing at all. The
+        // label is centred, so a string wider than TitleWidth spills equally
+        // from both ends, and the left end is where the run-status block is: a
+        // playtest of act 3 put "ACT 3 OF 3 - THE HOLLOW THRONE" (the longest
+        // title in the game, and the only one that overflows) into the gold
+        // chip. Clipping instead would cut the act's name off both sides.
+        TextFit.Apply(label, TitleWidth, TitleFontSizes);
         return label;
     }
 

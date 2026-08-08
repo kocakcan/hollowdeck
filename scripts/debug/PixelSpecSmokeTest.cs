@@ -18,6 +18,7 @@ namespace Hollowdeck.Debug;
 //   - every authored asset sits on a legal grid (section 1)
 //   - creature sprites render at an integer scale (section 2)
 //   - the project default texture filter is Nearest (section 3)
+//   - the canvas letterboxes rather than expanding (section 4)
 //   - no SVG survives under assets/ (section 8)
 //   - the fonts in use are the bitmap pair, not the retired serif pair
 //   - every rendered font size is a multiple of the faces' 8px design em
@@ -42,6 +43,7 @@ public partial class PixelSpecSmokeTest : Node
         TestIconsAreOnLegalGrid();
         TestCreatureSpritesRenderAtIntegerScale();
         TestDefaultTextureFilterIsNearest();
+        TestCanvasIsLetterboxedNotExpanded();
         TestNoSvgRemainsUnderAssets();
         TestFontsAreTheBitmapPair();
         TestEveryRenderedFontSizeIsOnTheGrid();
@@ -148,6 +150,33 @@ public partial class PixelSpecSmokeTest : Node
         var setting = ProjectSettings.GetSetting("rendering/textures/canvas_textures/default_texture_filter");
         Check("default_texture_filter_is_nearest", setting.AsInt32() == 0,
             $"expected 0 (Nearest), got {setting} (ART_SPEC section 3)");
+    }
+
+    // ART_SPEC section 4: the UI layer works in 1152x648 space. "keep" is what
+    // makes that a fact rather than a hope - it letterboxes, so the canvas is
+    // exactly 1152x648 at every window size.
+    //
+    // "expand" was the setting here for a long time and looks like the more
+    // generous choice, which is exactly why this needs an assertion rather than
+    // a comment. It grows the canvas along the window's long axis (a 1470x956
+    // window gives 1152x749), and every screen in this codebase positions
+    // against the design size: MapScreen's DesignHeight, CombatScreen.tscn's
+    // HandArea/EnemyRow offsets, ScreenChrome's DesignWidth, PileViewPopup's
+    // box. So the extra 101px was dead space under the map that nothing laid
+    // out into, and it was invisible on a 16:9 display - the shape of bug that
+    // ships. Making these screens genuinely responsive is the alternative and a
+    // much larger change; if that is ever done, this check is the thing to
+    // delete, deliberately.
+    private void TestCanvasIsLetterboxedNotExpanded()
+    {
+        var mode = ProjectSettings.GetSetting("display/window/stretch/mode").AsString();
+        Check("stretch_mode_is_canvas_items", mode == "canvas_items",
+            $"expected canvas_items, got '{mode}' (ART_SPEC section 4)");
+
+        var aspect = ProjectSettings.GetSetting("display/window/stretch/aspect").AsString();
+        Check("stretch_aspect_is_keep", aspect == "keep",
+            $"expected keep, got '{aspect}' - a non-16:9 window would grow the canvas past " +
+            "1152x648 and every fixed-offset layout would be wrong (ART_SPEC section 4)");
     }
 
     // ART_SPEC section 8 wants zero SVGs under assets/. This was a ratchet

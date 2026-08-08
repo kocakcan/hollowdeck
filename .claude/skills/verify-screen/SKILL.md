@@ -24,12 +24,18 @@ With no screen names it shoots all of them. Unknown names exit 1 and list the va
 ## Screens
 
 `combat` `combatfull` `combatintents` `combat2` `combat3` `reward` `rewardactclear` `shop` `map`
-`map2` `map3` `rest` `restupgrade` `treasure` `event` `eventpicker` `unlocks` `runend` `mainmenu`
-`settings` `deckpopup` `fade`
+`map2` `map3` `mapfull` `rest` `restupgrade` `treasure` `event` `eventpicker` `unlocks` `runend`
+`mainmenu` `settings` `deckpopup` `fade`
 
 `map2`/`map3` and `combat2`/`combat3` are the later acts — each has its own backdrop tint, title,
 boss sprites and floor count, none of which act 1's shots show. `map3` is also the longest map (10
 floors), which is where node layout runs out of horizontal room first.
+
+`mapfull` is the map's worst case and the one none of the other three can show: 13 relics, which
+wraps the run-status block's icon grid to three rows. That block grows downward out of the top-left
+corner, and the node band used to start at a fixed `y=116` regardless — one row's worth of
+clearance — so from the seventh relic on it was drawn straight over the top-left nodes. Reach for
+it for anything touching `MapScreen` layout or `ScreenChrome`'s block.
 
 `combatfull` is the combat HUD's worst case: 3 enemies, 8 relics, 3 potions. Plain `combat` is 2
 enemies and 1 relic, so it cannot show top-left chrome colliding with the enemy row — which is a
@@ -74,10 +80,12 @@ un-seeded screen renders empty or throws mid-`_Ready`, and the screenshot is wor
   `AnimationScreenshot.cs` and `StyleReferenceScreen.cs` already document.
 - **Godot is not on `PATH`** — use the full path above. `timeout(1)` does not exist on this
   machine either; don't wrap the command in it.
-- Shots are at the project's **1152x648 design size**. The user's real window is much larger and
-  the project stretches (`canvas_items` / `expand`), so content clipped at the bottom of a shot
-  may not clip in their game. Pass `--resolution 1920x1080` before the scene path to check a
-  larger window.
+- Shots are at the project's **1152x648 design size, and that is exactly what a player sees** at
+  any window size. The project stretches `canvas_items` with aspect **`keep`** (ART_SPEC §4), so
+  the canvas is letterboxed to 1152x648 rather than grown — a shot is the whole picture, and
+  anything clipped in one is clipped in the game. This used to be `expand`, where a larger window
+  really did reveal more canvas and a `--resolution 1920x1080` run was worth doing to check; that
+  caveat is gone, and so is the reason to pass the flag.
 
 ## Adding a screen
 

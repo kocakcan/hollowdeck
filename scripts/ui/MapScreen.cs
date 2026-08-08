@@ -38,9 +38,18 @@ public partial class MapScreen : Control
     // floor downward from a fixed y=60 at a fixed 80px pitch, so a four-deep
     // act ended at y=328 and the rest of the canvas was empty (ROADMAP
     // Phase 4).
+    //
+    // TopMargin is a *floor*, not the band top - see BandTop. 116 is what the
+    // status block measures carrying one row of relics, which is why a fixed
+    // 116 survived three phases: the seventh relic wraps the grid to a second
+    // row and the block grows past it.
     private const float TopMargin = 116f;
     private const float BottomMargin = 88f;
     private const float DesignHeight = 648f;
+
+    // Clear air between the status block and the topmost node, when the block
+    // is what decides the band top.
+    private const float BandGap = 12f;
 
     private Control _nodeButtons = null!;
     private readonly Dictionary<string, Vector2> _nodeCenters = new();
@@ -91,9 +100,9 @@ public partial class MapScreen : Control
         // so a player who had just cleared act 2's boss had no way to know a
         // third chapter was what the fresh map in front of them meant.
         ScreenChrome.AddTitle(this, $"Act {RunState.ActIndex + 1} of {ActDatabase.Count} — {act.Name}");
-        ScreenChrome.AddRunStatus(this);
+        var runStatus = ScreenChrome.AddRunStatus(this);
 
-        BuildLayout();
+        BuildLayout(BandTop(runStatus));
         BuildButtons();
         QueueRedraw();
 
@@ -150,7 +159,28 @@ public partial class MapScreen : Control
         DrawPolyline(points, color, highlighted ? 3f : 1.5f, antialiased: true);
     }
 
-    private void BuildLayout()
+    // Where the node band may start: below the run-status block, never above
+    // TopMargin. The block's height is a function of how many relics the run is
+    // carrying (ScreenChrome wraps them 6 to a row), so this is content, not a
+    // constant - at seven relics the second row reaches y~150 and the top node
+    // of a four-wide floor starts at y~117, which put an icon grid and a map
+    // node on the same pixels. The relics are drawn after the nodes and win,
+    // so the node underneath was simply unreadable.
+    //
+    // Vertical is the axis that has the room to give. Indenting the left-hand
+    // floors instead is the other fix and a worse one: floor spacing is already
+    // derived from a width act 3's ten floors do not comfortably fit (104px
+    // against MaxFloorSpacing's 130), so paying for the block out of the
+    // horizontal budget squeezes every act's longest map.
+    //
+    // GetCombinedMinimumSize rather than Size, because this runs in _Ready:
+    // the container has not sorted yet and Size is still zero. The minimum is
+    // computed on demand from the children already added, which is exactly the
+    // height the block will settle at - it has no expand flags.
+    private static float BandTop(Control runStatus) =>
+        Mathf.Max(TopMargin, runStatus.Position.Y + runStatus.GetCombinedMinimumSize().Y + BandGap);
+
+    private void BuildLayout(float bandTop)
     {
         // Derived from the longest act that has to fit, not a constant - see
         // RightMargin. GroupBy's key is the floor index, so Max() + 1 is the
@@ -166,11 +196,11 @@ public partial class MapScreen : Control
         // stretch into a ladder.
         var floors = RunState.MapNodes.GroupBy(n => n.Floor).ToList();
         int widestFloor = floors.Count == 0 ? 1 : floors.Max(f => f.Count());
-        float availableHeight = DesignHeight - TopMargin - BottomMargin - NodeSize;
+        float availableHeight = DesignHeight - bandTop - BottomMargin - NodeSize;
         float columnSpacing = widestFloor <= 1
             ? MaxColumnSpacing
             : Mathf.Min(MaxColumnSpacing, availableHeight / (widestFloor - 1));
-        float bandCenterY = TopMargin + (availableHeight + NodeSize) / 2f;
+        float bandCenterY = bandTop + (availableHeight + NodeSize) / 2f;
 
         foreach (var floor in floors)
         {
