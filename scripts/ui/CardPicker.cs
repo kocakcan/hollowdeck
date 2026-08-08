@@ -129,29 +129,33 @@ public static class CardPicker
     // cards", which reads as a list, and wrapping means the whole grid is
     // walkable on one axis. Only the last row leads out to `exit`, and only
     // downward - Up from Cancel comes back in.
-    private static void WireGridNavigation(GridContainer grid, List<CardView> cards, Control? exit)
+    // internal rather than private: LibraryScreen reuses this for its
+    // relic/potion tile grids too, not just CardViews - IReadOnlyList<Control>
+    // is what lets both callers share it (List<CardView> already satisfies it
+    // covariantly, so this call site needed no change).
+    internal static void WireGridNavigation(GridContainer grid, IReadOnlyList<Control> tiles, Control? exit)
     {
-        if (cards.Count == 0) return;
+        if (tiles.Count == 0) return;
 
         int columns = Mathf.Max(1, grid.Columns);
-        for (int i = 0; i < cards.Count; i++)
+        for (int i = 0; i < tiles.Count; i++)
         {
-            var card = cards[i];
-            if (i > 0) card.FocusNeighborLeft = card.GetPathTo(cards[i - 1]);
-            if (i + 1 < cards.Count) card.FocusNeighborRight = card.GetPathTo(cards[i + 1]);
-            if (i >= columns) card.FocusNeighborTop = card.GetPathTo(cards[i - columns]);
+            var card = tiles[i];
+            if (i > 0) card.FocusNeighborLeft = card.GetPathTo(tiles[i - 1]);
+            if (i + 1 < tiles.Count) card.FocusNeighborRight = card.GetPathTo(tiles[i + 1]);
+            if (i >= columns) card.FocusNeighborTop = card.GetPathTo(tiles[i - columns]);
 
             // Tab follows the same order, so the two ways of walking a grid
             // can't disagree about what comes next.
-            card.FocusPrevious = i > 0 ? card.GetPathTo(cards[i - 1]) : new NodePath();
-            card.FocusNext = i + 1 < cards.Count ? card.GetPathTo(cards[i + 1]) : new NodePath();
+            card.FocusPrevious = i > 0 ? card.GetPathTo(tiles[i - 1]) : new NodePath();
+            card.FocusNext = i + 1 < tiles.Count ? card.GetPathTo(tiles[i + 1]) : new NodePath();
 
-            Control? below = i + columns < cards.Count ? cards[i + columns] : exit;
+            Control? below = i + columns < tiles.Count ? tiles[i + columns] : exit;
             card.FocusNeighborBottom = below is null ? new NodePath() : card.GetPathTo(below);
         }
 
         if (exit is null) return;
-        var lastRowFirst = cards[cards.Count - 1 - (cards.Count - 1) % columns];
+        var lastRowFirst = tiles[tiles.Count - 1 - (tiles.Count - 1) % columns];
         exit.FocusNeighborTop = exit.GetPathTo(lastRowFirst);
         exit.FocusPrevious = exit.GetPathTo(lastRowFirst);
     }

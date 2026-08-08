@@ -151,6 +151,11 @@ public partial class ScreenShot : Node
         ["event"] = new("res://scenes/EventScreen.tscn", SeedEvent),
         ["eventpicker"] = new("res://scenes/EventScreen.tscn", SeedEventPicker, OpenEventPicker),
         ["unlocks"] = new("res://scenes/MetaProgressionScreen.tscn", SeedUnlocks),
+        ["library"] = new("res://scenes/LibraryScreen.tscn", SeedNothing),
+        // The Relics pane, reached by pressing its category button - like the
+        // rest site's Smith and the shop's card-removal grid, unreachable
+        // without the click.
+        ["libraryrelics"] = new("res://scenes/LibraryScreen.tscn", SeedNothing, OpenLibraryRelics),
         ["runend"] = new("res://scenes/RunEndScreen.tscn", SeedRunEnd),
         ["mainmenu"] = new("res://scenes/MainMenu.tscn", SeedNothing),
         ["settings"] = new("res://scenes/SettingsScreen.tscn", SeedNothing),
@@ -666,6 +671,9 @@ public partial class ScreenShot : Node
     private static void OpenRestUpgrade(Node screen) =>
         screen.GetNode<Button>("CenterContainer/VBoxContainer/ChoiceColumn/SmithButton")
             .EmitSignal(Button.SignalName.Pressed);
+
+    private static void OpenLibraryRelics(Node screen) =>
+        screen.GetNode<Button>("Content/CategoryRow/Relics").EmitSignal(Button.SignalName.Pressed);
 
     private static void SeedTreasure() => RunState.Relics = new List<RelicInstance>();
 

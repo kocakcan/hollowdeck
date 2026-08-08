@@ -17,8 +17,6 @@ namespace Hollowdeck.UI;
 // underneath them.
 public partial class MetaProgressionScreen : Control
 {
-    private static readonly Color LockedTint = new(0.55f, 0.55f, 0.58f);
-
     private Label _progressLabel = null!;
     private Label _nextUnlockLabel = null!;
     private ProgressBar _nextUnlockBar = null!;
@@ -106,7 +104,7 @@ public partial class MetaProgressionScreen : Control
     {
         var panel = new PanelContainer();
         panel.AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());
-        if (!unlocked) panel.Modulate = LockedTint;
+        if (!unlocked) panel.Modulate = ChromeStyles.LockedTint;
 
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 10);

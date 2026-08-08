@@ -15,7 +15,7 @@ public partial class RunManager : Node
     public enum ScreenState
     {
         MainMenu, RunSetup, Map, Combat, Event, Rest, Shop,
-        Treasure, Reward, Victory, Defeat, MetaProgression, Settings,
+        Treasure, Reward, Victory, Defeat, MetaProgression, Library, Settings,
     }
 
     private static readonly Dictionary<ScreenState, string> ScenePaths = new()
@@ -30,6 +30,7 @@ public partial class RunManager : Node
         { ScreenState.Victory, "res://scenes/RunEndScreen.tscn" },
         { ScreenState.Defeat, "res://scenes/RunEndScreen.tscn" },
         { ScreenState.MetaProgression, "res://scenes/MetaProgressionScreen.tscn" },
+        { ScreenState.Library, "res://scenes/LibraryScreen.tscn" },
         { ScreenState.Settings, "res://scenes/SettingsScreen.tscn" },
         { ScreenState.Event, "res://scenes/EventScreen.tscn" },
         // RunSetup deliberately stays unregistered - no pre-run choices
