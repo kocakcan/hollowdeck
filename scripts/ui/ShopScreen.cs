@@ -121,9 +121,11 @@ public partial class ShopScreen : Control
         // conflated into a single badge. Relics/potions have no CardView
         // equivalent, so they get the tile treatment below.
         var cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
-        // Cards go through CardPool so the stock is rarity-weighted the same
-        // way a fight reward is; relics and potions keep the plain uniform
-        // Sample below, since neither carries a rarity tier today.
+        // Cards go through CardPool and potions through PotionPool, so the
+        // stock is rarity-weighted the same way a fight reward is. Relics keep
+        // the plain uniform Sample below, since a relic still carries no tier -
+        // that is ROADMAP Phase 9's relic-tier item, and it is the change that
+        // retires the helper.
         foreach (var card in CardPool.Sample(MetaProgressionManager.Instance.UnlockedCards(), 4, rng))
         {
             AddCardOffer(card, cardScene);
@@ -139,8 +141,12 @@ public partial class ShopScreen : Control
                 () => RunState.Relics.Add(new RelicInstance(relic)), ArtAssets.RelicIcon(relic.Id));
         }
 
-        // All potions unlocked too - same reasoning as cards above.
-        foreach (var potion in Sample(PotionDatabase.All.ToList(), 2, rng))
+        // All potions unlocked too - same reasoning as cards above. The tier
+        // is not shown on the tile and the price is flat at PotionPrice, so
+        // rarity reaches the shop only as "how often is this stocked"; a price
+        // that moved with an attribute the tile does not render would read as
+        // a bug rather than as a tier.
+        foreach (var potion in PotionPool.Sample(PotionDatabase.All, 2, rng))
         {
             AddOfferTile(potion.Name, "Potion",
                 EffectDescriptionFormatter.Describe(potion.Effects, new DescribeContext(TargetType: potion.Target)),
@@ -236,7 +242,9 @@ public partial class ShopScreen : Control
         _removeCardButton.Visible = visible;
     }
 
-    // Uniform sampling, for the pools that have no rarity to weight by.
+    // Uniform sampling, for the relic pool - the last one with no rarity to
+    // weight by. Cards have gone through CardPool since Phase 6 and potions
+    // through PotionPool since Phase 9; relic tiers are what retires this.
     private static List<T> Sample<T>(List<T> pool, int count, System.Random rng)
     {
         var copy = new List<T>(pool);

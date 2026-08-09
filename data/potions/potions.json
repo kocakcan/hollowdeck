@@ -2,6 +2,7 @@
   {
     "id": "healing_potion",
     "name": "Healing Potion",
+    "rarity": "Common",
     "target": "Self",
     "effects": [
       { "action": "heal", "amount": 20, "scope": "Self" }
@@ -10,6 +11,7 @@
   {
     "id": "block_potion",
     "name": "Block Potion",
+    "rarity": "Common",
     "target": "Self",
     "effects": [
       { "action": "gain_block", "amount": 12, "scope": "Self" }
@@ -18,6 +20,7 @@
   {
     "id": "fire_potion",
     "name": "Fire Potion",
+    "rarity": "Common",
     "target": "SingleEnemy",
     "effects": [
       { "action": "deal_damage", "amount": 20, "scope": "Target" }
@@ -26,6 +29,7 @@
   {
     "id": "weak_potion",
     "name": "Weak Potion",
+    "rarity": "Uncommon",
     "target": "AllEnemies",
     "effects": [
       { "action": "apply_status", "status": "Weak", "amount": 2, "scope": "Target" }
@@ -34,6 +38,7 @@
   {
     "id": "strength_potion",
     "name": "Strength Potion",
+    "rarity": "Rare",
     "target": "Self",
     "effects": [
       { "action": "apply_status", "status": "Strength", "amount": 2, "scope": "Self" }
@@ -42,6 +47,7 @@
   {
     "id": "energy_potion",
     "name": "Energy Potion",
+    "rarity": "Common",
     "target": "Self",
     "effects": [
       { "action": "gain_energy", "amount": 2, "scope": "Self" }
@@ -50,6 +56,7 @@
   {
     "id": "focus_potion",
     "name": "Focus Potion",
+    "rarity": "Common",
     "target": "Self",
     "effects": [
       { "action": "draw_cards", "amount": 3, "scope": "Self" }
@@ -58,6 +65,7 @@
   {
     "id": "poison_potion",
     "name": "Poison Potion",
+    "rarity": "Uncommon",
     "target": "SingleEnemy",
     "effects": [
       { "action": "apply_status", "status": "Poison", "amount": 6, "scope": "Target" }
@@ -66,6 +74,7 @@
   {
     "id": "elixir_of_vigor",
     "name": "Elixir of Vigor",
+    "rarity": "Rare",
     "target": "Self",
     "effects": [
       { "action": "heal", "amount": 12, "scope": "Self" },
@@ -75,6 +84,7 @@
   {
     "id": "vulnerability_potion",
     "name": "Vulnerability Potion",
+    "rarity": "Common",
     "target": "SingleEnemy",
     "effects": [
       { "action": "apply_status", "status": "Vulnerable", "amount": 2, "scope": "Target" }
@@ -83,6 +93,7 @@
   {
     "id": "greater_block_potion",
     "name": "Greater Block Potion",
+    "rarity": "Uncommon",
     "target": "Self",
     "effects": [
       { "action": "gain_block", "amount": 18, "scope": "Self" }
@@ -91,6 +102,7 @@
   {
     "id": "swift_potion",
     "name": "Swift Potion",
+    "rarity": "Uncommon",
     "target": "Self",
     "effects": [
       { "action": "draw_cards", "amount": 2, "scope": "Self" },

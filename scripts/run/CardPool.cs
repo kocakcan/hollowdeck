@@ -43,61 +43,24 @@ public static class CardPool
     /// `count` distinct cards drawn without replacement, weighted by rarity.
     /// Returns fewer only if the pool itself is smaller.
     ///
-    /// Draws a *tier* first and then a uniform card within it, rather than
-    /// weighting each card by its own rarity. The difference matters: the
-    /// offerable pool is roughly half Common and half Uncommon with a thin
-    /// Rare tier (re-measure with tools/balance-report.sh rather than trusting
-    /// a number written here), so per-card weighting would
-    /// hand Uncommon more total probability than Common purely because there
-    /// happen to be more of them, and every card authored later would silently
-    /// re-tune the odds of every tier.
-    public static List<CardDefinition> Sample(IEnumerable<CardDefinition> pool, int count, Random rng)
-    {
+    /// The tier-first draw itself lives in RarityPool, shared with PotionPool.
+    /// What stays here is the pair of things that are about *cards*: the
+    /// weights above, and the IsPlayable filter below.
+    public static List<CardDefinition> Sample(IEnumerable<CardDefinition> pool, int count, Random rng) =>
         // Curses and Status cards live in CardDatabase like any other row, and
         // nothing on the unlock track gates them (MetaProgressionManager
         // treats an ungated id as unlocked), so without this they would be
         // offered as rewards and stocked in the shop. Filtering here rather
         // than at each caller is the whole reason this class exists: it is the
         // single place "which cards does the player get offered" is decided,
-        // and a fourth grant site added later inherits the rule for free.
-        var remaining = pool.Where(c => c.IsPlayable)
-            .GroupBy(c => c.Rarity)
-            .ToDictionary(g => g.Key, g => g.ToList());
-        var picked = new List<CardDefinition>();
-
-        while (picked.Count < count)
-        {
-            var tier = PickTier(remaining, rng);
-            if (tier is null) break; // pool exhausted
-            var cards = remaining[tier.Value];
-            int index = rng.Next(cards.Count);
-            picked.Add(cards[index]);
-            cards.RemoveAt(index);
-            if (cards.Count == 0) remaining.Remove(tier.Value);
-        }
-
-        return picked;
-    }
+        // and a fourth grant site added later inherits the rule for free. It
+        // stays *here* rather than moving down into RarityPool for the same
+        // reason - it is a card rule, and a generic sampler is not where a
+        // reader would look for it.
+        RarityPool.Sample(pool.Where(c => c.IsPlayable), count, rng, c => c.Rarity, WeightOf);
 
     /// One card, weighted the same way. For the event outcome, which grants a
     /// single card and previously did its own uniform pick.
     public static CardDefinition? SampleOne(IEnumerable<CardDefinition> pool, Random rng) =>
         Sample(pool, 1, rng).FirstOrDefault();
-
-    // Roulette over the tiers that still have cards in them.
-    private static Rarity? PickTier(Dictionary<Rarity, List<CardDefinition>> remaining, Random rng)
-    {
-        int total = remaining.Keys.Sum(WeightOf);
-        if (total <= 0) return null;
-
-        int roll = rng.Next(total);
-        foreach (var tier in remaining.Keys.OrderBy(t => t))
-        {
-            roll -= WeightOf(tier);
-            if (roll < 0) return tier;
-        }
-        // Unreachable while the weights are positive, but a tier must come
-        // back rather than the caller silently getting a short list.
-        return remaining.Keys.First();
-    }
 }

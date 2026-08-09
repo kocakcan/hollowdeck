@@ -107,8 +107,9 @@ migration) and `run_save.json` (autosaved on Map/Rest/Shop/Treasure/Reward/Event
 never mid-combat). Both store instance IDs referencing definitions, never embedded definitions,
 so balance tweaks don't invalidate existing saves.
 
-`RngStreams` splits randomness into four seeded streams derived from the run seed — `Combat`,
-`EnemyAI`, `Shop`, `Map` — so drawing an extra card can't shift what the shop stocks. The `Map`
+`RngStreams` splits randomness into five seeded streams derived from the run seed — `Combat`,
+`EnemyAI`, `Shop`, `Map`, `Drops` — so drawing an extra card can't shift what the shop stocks, and
+whether a fight dropped a potion can't either. The `Map`
 stream also picks which of an act's bosses a run gets, so that's reproducible from the seed too.
 
 Some map nodes are drawn as a `?` and only show what they are once you walk in. That's
@@ -178,7 +179,9 @@ attacks to 1 and wears off by 1 a turn. A genuinely new
 mechanic means a new `IEffect` in `scripts/effects/` registered in `EffectRegistry` — reach for
 that only when the mechanic can't be composed from existing actions.
 
-**A potion** (`data/potions/potions.json`) has the same `effects` shape. **An enemy**
+**A potion** (`data/potions/potions.json`) has the same `effects` shape, plus a `rarity`
+(`Common`/`Uncommon`/`Rare`) that decides how often it is offered — by the shop, by the
+`gain_potion` event, and by the per-act drop roll after a won fight. **An enemy**
 (`data/enemies/enemies.json`) is HP plus a list of moves, each pairing a displayed `intent` with
 the `effects` it will actually resolve; `aiType` picks the intent strategy (`sequential`,
 `weighted_random`, `phase_threshold`, or `wake_on_damage` — the last two both switch to the

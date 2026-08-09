@@ -29,7 +29,7 @@ rest of Phases 9 through 10 own. Phase 9 is open and its first item, the `?` nod
 | ~~`StatusType`~~ | ~~11~~ | **Closed in Phase 8** — `Artifact`, `Thorns`, `Intangible`, `Plating` make 15 |
 | ~~Enemy AI types~~ | ~~3, all "pick a move off a list"~~ | **Closed in Phase 8** — `summon_enemy`, `onDeath`, escape, and `wake_on_damage` make four pickers |
 | `RelicDefinition` | no tier field | A boss grants from the same pool 150 gold buys from |
-| `PotionDefinition` | no rarity field, no combat drop | The three-slot belt is nearly always empty |
+| ~~`PotionDefinition`~~ | ~~no rarity field, no combat drop~~ | **Closed in Phase 9** — `Rarity` at 65/25/10 across all four grant sites, and a per-act drop roll |
 
 **The load-bearing row was the third**, and it is the one Phase 7 opened first. While no effect
 could add a card to a pile, Curses and Status cards were unauthorable, "add a copy of this to your
@@ -366,12 +366,52 @@ distribution held against 20k samples of the real picker).
     node nothing routes from and changed no screen — a soft-lock rather than a crash. Split out as
     `MapScreen.EnterNode`, which is also where the reveal lives (not `BuildButtons`: revealing on
     render would show every `?` a floor early), and every enum member is now driven through it.
-- **Potion drops from combat.** The three-slot belt is nearly always empty because potions are shop-
-  and event-only — `RunState.Potions.Add` has exactly two call sites in the whole tree. A per-fight
-  drop roll is what turns potions into a live combat resource instead of a shop line item. Ships with
-  **potion rarity**, which `PotionDefinition` has no field for at all, weighted by copying
-  `CardPool`'s draw-a-tier-then-an-item shape rather than reinventing it — that shape exists
-  precisely so authoring more of one tier cannot silently retune the others.
+- ~~**Potion drops from combat.**~~ **Shipped**, and the forecast was right about the mechanism and
+  wrong about where the work was. Rarity landed as forecast: `PotionDefinition.Rarity` reusing
+  `CardDefinition`'s enum, weighted 65/25/10 across all four grant sites, with the tier-first draw
+  *extracted* into `RarityPool` rather than copied — the weights stay split (that is the
+  `BlockMath`/`DamageMath` argument), the algorithm does not. Drop rates are per-act data beside the
+  gold dials (`ActDefinition.PotionDropPercent`/`ElitePotionDropPercent`), rolled off a fifth RNG
+  stream, `RngStreams.Drops`. No save-version bump: potions save by id, and the rates live in
+  `acts.json`.
+
+  Four things the forecast did not contain, in ascending order of how much they cost:
+
+  - **The tier number that matters is per *row*, not per tier**, because tier-first sampling divides
+    a tier's weight among its members. At 6/4/2 rows that is 10.8% / 6.3% / 5.0% — monotone, which is
+    the whole point — but authoring two more Uncommon potions and nothing else would put an Uncommon
+    *below* a Rare, and every assertion anyone would naturally write is about a tier's share and
+    would stay green through it. That is one check, and it is the highest-value one in the batch.
+  - **A drop rate defaulting to 0 is the one absent-is-zero field in the data layer whose default is
+    wrong.** Everywhere else a missing key reads as "this act didn't have that", which is true; here
+    it silently switches the feature off for that act with nothing thrown. `ActSmokeTest` asserts
+    both keys are authored above zero, in range, and not transposed.
+  - **The item uncovered a live double-grant bug that had nothing to do with potions.**
+    `CombatScreen`'s Continue handler had a guard on the *stats* fold and none on the rewards below
+    it, and two independent entry points (the button, and `hd_confirm`/`hd_end_turn`, which is
+    deliberately not focus-based). `ScreenFade` holds the scene up long enough that a click plus an
+    Enter awarded the gold twice and granted **two relics**. Fixed as `_continueResolved` over the
+    whole handler.
+  - **The presentation was the real work, and the first answer to it was wrong.** A potion tile
+    beside the card fan needed a guard on the card pick and a retitled button, because taking a card
+    called `Advance()` and whichever reward the player touched first forfeited the other. Those
+    patches were the tell: the screen was a card fan pretending to be a reward list. It is an actual
+    list now — gold, relic, potion and "add a card to your deck" are rows, claiming one removes it,
+    the fan is a modal behind its own row, and one button leaves. Gold and the relic stopped being
+    granted before the screen loaded, which is what made them rows rather than announcements.
+
+    Two things fell out of that which are worth carrying: `MarkClaimed` has to **re-save**, because
+    `RunManager` autosaves on *entering* a screen and the save taken when Reward opened has no claims
+    in it; and **opening a modal is the one case `Regrab` cannot handle** — `RegrabNow` deliberately
+    leaves an existing focus owner alone, so the row just pressed kept the ring behind the dim. Focus
+    has to be *taken* into an overlay, and the list has to leave the focus chain rather than merely
+    be dimmed. A 0.75 scrim also turned out not to be enough on its own: a column of gold headings
+    read straight through it, the same failure the event picker had, and only a screenshot shows it.
+
+  Landing: the encounter-cost, curve, band, boss and threshold tables byte-identical against `main`
+  — the only lines that moved in `tools/balance-report.sh` are the two new ones. 4.5 expected drops
+  a run against a three-slot belt, 8.1 on the best path, banded in `BalanceSmokeTest` at both ends
+  because both ends are real failures.
 - **Relic tiers.** `RelicDefinition` has no tier field, so all four grant sites (elite/boss reward,
   treasure, shop, event) draw one flat pool and a boss can hand over what 150 gold would have.
   `RelicTier { Common, Uncommon, Rare, Boss, Shop, Event }`, one pool per site.
@@ -394,7 +434,20 @@ their type in the tooltip as well as the icon while their neighbours still show 
 on entry — plus every `MapNodeType` routing to a screen through the extracted `EnterNode`),
 `RunSaveSmokeTest` (a concealed node surviving a round trip in both directions, and a v3 save whose
 map nodes omit the flag loading as visible), `ScreenSmokeTest` for the boss-relic choice and
-RunSetup, `EffectSmokeTest` for potion-tier weighting.
+RunSetup.
+
+For the potion pass: `EffectSmokeTest` (`RarityPool`'s algorithm against a synthetic pool rather
+than real content — drains every tier once, fixed order, renormalises an exhausted tier, and
+actually reads the weight function; `PotionPool`'s rare share; every potion row *authoring* a
+rarity, read out of `potions.json` as text because the enum has no null; and the per-row
+monotonicity above), `ActSmokeTest` (both drop rates authored, in range, and not transposed),
+`BalanceSmokeTest` (a boss never rolling, every act's fights actually rolling, and the per-run yield
+banded), `ScreenSmokeTest` (the reward list: a row per offered reward and none for one not offered,
+gold and the relic granted only on the claim, a claim that cannot repeat, the potion row refused but
+still shown against a full belt, the card row opening the fan and a pick returning to the list
+rather than leaving the screen), `KeyboardSmokeTest` (claiming the focused row leaving the ring
+somewhere legal, and the modal taking focus while the list leaves the focus chain),
+`Phase4ContentSmokeTest` (an elite reward *offered* rather than banked before the screen).
 
 ## Phase 10 — Ascension
 

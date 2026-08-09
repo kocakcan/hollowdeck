@@ -36,6 +36,8 @@
     "goldPerEnemy": 5,
     "eliteGold": 45,
     "bossGold": 60,
+    "potionDropPercent": 40,
+    "elitePotionDropPercent": 60,
     "clearMaxHpBonus": 8,
     "clearHealPercent": 100
   },
@@ -75,6 +77,8 @@
     "goldPerEnemy": 7,
     "eliteGold": 60,
     "bossGold": 80,
+    "potionDropPercent": 30,
+    "elitePotionDropPercent": 55,
     "clearMaxHpBonus": 8,
     "clearHealPercent": 100
   },
@@ -114,6 +118,8 @@
     "goldPerEnemy": 9,
     "eliteGold": 75,
     "bossGold": 0,
+    "potionDropPercent": 25,
+    "elitePotionDropPercent": 50,
     "clearMaxHpBonus": 0,
     "clearHealPercent": 0
   }

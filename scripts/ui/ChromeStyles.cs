@@ -169,6 +169,18 @@ public static class ChromeStyles
         return style;
     }
 
+    // The one place a Rarity becomes a colour. Pulled out of CardFrameStyle
+    // when potions gained a tier and the reward screen's drop tile needed the
+    // same three colours: a second switch would be a second place for the
+    // ramp to drift, and rarity's whole job in this codebase is that a border
+    // colour means the same thing wherever it appears.
+    public static Color RarityColor(Rarity rarity) => rarity switch
+    {
+        Rarity.Uncommon => UiTheme.Palette.RarityUncommon,
+        Rarity.Rare => UiTheme.Palette.RarityRare,
+        _ => UiTheme.Palette.RarityCommon,
+    };
+
     // Two independent color channels rather than one fighting a second
     // painted on top of it: fill reads CardType (Attack/Skill), border reads
     // Rarity (Common/Uncommon/Rare). Hover brightens whichever border color
@@ -178,12 +190,7 @@ public static class ChromeStyles
     // gold-with-a-green-cast rather than one signal replacing the other.
     public static StyleBoxFlat CardFrameStyle(CardType type, Rarity rarity, bool hovered, bool isUpgraded = false)
     {
-        var borderColor = rarity switch
-        {
-            Rarity.Uncommon => UiTheme.Palette.RarityUncommon,
-            Rarity.Rare => UiTheme.Palette.RarityRare,
-            _ => UiTheme.Palette.RarityCommon,
-        };
+        var borderColor = RarityColor(rarity);
         if (isUpgraded) borderColor = borderColor.Lerp(UiTheme.Palette.UpgradeAccent, 0.35f);
         if (hovered) borderColor = borderColor.Lerp(Colors.White, 0.4f);
 

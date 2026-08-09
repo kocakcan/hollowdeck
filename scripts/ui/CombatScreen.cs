@@ -1355,17 +1355,25 @@ public partial class CombatScreen : Control
         tween.TweenProperty(_endTurnButton, "modulate", Colors.White, 0.6);
     }
 
+    // Guards the whole Continue handler against being run twice. There are two
+    // independent ways in - the button's Pressed signal and hd_confirm /
+    // hd_end_turn in _UnhandledInput, which is deliberately *not* focus-based
+    // (see the CombatEnd branch there) - and leaving through
+    // RunManager.ChangeScreen is not instant, because ScreenFade holds the
+    // scene up for the length of the fade. A click plus an Enter inside that
+    // window used to award CombatContext.GoldReward twice and grant *two*
+    // relics, since GrantRewardRelic adds to RunState.Relics as it picks.
+    //
+    // This started life as _statsFolded, covering only FoldCombatStatsIntoRun.
+    // The stats were the half that had a guard and the rewards were the half
+    // that needed one.
+    private bool _continueResolved;
+
     // Folds this fight's tallies into the run-long RunStats that RunScore
     // reads at the end of the run. Counted on a loss too - the enemies the
     // player killed in the fight that finally got them still happened.
-    // _statsFolded guards against a double Continue press double-counting.
-    private bool _statsFolded;
-
     private void FoldCombatStatsIntoRun()
     {
-        if (_statsFolded) return;
-        _statsFolded = true;
-
         var stats = RunState.Stats;
         stats.EnemiesSlain += _combat.EnemiesKilled;
         if (_combat.LargestSingleHit >= RunScore.OverkillDamage) stats.OverkillEarned = true;
@@ -1387,13 +1395,15 @@ public partial class CombatScreen : Control
 
     private void OnContinuePressed()
     {
+        if (_continueResolved) return;
+        _continueResolved = true;
+
         FoldCombatStatsIntoRun();
 
         if (_combat.Outcome == CombatOutcome.Win)
         {
             RunState.PlayerCurrentHp = _combat.Player.CurrentHp;
             RunState.PlayerMaxHp = _combat.Player.MaxHp;
-            RunState.Gold += CombatContext.GoldReward;
 
             // Only the *final* act's boss ends the run. Any earlier boss
             // advances to the next act and then hands out a boss reward -
@@ -1401,11 +1411,28 @@ public partial class CombatScreen : Control
             // Map lands on the new act with no extra screen or flag needed.
             if (CombatContext.IsBoss && RunState.IsFinalAct)
             {
+                // Banked here rather than offered, because this is the one win
+                // with no reward screen behind it to claim from. The final
+                // act's BossGold happens to be 0 today; relying on that instead
+                // of this line would make a data edit silently eat the reward.
+                RunState.Gold += CombatContext.GoldReward;
                 RunEndContext.Outcome = RunEndOutcome.Win;
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Victory);
             }
             else
             {
+                // Every field below is an *offer*. Nothing here touches
+                // RunState - RewardScreen's list is what grants, one row at a
+                // time. Gold used to be banked a few lines above this and the
+                // relic granted as it was picked, which made two of the four
+                // rows things the player already had.
+                //
+                // Rolled before AdvanceAct below, which moves RunState.ActIndex
+                // and so changes which act's rates RollPotionDrop would read.
+                // A boss never rolls, so the ordering is inert today - it is
+                // written this way so it stays inert if that ever changes.
+                RewardContext.PotionDrop = RollPotionDrop();
+
                 // Assigned unconditionally, so an act-clear banner can't be
                 // left over from the last boss onto an ordinary fight's reward.
                 RewardContext.ActCleared = CombatContext.IsBoss ? RunState.AdvanceAct() : null;
@@ -1413,8 +1440,9 @@ public partial class CombatScreen : Control
                 RewardContext.GoldAwarded = CombatContext.GoldReward;
                 // A boss is worth a guaranteed relic too, not just elites.
                 RewardContext.GuaranteedRelic = CombatContext.IsElite || CombatContext.IsBoss
-                    ? GrantRewardRelic()
+                    ? PickRewardRelic()
                     : null;
+                RewardContext.Claimed.Clear();
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Reward);
             }
         }
@@ -1428,7 +1456,13 @@ public partial class CombatScreen : Control
     // Elite and boss fights guarantee a relic on top of the usual card/gold
     // reward - same unowned+unlock-filtered pool ShopScreen/TreasureScreen
     // already draw from, sampled from the dedicated Shop RNG stream.
-    private static RelicDefinition? GrantRewardRelic()
+    //
+    // Picks, and stops there. This was GrantRewardRelic and added to
+    // RunState.Relics in the same breath, which is why a double Continue press
+    // used to hand over two (see _continueResolved) - and why the reward screen
+    // was announcing a relic the player already had. Claiming the row is what
+    // grants it now.
+    private static RelicDefinition? PickRewardRelic()
     {
         var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
         var available = RelicDatabase.All
@@ -1436,9 +1470,30 @@ public partial class CombatScreen : Control
             .ToList();
         if (available.Count == 0) return null;
 
-        var picked = available[RngStreams.Shop.Next(available.Count)];
-        RunState.Relics.Add(new RelicInstance(picked));
-        return picked;
+        return available[RngStreams.Shop.Next(available.Count)];
+    }
+
+    // Whether this fight offers a potion, and which one. Returns the offer;
+    // RewardScreen's tile is what actually grants it, so nothing here touches
+    // RunState and re-running it cannot hand out two.
+    //
+    // A boss never rolls. It already guarantees a relic and, for acts I and II,
+    // an act-clear banner carrying a max-HP bonus and a heal - a third reward
+    // on that screen makes the guaranteed one read as noise. Combat and Elite
+    // roll at rates authored per act beside the gold they pay, because how much
+    // a room gives is a pacing dial and act I is where the belt is emptiest.
+    //
+    // BalanceModel.NodePotionPercent mirrors this switch. The two have to agree
+    // or the report prices a drop table the game does not play.
+    private static PotionDefinition? RollPotionDrop()
+    {
+        if (CombatContext.IsBoss) return null;
+
+        var act = RunState.CurrentAct;
+        int percent = CombatContext.IsElite ? act.ElitePotionDropPercent : act.PotionDropPercent;
+        if (RngStreams.Drops.Next(100) >= percent) return null;
+
+        return PotionPool.SampleOne(PotionDatabase.All, RngStreams.Drops);
     }
 
     private static List<CardDefinition> SampleCardChoices(int count)

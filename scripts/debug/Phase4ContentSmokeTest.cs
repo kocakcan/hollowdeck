@@ -1055,21 +1055,35 @@ public partial class Phase4ContentSmokeTest : Node
 
         // Simulate the win-screen's Continue click (OnContinuePressed is
         // private; the button's own Pressed signal is the real entry point
-        // a player uses, so drive it the same way). RewardContext.
-        // GuaranteedRelic/RunState.Relics are both set before
-        // OnContinuePressed calls ChangeScreen, so the checks below are
-        // accurate even though this logs one harmless "parent busy" engine
-        // error - ChangeSceneToFile doesn't like being called on the
-        // current scene from inside this test's own _Ready() call stack,
-        // which none of the other debug smoke tests trigger.
+        // a player uses, so drive it the same way). RewardContext is fully
+        // assigned before OnContinuePressed calls ChangeScreen, so the checks
+        // below are accurate even though this logs one harmless "parent busy"
+        // engine error - ChangeSceneToFile doesn't like being called on the
+        // current scene from inside this test's own _Ready() call stack, which
+        // none of the other debug smoke tests trigger.
         int relicsBefore = RunState.Relics.Count;
+        int goldBefore = RunState.Gold;
         var continueButton = instance.GetNode<Button>("CombatEndPanel/ContinueButton");
         continueButton.EmitSignal(Button.SignalName.Pressed);
 
-        Check("elite_reward_grants_a_guaranteed_relic", RewardContext.GuaranteedRelic is not null,
+        Check("elite_reward_offers_a_guaranteed_relic", RewardContext.GuaranteedRelic is not null,
             "RewardContext.GuaranteedRelic was null");
-        Check("elite_reward_relic_actually_added_to_run", RunState.Relics.Count == relicsBefore + 1,
-            $"relics={RunState.Relics.Count}");
+
+        // Offered, not granted - and that is the assertion now, not an
+        // accident of where the test stops. Every reward on that screen is a
+        // row the player claims, so a relic already in RunState by the time the
+        // screen loads would be a row announcing something they already had.
+        // ScreenSmokeTest.reward_relic_is_only_granted_when_claimed covers the
+        // other half.
+        Check("elite_reward_relic_is_not_granted_before_the_screen",
+            RunState.Relics.Count == relicsBefore, $"relics={RunState.Relics.Count}");
+        // Only that it was not banked. Whether this fixture seeded a nonzero
+        // CombatContext.GoldReward is not this test's business - the amount is
+        // ScreenSmokeTest's, on the row that shows it.
+        Check("elite_reward_gold_is_not_banked_before_the_screen", RunState.Gold == goldBefore,
+            $"gold went {goldBefore} -> {RunState.Gold} before the player claimed anything");
+        Check("elite_reward_starts_with_nothing_claimed", RewardContext.Claimed.Count == 0,
+            $"claimed={string.Join(",", RewardContext.Claimed)} - a stale claim from the last fight");
 
         instance.QueueFree();
     }

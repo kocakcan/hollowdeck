@@ -70,6 +70,7 @@ public partial class ArtScreenshot : Node
 
         RewardContext.GoldAwarded = 35;
         RewardContext.GuaranteedRelic = null;
+        RewardContext.PotionDrop = null;
         RewardContext.CardChoices = new List<CardDefinition>
         {
             CardDatabase.Get("strike"), CardDatabase.Get("bash"), CardDatabase.Get("shrug_it_off"),
