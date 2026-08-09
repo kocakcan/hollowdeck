@@ -264,7 +264,12 @@ public partial class MapScreen : Control
 
                 // Kept on unreachable nodes on purpose: reading the route ahead
                 // is how this genre is played. Only the *highlight* goes away.
-                TooltipText = NodeLabel(node.Type),
+                //
+                // A concealed node is the one thing that route-reading does not
+                // get, and the tooltip is the easiest place to give it away by
+                // accident - node.Type holds the truth from generation onward,
+                // so anything rendering it unguarded leaks the whole mechanic.
+                TooltipText = node.Concealed ? ConcealedLabel : NodeLabel(node.Type),
             };
             // Boss wins over the trail style below. The two cannot co-occur on a
             // live map (entering the boss ends the act, so it is never both
@@ -287,7 +292,7 @@ public partial class MapScreen : Control
             // the texture to whatever the content rect happens to be, which is
             // a fractional scale of the 32px grid and blurs the icon under
             // Nearest into uneven pixel widths (ART_SPEC section 2).
-            var icon = ArtAssets.MapIcon(node.Type);
+            var icon = node.Concealed ? ArtAssets.ConcealedMapIcon() : ArtAssets.MapIcon(node.Type);
             if (icon is not null)
             {
                 // Left on the default top-left anchors and positioned by hand.
@@ -302,7 +307,7 @@ public partial class MapScreen : Control
             }
             else
             {
-                button.Text = NodeLabel(node.Type);
+                button.Text = node.Concealed ? ConcealedLabel : NodeLabel(node.Type);
             }
             if (isReachable)
             {
@@ -355,6 +360,10 @@ public partial class MapScreen : Control
         return RunState.GetMapNode(RunState.CurrentNodeId).NextNodeIds.ToHashSet();
     }
 
+    // What a concealed node says instead of its type - in both the tooltip and
+    // the no-art text fallback, so the two cannot drift apart.
+    private const string ConcealedLabel = "?";
+
     private static string NodeLabel(MapNodeType type) => type switch
     {
         MapNodeType.Combat => "Fight",
@@ -370,6 +379,21 @@ public partial class MapScreen : Control
     private void OnNodeChosen(MapNode node)
     {
         AudioManager.Instance?.PlaySfx("ui_click");
+        RunManager.Instance.ChangeScreen(EnterNode(node));
+    }
+
+    // Everything walking into a node does to the run, minus the screen change
+    // itself. Split out of OnNodeChosen so the type -> ScreenState mapping is
+    // drivable from a smoke test: the mapping is the one part of this screen
+    // that a new MapNodeType can silently fall out of, and the version that
+    // ended in ChangeScreen could only be exercised by a real run.
+    internal static RunManager.ScreenState EnterNode(MapNode node)
+    {
+        // The reveal lives here rather than in BuildButtons, because a node
+        // rendered as reachable is not a node the player has walked into -
+        // revealing on render would show every "?" one floor early.
+        node.Concealed = false;
+
         RunState.CurrentNodeId = node.Id;
         bool firstVisit = RunState.VisitedNodeIds.Add(node.Id);
 
@@ -394,34 +418,36 @@ public partial class MapScreen : Control
                 CombatContext.IsElite = false;
                 CombatContext.IsBoss = false;
                 CombatContext.GoldReward = act.NormalGoldBase + node.EnemyIds.Count * act.GoldPerEnemy;
-                RunManager.Instance.ChangeScreen(RunManager.ScreenState.Combat);
-                break;
+                return RunManager.ScreenState.Combat;
             case MapNodeType.Elite:
                 CombatContext.EnemyDefinitionIds = node.EnemyIds;
                 CombatContext.IsElite = true;
                 CombatContext.IsBoss = false;
                 CombatContext.GoldReward = act.EliteGold;
-                RunManager.Instance.ChangeScreen(RunManager.ScreenState.Combat);
-                break;
+                return RunManager.ScreenState.Combat;
             case MapNodeType.Boss:
                 CombatContext.EnemyDefinitionIds = node.EnemyIds;
                 CombatContext.IsElite = false;
                 CombatContext.IsBoss = true;
                 CombatContext.GoldReward = act.BossGold;
-                RunManager.Instance.ChangeScreen(RunManager.ScreenState.Combat);
-                break;
+                return RunManager.ScreenState.Combat;
             case MapNodeType.Rest:
-                RunManager.Instance.ChangeScreen(RunManager.ScreenState.Rest);
-                break;
+                return RunManager.ScreenState.Rest;
             case MapNodeType.Shop:
-                RunManager.Instance.ChangeScreen(RunManager.ScreenState.Shop);
-                break;
+                return RunManager.ScreenState.Shop;
             case MapNodeType.Treasure:
-                RunManager.Instance.ChangeScreen(RunManager.ScreenState.Treasure);
-                break;
+                return RunManager.ScreenState.Treasure;
             case MapNodeType.Event:
-                RunManager.Instance.ChangeScreen(RunManager.ScreenState.Event);
-                break;
+                return RunManager.ScreenState.Event;
+            default:
+                // A MapNodeType with no arm used to fall out of the bottom of
+                // this switch, which left CurrentNodeId already advanced onto a
+                // node nothing routes from and no screen change to carry the
+                // player off the map - a soft-lock rather than a crash. Staying
+                // on the map at least leaves the run playable while the error
+                // says what is missing.
+                GD.PushError($"MapScreen: no screen registered for map node type {node.Type}.");
+                return RunManager.ScreenState.Map;
         }
     }
 

@@ -613,19 +613,37 @@ public partial class ScreenShot : Node
     // is actually checking.
     //
     // Deterministic: always the first successor, so the trail is the same every
-    // run like the rest of these fixtures. Stops short of a Boss node - entering
-    // one ends the act, so it is a state MapScreen never renders.
+    // run like the rest of these fixtures. Two things cut the walk short of
+    // `floors`, and both are about what the resulting picture can show:
+    //
+    //   Boss     - entering one ends the act, so it is a state MapScreen never
+    //              renders.
+    //   the first "?" it reveals - stopping there is what puts a revealed one
+    //              behind the player and, usually, a live one still ahead.
+    //              Without it the walk length decides whether the feature is in
+    //              the shot at all by coincidence: act 1 / seed 7 has exactly
+    //              two concealed nodes and the 3-floor walk consumed both, so
+    //              the map shot a human reaches for first contained no "?".
     private static void SeedMapWalkedTo(int floors)
     {
         RunState.MapNodes = MapGenerator.Generate(new Random(7), RunState.CurrentAct);
         var node = RunState.MapNodes.First(n => n.Floor == 0);
         RunState.VisitedNodeIds = new HashSet<string> { node.Id };
+        node.Concealed = false;
         for (int i = 0; i < floors; i++)
         {
             var next = node.NextNodeIds.Select(RunState.GetMapNode).FirstOrDefault();
             if (next is null || next.Type == MapNodeType.Boss) break;
             node = next;
             RunState.VisitedNodeIds.Add(node.Id);
+
+            // Walking a node is what reveals it (MapScreen.EnterNode), so a
+            // trail that only set VisitedNodeIds would leave a "?" sitting
+            // under the current-node ring - a state no real run reaches, in
+            // the one image a human checks this screen against.
+            bool wasConcealed = node.Concealed;
+            node.Concealed = false;
+            if (wasConcealed) break;
         }
         RunState.CurrentNodeId = node.Id;
     }

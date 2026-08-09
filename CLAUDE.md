@@ -190,7 +190,44 @@ act's graph. Killing a non-final act's boss goes RewardScreen-then-Map like any 
 `RunState.AdvanceAct()` regenerating the map, resetting `CurrentNodeId`/`VisitedNodeIds` (node ids
 repeat across acts), banking the cleared act's floors into `RunStats.FloorsInPreviousActs`, and
 applying the act's max-HP bonus and heal. Only `IsFinalAct`'s boss routes to Victory. The run save
-is v3 for `ActIndex`; a v2 save loads as act 1, which is what it always was.
+is v4 for `MapNode.Concealed`; neither bump carries migration code, because both fields' absent-is-
+false/zero default is already the right reading of an older save (a v2 save loads as act 1, which is
+what it always was; a v3 map loads fully visible, which is what it always was).
+
+**A `?` node hides its type from the player and from nothing else.** `MapNode.Concealed` is a bool
+beside `Type`, not a `MapNodeType.Unknown` in place of it: the roll happens in `MapGenerator` like
+every other node's, and concealment only withholds the answer until `MapScreen.EnterNode` clears it.
+Resolving at *visit* time — which is what the roadmap forecast — reads as the same feature and
+breaks two things quietly. `BalanceModel` reads `Type` in a dozen places (`Count`, `NodeGold`,
+`CardsAt`, `RelicsAt`, five `MaxAlong` sweeps) and would price an unrolled node as no fight, no
+gold and no reward card, silently deflating every printed curve number; and because Combat is
+deliberately *not* in `RunManager.AutoSaveScreens`, a resolution made on the player's click is never
+persisted before the fight, so quitting mid-fight would re-roll a `?` that had turned out to be an
+Elite. Rolling early costs nothing the player can observe and removes both.
+
+Three things around it are load-bearing:
+
+- **The weight is carved out of the utility rooms, not out of the whole table — and Elite still had
+  to be paid.** A `?` comes back as a fight only one time in five, so paying for it proportionally
+  taxes fights: measured, 1.1 reward picks and 51 gold a run, and `RunScore`'s Encyclopedian from
+  reachable on 23% of seeds to 15%. Shop/Treasure/Rest/Event pay instead. But an unchanged *weight*
+  is not an unchanged *share* once the table grows 110 → 119: Combat breaks even off the `?` table's
+  20% Combat slice, and Elite — the one type a `?` may never be — has nothing handing it back, so it
+  silently lost 6.8% of its frequency until its weight went 14 → 15. Nothing would have caught that;
+  `BalanceSmokeTest` bands elite *cost ratios* and has never measured how often an elite is offered.
+- **A `?` is never an Elite**, which is the one exclusion in `PickConcealedType` that is a design
+  rule rather than structure. An unadvertised elite is a fight committed to without the fact that
+  decides whether to take it — an ambush rather than a gamble. `MapSmokeTest` keeps its own copy of
+  the legal set so widening the generator's table has to be argued for rather than inherited.
+- **`MapScreen` has two leak sites and they are easy to miss**, because `Type` holds the truth the
+  whole time: the tooltip and the no-art text fallback both read `NodeLabel(node.Type)` unguarded.
+  The icon is the obvious one and the tooltip is the one that would ship.
+
+`MapScreen.EnterNode` is where the reveal lives (not `BuildButtons` — revealing on render would show
+every `?` a floor early), and it is the type→`ScreenState` router split out of `OnNodeChosen` so a
+smoke test can drive it. It gained the `default:` arm that switch never had: an unhandled
+`MapNodeType` used to advance `CurrentNodeId` onto a node nothing routes from and change no screen,
+which is a soft-lock rather than a crash.
 
 **Combat loop** (`CombatManager`) is an explicit `CombatState` enum machine — `Start`,
 `PlayerTurn`, `AwaitingTarget`, `ResolvingCard`, `EnemyTurn`, `ResolvingEnemyIntent`, `CombatEnd`
@@ -431,8 +468,9 @@ balance retune, the *card* half of the vocabulary — keywords, per-effect targe
 primitive, unplayable card types, X-cost — and now the *status* half — `Artifact`, `Thorns`,
 `Intangible`, `Plating` — and the *behaviour* half — `summon_enemy`, `onDeath`, escape, and now the
 `wake_on_damage` picker, and the `WeightedRandomIntentPicker` run cap that closed it — have all
-shipped. What's open is relic tiers, potion rarity and combat drops, the `?` node, an ascension
-ladder. Don't treat this section as a to-do list.
+shipped, as has the `?` node that opened Phase 9. What's open is relic tiers, potion rarity and
+combat drops, the boss-relic choice, a start-of-run screen, an ascension ladder. Don't treat this
+section as a to-do list.
 
 One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap
 is next read:
@@ -487,7 +525,8 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
 - `scripts/effects/BlockMath.cs` — Dexterity/Frail, the exact mirror of `DamageMath`'s
   Strength/Weak, split for the same no-drift reason
 - `scripts/map/MapGenerator.cs` — branching node DAG, per-act (floor count, encounter pools and
-  boss pool all come from the `ActDefinition` passed in)
+  boss pool all come from the `ActDefinition` passed in). Owns both weight tables: the node-type
+  one, and `PickConcealedType`'s separate table for what is behind a `?`
 - `scripts/data/ActDefinition.cs` + `ActDatabase.cs` — the three acts and what varies per act
 - `data/*/*.json` — the content layer; the schema is the data-vs-code split everything depends on
 - `scripts/data/DataFile.cs` — the one place a content JSON is read off `res://`. The null guard
