@@ -17,6 +17,17 @@ public class EnemyDefinition
     // enrage phase - every enemy stays plain sequential unless authored
     // otherwise.
     public int EnrageHpPercent { get; set; } = 0;
+
+    // The *second phase*, whatever brings it on, which is why this list has two
+    // readers rather than one. "phase_threshold" enters it at the HP percent
+    // above; "wake_on_damage" enters it the moment the enemy loses HP at all,
+    // and for that one Moves is what it does while dormant.
+    //
+    // One list rather than one per trigger on purpose: ten sweeps across the
+    // debug suites walk `Moves.Concat(EnrageMoves)` to check that a telegraph
+    // matches its effects, that a summon terminates, that nothing crosses an
+    // act. A third list would be ten places to remember and one silent gap per
+    // forgotten site.
     public List<EnemyMove> EnrageMoves { get; set; } = new();
 
     // What this enemy does as it dies, resolved by CombatManager.ResolveDeaths

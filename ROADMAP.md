@@ -27,7 +27,7 @@ rest of Phases 8 through 10 own.
 | ~~`EffectRegistry` actions~~ | ~~10, every one of which moves an *existing* card or moves a number~~ | **Closed in Phase 7** — `add_card` is 11 |
 | ~~`CardType`~~ | ~~`{ Attack, Skill, Power }`~~ | **Closed in Phase 7** — `Status` and `Curse`, unplayable |
 | ~~`StatusType`~~ | ~~11~~ | **Closed in Phase 8** — `Artifact`, `Thorns`, `Intangible`, `Plating` make 15 |
-| ~~Enemy AI types~~ | ~~3, all "pick a move off a list"~~ | **Mostly closed in Phase 8** — `summon_enemy`, `onDeath` and escape ship; `wake_on_damage` is the picker that remains |
+| ~~Enemy AI types~~ | ~~3, all "pick a move off a list"~~ | **Closed in Phase 8** — `summon_enemy`, `onDeath`, escape, and `wake_on_damage` make four pickers |
 | `RelicDefinition` | no tier field | A boss grants from the same pool 150 gold buys from |
 | `PotionDefinition` | no rarity field, no combat drop | The three-slot belt is nearly always empty |
 
@@ -146,9 +146,9 @@ may declare a card-only scope — the telegraph-honesty guard), `EventSmokeTest`
 
 Phase 6 took the roster 24 → 36 by widening the *telegraph* vocabulary. The behaviour vocabulary was
 not: all 36 were a list of moves picked by one of three pickers, and `EnemyDefinition` had no hook
-for anything else, which is why 36 enemies felt like a dozen. Most of that is now closed — an enemy
-can bring in minions, react to its own death and leave a fight alive. What is left is the picker
-layer itself.
+for anything else, which is why 36 enemies felt like a dozen. That is now closed — an enemy can bring
+in minions, react to its own death, leave a fight alive, and lie dormant until it is struck. What is
+left is one honesty fix inside a picker that already exists.
 
 - ~~**`summon_enemy`**, **`onDeath: [EffectSpec]`** and **escape.**~~ **Shipped**, as one branch,
   because all three are the same change: `CombatManager.Enemies` mutating mid-fight. Effect actions
@@ -211,9 +211,37 @@ layer itself.
     that it only ever fires against a *below*-reference deck. The move existed to rescue the deck it
     was written to punish. Theft 25 → 40, and `BalanceSmokeTest` now asserts a theft exceeds the
     smallest reward any node the thief appears in can pay.
-- **A fourth AI type, `wake_on_damage`** — structurally `PhaseThresholdIntentPicker` inverted
-  (transition on damage taken rather than an HP threshold), reusing that file's shape the way
-  `BlockMath` reuses `DamageMath`'s.
+- ~~**A fourth AI type, `wake_on_damage`**~~ — **shipped**, structurally as forecast:
+  `PhaseThresholdIntentPicker` inverted, reusing that file's shape rather than growing a flag on it.
+  It reuses its *data* too — `EnrageMoves` is the second phase for both pickers now, because ten
+  sweeps already walk `Moves.Concat(EnrageMoves)` and a third list would be ten places to forget.
+  Intent types 6 → 7 (`Dormant`), one re-authored act-3 normal (`gilded_husk`), and no schema change
+  at all. Four things the forecast did not contain:
+  - **The picker was the cheap half; the *timing* was the design decision.** A picker-only wake is
+    honest and invisible — the sleeper resolves its dormant move once more and wakes at its own turn
+    boundary, which looks exactly like a sequential enemy with an opener. The wake has to re-telegraph
+    *while the player still holds the turn* or the mechanic exists only in the rules. That is
+    `CombatManager.RetelegraphChangedPhases` plus one defaulted `IIntentPicker.TryAdvancePhase`, and
+    it is gated on `ResolvingCard`: an enemy woken during the enemy turn must resolve what it already
+    advertised, which is the canonical bad bug approached from the other side.
+  - **A sleeper needs an intent type for a reason the sweep does not enforce.** Unlike `Summon`, a
+    dormant move *does* resolve to a `Self`-scoped grant, so `Buff` would have passed every
+    assertion in the repo. It is still wrong: true about the effect, silent about the only thing the
+    player needs to know. `PixelSpecSmokeTest` had already named this item as the case its
+    intent-coverage assertion existed to catch, and it was right.
+  - **The dormant grant may not be defensive, and that is a soft-lock rather than a balance rule.**
+    HP loss is what wakes a sleeper, so Block accrued while dormant compounds; once it outgrows the
+    player's per-hit damage the enemy cannot be woken, cannot be killed, and there is no flee.
+    `TestNoDormantMoveGrantsBlock` refuses the authoring. Strength instead, which prices stalling
+    without ever closing it off.
+  - **The costliest normal in act 3 was one JSON number, and the report found it in one run.**
+    Moving `gild` (Metallicize 4) from a one-time opener into a repeating three-move awake loop made
+    the husk tanky enough that `gilded_husk + wailing_effigy` cost 522 — 2.16x the act mean, past
+    every elite, and inside a rounding error of the `BossCostLow` line a normal may not cross. It
+    also dragged act 3's mean 226 → 242 and deflated every elite and boss ratio in the act, which is
+    the Phase 8 denominator trap repeating exactly. Metallicize 4 → 2 and the woken fist 16 → 22
+    lands the whole encounter-cost table byte-identical to `main`, with the mechanic changed and the
+    curve untouched.
 - ~~**`Artifact`, plus three more statuses.**~~ **Shipped** — statuses 11 → 15, and six cards
   (`ward_sigil`, `reliquary_seal`, `bramble_mail`, `bramble_guard`, `scaled_hide`, `hollow_form`)
   plus two re-authored enemy moves that actually grant them. Landed as forecast: `Artifact` is one
@@ -238,21 +266,27 @@ layer itself.
 
   Still unmodelled in `EncounterCost` and the next thing to do to it: one-off `gain_block` moves,
   i.e. every Defend intent in the game.
-- **Fix the two-move `WeightedRandomIntentPicker` collapse.** Its anti-repeat rule only engages at
-  three or more moves, so a two-move enemy strictly alternates and its authored `Weight` values are a
-  lie the content cannot see. Replace it with a per-move "not more than N times in a row" cap, which
-  is honest at every move count. `BalanceModel`'s stationary-distribution correction has to follow in
-  the same change or the analyser silently reports the old chain.
+- **Give `WeightedRandomIntentPicker` a run cap.** The wording this bullet carried for two phases was
+  stale and worth correcting: the two-move *alternation* it described was fixed long ago, by
+  disabling the anti-repeat rule below three moves. What is left is the other end of that trade — a
+  two-move enemy is now unbounded i.i.d. sampling and can play the same move four times running. A
+  per-move "not more than N times in a row" cap is honest at every move count, where both of the
+  rules that have shipped so far are honest at one. `BalanceModel.AntiRepeatStationary` has to follow
+  in the same change or the analyser silently reports the old chain.
 
-*Proven by:* `Phase4ContentSmokeTest` (Summon and Escape telegraphs, every `summon_enemy` naming a
+*Proven by:* `Phase4ContentSmokeTest` (Summon, Escape and Dormant telegraphs, the wake picker's
+latch, the wake landing on the player's turn and *not* mid-enemy-turn, every aiType resolving to its
+own picker, no dormant move granting Block, every `summon_enemy` naming a
 real enemy that does not itself summon, a summon arriving telegraphed but not acting that turn, an
 escape leaving without a kill, `onDeath` firing before the fight is scored),
 `CombatTargetingSmokeTest` (mid-fight `EnemyView` creation and `Instances` order, hit test skipping a
 runaway as well as a corpse, the HUD clear of a full four-enemy row), `ActSmokeTest` (no summon
-crossing an act), `EffectSmokeTest` (negative `gain_gold`, enemy-only actions off cards).
+crossing an act), `EffectSmokeTest` (negative `gain_gold`, enemy-only actions off cards),
+`BalanceSmokeTest` (a sleeper with no awake phase, and an awake phase that fails to out-damage its
+dormant one).
 
-Two of the five bullets remain: `wake_on_damage` and the two-move picker collapse. Both are
-picker-local, and neither shares plumbing with what shipped.
+One of the five bullets remains: the `WeightedRandomIntentPicker` run cap. It is picker-local and
+shares no plumbing with what shipped.
 
 ## Phase 9 — The map, and the run's texture
 

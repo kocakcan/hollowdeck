@@ -44,6 +44,7 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "intents", name: "debuff", draw: intent_debuff },
         Icon { category: "intents", name: "summon", draw: intent_summon },
         Icon { category: "intents", name: "escape", draw: intent_escape },
+        Icon { category: "intents", name: "dormant", draw: intent_dormant },
         // Deliberately the same `?` the map uses, under a second category.
         // ArtAssets.IntentIcon and MapIcon both fall back to "unknown", and
         // only map/ had the file - so an IntentType with no arm rendered as
@@ -588,6 +589,40 @@ fn intent_summon() -> Canvas {
     sparkle(&mut canvas, 5, 16, 3, P3);
     finish(&mut canvas);
     canvas
+}
+
+/// Dormant: three `z`s rising left to right. The only intent that is not aimed
+/// at the player, so like `intent_summon` it deliberately borrows no shape from
+/// the other six — no arrow, no shield, no blade — and sits on cold blue rather
+/// than a signal colour. A row that reads as a threat is the one thing this
+/// telegraph must not do; the number beside it is a price, not damage.
+///
+/// It is the zs alone, and getting there cost two drafts. A shut eye with the zs
+/// above it is the obvious composition and does not survive the grid: an eye
+/// closed is an arc, an arc with lashes under it is a bench with legs, and the
+/// mark has to carry at 32px against five icons with hard silhouettes. Nor is
+/// `shapes::eye` available for it — that diamond is the arcane family's *open*
+/// eye, and closing it means striking it through, which reads as blindness.
+/// Freed of the eye, the zs get the whole canvas and the diagonal they need.
+fn intent_dormant() -> Canvas {
+    let mut canvas = new_icon();
+
+    // Growing and brightening as they rise, which is what makes the three read
+    // as one sound receding rather than as three letters.
+    zed(&mut canvas, 3, 21, 5, B3);
+    zed(&mut canvas, 10, 12, 7, B4);
+    zed(&mut canvas, 19, 2, 9, B5);
+
+    finish(&mut canvas);
+    canvas
+}
+
+/// A `z` with its top-left corner at (x, y) and both bars `size` wide. Shared by
+/// all three in `intent_dormant` so they cannot drift into different letters.
+fn zed(canvas: &mut Canvas, x: i32, y: i32, size: i32, colour: Rgb) {
+    canvas.hline(x, y, size, colour);
+    canvas.line(x + size - 1, y, x, y + size - 1, colour);
+    canvas.hline(x, y + size - 1, size, colour);
 }
 
 /// Escape: an arrow leaving at speed. Horizontal where buff and debuff are

@@ -1177,21 +1177,23 @@
     "id": "gilded_husk",
     "name": "Gilded Husk",
     "maxHp": 92,
-    "aiType": "sequential",
-    "loopFromIndex": 1,
+    "aiType": "wake_on_damage",
+    "loopFromIndex": 0,
     "moves": [
       {
-        "moveId": "gild",
-        "intent": { "type": "Buff", "displayAmount": 4 },
+        "moveId": "slumber",
+        "intent": { "type": "Dormant", "displayAmount": 2 },
         "effects": [
-          { "action": "apply_status", "status": "Metallicize", "amount": 4, "scope": "Self" }
+          { "action": "apply_status", "status": "Strength", "amount": 2, "scope": "Self" }
         ]
-      },
+      }
+    ],
+    "enrageMoves": [
       {
         "moveId": "gilded_fist",
-        "intent": { "type": "Attack", "displayAmount": 16 },
+        "intent": { "type": "Attack", "displayAmount": 22 },
         "effects": [
-          { "action": "deal_damage", "amount": 16, "scope": "Target" }
+          { "action": "deal_damage", "amount": 22, "scope": "Target" }
         ]
       },
       {
@@ -1199,6 +1201,13 @@
         "intent": { "type": "Defend", "displayAmount": 14 },
         "effects": [
           { "action": "gain_block", "amount": 14, "scope": "Self" }
+        ]
+      },
+      {
+        "moveId": "gild",
+        "intent": { "type": "Buff", "displayAmount": 2 },
+        "effects": [
+          { "action": "apply_status", "status": "Metallicize", "amount": 2, "scope": "Self" }
         ]
       }
     ]

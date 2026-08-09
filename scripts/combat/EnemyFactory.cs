@@ -23,6 +23,7 @@ public static class EnemyFactory
         "sequential" => new SequentialLoopingIntentPicker(),
         "weighted_random" => new WeightedRandomIntentPicker(),
         "phase_threshold" => new PhaseThresholdIntentPicker(),
+        "wake_on_damage" => new WakeOnDamageIntentPicker(),
         _ => LogUnknownAndFallback(aiType),
     };
 

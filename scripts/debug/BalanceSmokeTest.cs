@@ -41,6 +41,7 @@ public partial class BalanceSmokeTest : Node
         TestEveryEnemyCanFight();
         TestActCurveRises();
         TestEnrageIsAnEscalation();
+        TestWakingIsAnEscalation();
         TestBossesOutweighTheirAct();
         TestEncounterCostsStayInTheirBand();
         TestAnEscapeCostsMoreThanTheNodeItLeaves();
@@ -127,6 +128,39 @@ public partial class BalanceSmokeTest : Node
             .Select(d => d.Id)
             .ToList();
         Check("no_phase_threshold_enemy_lacks_enrage_moves", empty.Count == 0, Join(empty));
+    }
+
+    // The same two traps, one trigger along. A sleeper shares EnrageMoves with
+    // the enrage picker, so it inherits both failure modes and neither of the
+    // checks above sees it: HasEnrage gates on EnrageHpPercent, which a
+    // wake_on_damage enemy leaves at 0.
+    //
+    // The escalation half means something slightly different here and is worth
+    // more, not less. An enrage that fails to escalate is an anticlimax; a
+    // sleeper whose awake phase does not out-damage its dormant one is a fight
+    // the player is actively rewarded for never touching, which the win
+    // condition then forces them to touch anyway.
+    private void TestWakingIsAnEscalation()
+    {
+        var sleepers = EnemyDatabase.All.Where(d => d.AiType == "wake_on_damage").ToList();
+        Check("sleepers_exist", sleepers.Count > 0, "no enemy uses wake_on_damage");
+
+        var empty = sleepers.Where(d => d.EnrageMoves.Count == 0).Select(d => d.Id).ToList();
+        Check("no_sleeper_lacks_an_awake_phase", empty.Count == 0,
+            Join(empty) + " - with no EnrageMoves a sleeper never wakes at all");
+
+        // Dormant damage read off the dormant list directly: BalanceModel.Profile
+        // steady-states a sleeper on its *awake* moves, which is the right
+        // reading everywhere else and would compare a number against itself here.
+        var weak = sleepers
+            .Where(d => d.EnrageMoves.Count > 0)
+            .Select(d => (d.Id,
+                Dormant: BalanceModel.MeanMoveDamage(d.Moves),
+                Awake: BalanceModel.MeanMoveDamage(d.EnrageMoves)))
+            .Where(x => x.Awake <= x.Dormant)
+            .ToList();
+        Check("every_awake_phase_hits_harder_than_its_dormant_one", weak.Count == 0,
+            Join(weak.Select(x => $"{x.Id} {x.Dormant:F1} -> {x.Awake:F1}")));
     }
 
     // A boss the act's own elites out-stat is not a climax. Compared against

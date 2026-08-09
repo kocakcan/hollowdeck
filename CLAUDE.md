@@ -207,7 +207,7 @@ are exactly where these games accumulate input-during-animation bugs if left imp
 5. Repeat to victory/defeat → RewardScreen.
 
 **A telegraph is mostly derived, and that is what keeps it honest.** An `EnemyIntent` is a type —
-`Attack`/`Defend`/`Buff`/`Debuff`/`Summon`/`Escape` — plus a single authored `DisplayAmount`;
+`Attack`/`Defend`/`Buff`/`Debuff`/`Summon`/`Escape`/`Dormant` — plus a single authored `DisplayAmount`;
 everything else in the
 label `EnemyView.FormatIntent` builds comes from the move's own `EffectSpec`s. How many hits it is
 (`4 x2`) is a run of identical `deal_damage` specs, counted through
@@ -225,7 +225,42 @@ move that changes *who is in the fight* has neither — so borrowing an existing
 lies and a red suite, in that order. Their derived halves are the summoned enemy's own `Name` and
 the gold an escape takes, the latter read off a **negative `gain_gold`** and shown positive
 (`-25g`): one action rather than one per sign, and `EnemyView.StolenGold` is the single place that
-sign is turned back around.
+sign is turned back around. `Dormant` is the third instance of the same argument and the only intent
+that is not aimed at the player: it resolves to the same `Self`-scoped grant a `Buff` does, so
+nothing in the sweep forced it, but a sleeper telegraphing `Buff +2 Str` is true about the effect and
+silent about the only thing the player needs — that hitting it wakes it.
+
+**An enemy can be asleep, and the wake is the one phase change that re-telegraphs mid-turn.**
+`aiType: "wake_on_damage"` (`WakeOnDamageIntentPicker`) loops `Moves` while the enemy has lost no HP
+and permanently loops `EnrageMoves` once it has — `PhaseThresholdIntentPicker` inverted, a separate
+file for the reason `BlockMath` is a separate file from `DamageMath`. `EnrageMoves` is the *second
+phase* now rather than the enrage phase, shared by both pickers, because ten sweeps across the debug
+suites already walk `Moves.Concat(EnrageMoves)` and a third list would be ten places to forget.
+
+Four things about it are worth more than re-reading the picker:
+
+- **The wake re-telegraphs during the player's own turn.** `CombatManager.RetelegraphChangedPhases`
+  runs inside the settle pass and asks `IIntentPicker.TryAdvancePhase`, so the sleeper's intent flips
+  the instant the damage lands and the player can still answer it. Waiting for the enemy's turn
+  boundary would make hitting a sleeper indistinguishable from hitting anything else.
+- **It is gated on `State == CombatState.ResolvingCard`, and that gate is the safety half.** An enemy
+  woken during the *enemy* turn — a Poison tick, a Thorns prick — must resolve what it already
+  advertised; re-picking there is the canonical bad bug reached from the opposite direction. It wakes
+  at its own `AdvanceEnemyIntent` a few lines later either way.
+- **`PhaseThresholdIntentPicker` deliberately does not opt in.** A boss crossing its threshold holds a
+  real move that still resolves truthfully, and flipping it early would change every boss fight and
+  the curve measured under them. `TryAdvancePhase` defaults to false for exactly that reason.
+- **A dormant move must grant something, and it must not be Block.** The first is the telegraph sweep
+  (`Dormant` needs a `Self` grant behind it), so leaving a sleeper alone is never free. The second is
+  `Phase4ContentSmokeTest.TestNoDormantMoveGrantsBlock`, and it is a soft-lock guard rather than
+  balance: HP loss is what wakes a sleeper, so Block it accrues while dormant compounds, and once it
+  passes the player's per-hit damage the enemy can never be woken, never be killed, and the fight has
+  no exit.
+
+`BalanceModel` steady-states a sleeper on its *awake* list (`SteadyMoves`) and wakes it in the walk
+the turn it first loses HP, because the reference deck always attacks. Its dormant phase is therefore
+unpriced by design — turns spent letting one sleep are a choice made against a visible Strength
+counter, not a property of the curve.
 
 **The roster mutates mid-fight, and everything about that lives in one settle pass.** `Enemies` was
 fixed for the length of a fight until Phase 8's behaviour half — set once in `StartCombat`, only ever
@@ -361,7 +396,7 @@ to catch committed art drifting from its source. The one command, for all three 
 
 ```bash
 cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
-#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 185
+#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 186
 #   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
 #   validate           what run-smoke-tests.sh calls; nonzero exit on failure
 ```
@@ -373,9 +408,9 @@ above.
 `ROADMAP.md` tracks what's genuinely still open. Packaged export, the card and enemy passes, the
 balance retune, the *card* half of the vocabulary — keywords, per-effect targeting, the `add_card`
 primitive, unplayable card types, X-cost — and now the *status* half — `Artifact`, `Thorns`,
-`Intangible`, `Plating` — and the *behaviour* half — `summon_enemy`, `onDeath`, escape — have all
-shipped. What's open of the enemy vocabulary is a `wake_on_damage` picker and the two-move
-`WeightedRandomIntentPicker` collapse; after that, relic tiers, potion rarity and combat drops, the
+`Intangible`, `Plating` — and the *behaviour* half — `summon_enemy`, `onDeath`, escape, and now the
+`wake_on_damage` picker — have all shipped. What's open of the enemy vocabulary is the two-move
+`WeightedRandomIntentPicker` run cap; after that, relic tiers, potion rarity and combat drops, the
 `?` node, an ascension ladder. Don't treat this section as a to-do list.
 
 One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap

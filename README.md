@@ -80,7 +80,7 @@ scenes/       11 screens + reusable CardView/EnemyView/PotionView/FloatingText
 data/         acts / cards / relics / potions / enemies / events — all JSON, the content layer
 assets/       sprites, icons, fonts, backgrounds, themes (see CREDITS.md for licensing)
 tools/        run-smoke-tests.sh
-  artgen/     Rust asset tool — generates the 185 icons, palette-clamps art, validates ART_SPEC
+  artgen/     Rust asset tool — generates the 186 icons, palette-clamps art, validates ART_SPEC
 ```
 
 ## Architecture
@@ -175,7 +175,9 @@ that only when the mechanic can't be composed from existing actions.
 **A potion** (`data/potions/potions.json`) has the same `effects` shape. **An enemy**
 (`data/enemies/enemies.json`) is HP plus a list of moves, each pairing a displayed `intent` with
 the `effects` it will actually resolve; `aiType` picks the intent strategy (`sequential`,
-weighted, or phase-threshold). An intent is one of `Attack` / `Defend` / `Buff` / `Debuff` plus a
+`weighted_random`, `phase_threshold`, or `wake_on_damage` — the last two both switch to the
+`enrageMoves` list, one at an HP threshold and one the moment the enemy takes damage). An intent is
+one of `Attack` / `Defend` / `Buff` / `Debuff` / `Summon` / `Escape` / `Dormant` plus a
 `displayAmount`, and that number is the *only* authored part of the telegraph — the hit count and
 the name of the status a Buff grants are derived from the move's own effects, so a move can't
 promise something it doesn't do. A new enemy also needs a 32x32 sprite at

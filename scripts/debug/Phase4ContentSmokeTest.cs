@@ -38,11 +38,17 @@ public partial class Phase4ContentSmokeTest : Node
         await TestPoisonTickBypassesBlockAndDecays();
         TestLoseHpEffect();
         TestEnragePickerSwitchesAtThreshold();
+        TestWakePickerSleepsUntilDamaged();
+        TestEveryAiTypeMapsToItsOwnPicker();
+        TestNoDormantMoveGrantsBlock();
+        TestDormantAndWakeOnDamageImplyEachOther();
         TestEveryIntentTelegraphsWhatItResolves();
         TestNoEnemyMoveUsesACardOnlyScope();
         TestEverySummonNamesARealEnemyAndTerminates();
         TestIntentLabelsAreReadFromTheMove();
         await TestSummonJoinsTheFightWithoutActingThisTurn();
+        await TestDamageWakesTheSleeperOnThePlayersTurn();
+        await TestWakingMidEnemyTurnDoesNotChangeAnAlreadyTelegraphedMove();
         await TestEscapeRemovesAnEnemyWithoutCountingAKill();
         await TestDeathBeatsEscapeWhenBothLandInOneMove();
         await TestOnDeathResolvesBeforeTheFightIsScored();
@@ -137,6 +143,168 @@ public partial class Phase4ContentSmokeTest : Node
             $"got moveId={enragedMove.MoveId}");
     }
 
+    // The enrage picker's mirror image, and the three properties that are not
+    // obvious from reading it: the wake is an HP *loss*, not an attack; it is
+    // permanent once it happens; and the dormant list loops rather than falling
+    // through to the awake one on its own.
+    private void TestWakePickerSleepsUntilDamaged()
+    {
+        var picker = new WakeOnDamageIntentPicker();
+        var husk = new EnemyCombatant
+        {
+            Name = "Husk", MaxHp = 92, CurrentHp = 92,
+            Definition = EnemyDatabase.Get("gilded_husk"),
+        };
+        husk.IntentPicker = picker;
+
+        // Picked into a list first, deliberately: PickNext advances the picker,
+        // so calling it inside a List.Exists predicate runs it once per
+        // candidate move and asserts against a different pick each time.
+        var dormant = new List<string>();
+        for (int i = 0; i < 5; i++) dormant.Add(picker.PickNext(husk).MoveId);
+        Check("wake_picker_loops_its_dormant_list_while_untouched",
+            dormant.TrueForAll(id => husk.Definition.Moves.Exists(m => m.MoveId == id)),
+            $"a full-HP sleeper played {string.Join(", ", dormant)}");
+
+        Check("wake_picker_does_not_wake_on_a_hit_its_block_ate",
+            !picker.TryAdvancePhase(husk), "woke with no HP lost");
+
+        husk.CurrentHp = 90;
+        Check("wake_picker_wakes_on_hp_actually_lost", picker.TryAdvancePhase(husk),
+            "still dormant after losing HP");
+        Check("wake_picker_reports_the_transition_only_once",
+            !picker.TryAdvancePhase(husk), "asked to re-telegraph twice for one wake");
+
+        // Driven through a synthetic multi-move dormant list because the only
+        // authored sleeper has one, which parks the picker's cursor at 0 and
+        // hides the whole question. On a longer dormant list a wake that does
+        // not reset the index enters the awake list mid-way - or past its end,
+        // if the awake list is the shorter of the two.
+        var deepSleeper = new EnemyCombatant
+        {
+            Name = "Deep Sleeper", MaxHp = 40, CurrentHp = 40,
+            Definition = new EnemyDefinition
+            {
+                Id = "deep_sleeper",
+                AiType = "wake_on_damage",
+                Moves = new List<EnemyMove> { Dormant("z1"), Dormant("z2"), Dormant("z3") },
+                // As long as the dormant list, so a carried-over cursor lands on
+                // a real move and this reports which one. Shorter would read off
+                // the end instead, which is the same bug arriving as a thrown
+                // exception - a red suite either way, but a TIMEOUT rather than
+                // a sentence naming the move it played.
+                EnrageMoves = new List<EnemyMove>
+                {
+                    Dormant("awake_first"), Dormant("awake_second"), Dormant("awake_third"),
+                },
+            },
+        };
+        var deepPicker = new WakeOnDamageIntentPicker();
+        deepPicker.PickNext(deepSleeper);
+        deepPicker.PickNext(deepSleeper);
+        deepSleeper.CurrentHp = 39;
+        deepPicker.TryAdvancePhase(deepSleeper);
+        var firstAwake = deepPicker.PickNext(deepSleeper).MoveId;
+        Check("waking_restarts_the_awake_list_from_its_first_move", firstAwake == "awake_first",
+            $"played {firstAwake} - the dormant cursor carried into the awake list");
+
+        // Healed back to full: the latch is what keeps it awake. Nothing heals
+        // an enemy today, so this is the guard for the first thing that does.
+        husk.CurrentHp = 92;
+        var played = new List<string>();
+        for (int i = 0; i < 5; i++) played.Add(picker.PickNext(husk).MoveId);
+        Check("wake_picker_stays_awake_once_woken",
+            played.TrueForAll(id => husk.Definition.EnrageMoves.Exists(m => m.MoveId == id)),
+            $"played {string.Join(", ", played)}");
+    }
+
+    private static EnemyMove Dormant(string moveId) => new()
+    {
+        MoveId = moveId,
+        Intent = new EnemyIntent { Type = IntentType.Dormant, DisplayAmount = 1 },
+        Effects = new List<EffectSpec>(),
+    };
+
+    // EnemyFactory falls back to sequential on an unknown aiType, which is the
+    // right behaviour at runtime (a typo must not throw out of a fight) and a
+    // silent no-op at authoring time: the enemy simply plays its list in order
+    // and every suite stays green. Driving the real factory covers the arm and
+    // the string in one assertion.
+    private void TestEveryAiTypeMapsToItsOwnPicker()
+    {
+        var problems = EnemyDatabase.All
+            .Where(d => d.AiType != "sequential"
+                        && EnemyFactory.Create(d).IntentPicker is SequentialLoopingIntentPicker)
+            .Select(d => $"{d.Id}: aiType '{d.AiType}' fell back to sequential")
+            .ToList();
+
+        Check("every_aitype_maps_to_its_own_picker", problems.Count == 0, string.Join("; ", problems));
+    }
+
+    // The one authoring rule WakeOnDamageIntentPicker cannot enforce for itself,
+    // and the reason it is worth a suite: HP loss is what wakes a sleeper, so a
+    // dormant move that grants Block compounds every turn it is left alone. Once
+    // that Block passes the player's per-hit damage the sleeper cannot be woken,
+    // cannot be killed, and the fight has no exit at all - there is no flee.
+    // Every other dormant grant is a cost to the player; a defensive one is a
+    // soft-lock waiting for a slow deck.
+    private void TestNoDormantMoveGrantsBlock()
+    {
+        var problems = new List<string>();
+        foreach (var def in EnemyDatabase.All)
+        {
+            foreach (var move in def.Moves.Concat(def.EnrageMoves))
+            {
+                if (move.Intent.Type != IntentType.Dormant) continue;
+                foreach (var spec in move.Effects)
+                {
+                    bool defensive = spec.Action == "gain_block"
+                        || (spec.Action == "apply_status"
+                            && spec.Status is "Metallicize" or "Plating");
+                    if (defensive) problems.Add($"{def.Id}/{move.MoveId}: {spec.Action} {spec.Status}");
+                }
+            }
+        }
+
+        Check("no_dormant_move_grants_block", problems.Count == 0,
+            string.Join("; ", problems) + " - a sleeper whose Block outgrows the "
+            + "player's damage can never be woken and never killed");
+    }
+
+    // The intent type and the picker are two halves of one mechanic joined by
+    // nothing but authoring, and each half is silent without the other. A
+    // Dormant move on a sequential enemy telegraphs "hit me to wake me" about an
+    // enemy that was never asleep; a wake_on_damage enemy whose dormant list is
+    // labelled Buff is asleep with no way for the player to know it. Both
+    // compile, both render, and every other assertion in the repo passes.
+    private void TestDormantAndWakeOnDamageImplyEachOther()
+    {
+        var problems = new List<string>();
+        foreach (var def in EnemyDatabase.All)
+        {
+            bool sleeper = def.AiType == "wake_on_damage";
+
+            // A Dormant move anywhere else, including in a sleeper's own *awake*
+            // list - a second phase that telegraphs sleep has already woken.
+            foreach (var move in def.EnrageMoves.Concat(sleeper ? new List<EnemyMove>() : def.Moves))
+            {
+                if (move.Intent.Type == IntentType.Dormant)
+                {
+                    problems.Add($"{def.Id}/{move.MoveId}: Dormant outside a sleeper's dormant list");
+                }
+            }
+
+            if (!sleeper) continue;
+            foreach (var move in def.Moves.Where(m => m.Intent.Type != IntentType.Dormant))
+            {
+                problems.Add($"{def.Id}/{move.MoveId}: {move.Intent.Type} in a dormant list");
+            }
+        }
+
+        Check("dormant_and_wake_on_damage_imply_each_other", problems.Count == 0,
+            string.Join("; ", problems));
+    }
+
     // A move's telegraph is one authored number (EnemyIntent.DisplayAmount)
     // sitting beside the effects that actually resolve, and nothing but this
     // stops the two drifting. A drifted telegraph is precisely the bug the
@@ -169,6 +337,14 @@ public partial class Phase4ContentSmokeTest : Node
                     // whose Amount is 0 - which is then what it must telegraph.
                     IntentType.Escape => move.Effects.FirstOrDefault(e => e.Action == "gain_gold")
                         ?? move.Effects.FirstOrDefault(e => e.Action == "escape"),
+                    // Same backing as a Buff, and requiring one is the point
+                    // rather than an inherited detail: it is what stops a
+                    // dormant move being a free turn for the player. A sleeper
+                    // has to charge for the turns it is left alone, or leaving
+                    // it asleep is strictly better than waking it and the
+                    // decision the mechanic exists for is not a decision.
+                    IntentType.Dormant => move.Effects.FirstOrDefault(e =>
+                        e.Scope == EffectScope.Self && (e.Action == "apply_status" || e.Action == "heal")),
                     _ => null,
                 };
 
@@ -504,6 +680,88 @@ public partial class Phase4ContentSmokeTest : Node
     // asserting EscapeEffect sets a bool, which proves nothing about the two
     // things that actually matter - that the enemy leaves, and that leaving is
     // not scored as a kill.
+    // The half of waking that lives in CombatManager rather than in the picker,
+    // and the whole reason the mechanic reads: the intent flips *while the
+    // player still holds the turn*. If it waited for the enemy's own turn
+    // boundary, hitting a sleeper would look exactly like hitting anything else
+    // and the decision would only exist in the rules.
+    private async Task TestDamageWakesTheSleeperOnThePlayersTurn()
+    {
+        var husk = EnemyFactory.Create(EnemyDatabase.Get("gilded_husk"));
+        var strike = CardDatabase.Get("strike");
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 200, CurrentHp = 200, MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(Enumerable.Repeat(strike, 8).ToList()),
+        };
+
+        var combat = new CombatManager();
+        AddChild(combat);
+        combat.StartCombat(player, new List<EnemyCombatant> { husk }, new List<RelicInstance>());
+
+        Check("a_sleeper_opens_the_fight_telegraphing_dormant",
+            husk.CurrentMove?.Intent.Type == IntentType.Dormant,
+            $"opening intent was {husk.CurrentMove?.Intent.Type}");
+
+        var card = player.Piles.Hand.First(c => c.Definition.Id == "strike");
+        combat.TryPlayCard(card, husk);
+
+        Check("striking_a_sleeper_wakes_it_before_the_turn_ends",
+            husk.CurrentMove is { } move && husk.Definition.EnrageMoves.Exists(m => m.MoveId == move.MoveId),
+            $"still telegraphing {husk.CurrentMove?.MoveId} after taking a hit");
+        Check("the_woken_intent_is_reachable_while_the_player_still_has_the_turn",
+            combat.State == CombatState.PlayerTurn, $"state={combat.State}");
+
+        combat.QueueFree();
+    }
+
+    // The other side of that gate, and the one a future edit is likeliest to
+    // break. An enemy can be woken during the *enemy* turn - a Poison tick, a
+    // Thorns prick, a relic retaliating - and at that point it may already be
+    // holding a telegraph the player has committed a turn against. Waking must
+    // not re-pick there, or the roster resolves a move nobody was shown.
+    //
+    // Staged with Poison, which ApplyPoisonTick applies at the top of the
+    // sleeper's own turn in ResolveEnemyTurnAsync: it loses HP and then acts,
+    // all inside one enemy turn.
+    private async Task TestWakingMidEnemyTurnDoesNotChangeAnAlreadyTelegraphedMove()
+    {
+        var husk = EnemyFactory.Create(EnemyDatabase.Get("gilded_husk"));
+        husk.AddStatus(StatusType.Poison, 5);
+        var player = new PlayerCombatant
+        {
+            Name = "Player", MaxHp = 200, CurrentHp = 200, MaxEnergy = 3, CurrentEnergy = 3,
+            Piles = new PileManager(new List<CardDefinition> { CardDatabase.Get("defend") }),
+        };
+
+        var combat = new CombatManager();
+        AddChild(combat);
+        combat.StartCombat(player, new List<EnemyCombatant> { husk }, new List<RelicInstance>());
+
+        var telegraphed = husk.CurrentMove!;
+        int hpBefore = player.CurrentHp;
+        combat.TryEndTurn();
+        await WaitForEnemyTurnToResolve(combat);
+
+        Check("the_poison_woke_it", husk.CurrentHp < husk.MaxHp, $"hp={husk.CurrentHp}");
+        // The dormant move is the one that resolved: it grants Strength and
+        // deals nothing, so an awake move landing instead would have taken HP.
+        Check("an_enemy_woken_mid_turn_still_resolves_what_it_telegraphed",
+            player.CurrentHp == hpBefore && husk.GetStatus(StatusType.Strength) > 0,
+            $"player hp {hpBefore} -> {player.CurrentHp}, telegraphed {telegraphed.MoveId}");
+        // The *first* awake move, not merely an awake one. "Some EnrageMoves
+        // entry" cannot fail: without the ResolvingCard gate the settle pass
+        // wakes it mid-enemy-turn and the regular AdvanceEnemyIntent below runs
+        // a second time, which still lands on an awake move - just one move
+        // further on, with the opener silently eaten.
+        Check("and_telegraphs_its_new_phase_before_the_player_acts_again",
+            husk.CurrentMove?.MoveId == husk.Definition.EnrageMoves[0].MoveId,
+            $"telegraphing {husk.CurrentMove?.MoveId}, expected {husk.Definition.EnrageMoves[0].MoveId} "
+            + "- an awake move further down the list means the phase advanced twice");
+
+        combat.QueueFree();
+    }
+
     private async Task TestEscapeRemovesAnEnemyWithoutCountingAKill()
     {
         var player = new PlayerCombatant

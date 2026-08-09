@@ -59,11 +59,16 @@ public static class BalanceModel
         public bool HasEnrage => EnrageHpPercent > 0 && EnrageFlatDpt > 0;
     }
 
+    // Flat mean damage over an arbitrary move list, for callers that need to
+    // price one *phase* rather than one enemy. Profile's steady state answers
+    // "what does this enemy do in a fight", which for a sleeper is its awake
+    // list - so comparing its two phases needs a way to ask about a list.
+    public static double MeanMoveDamage(IReadOnlyList<EnemyMove> moves) =>
+        moves.Count == 0 ? 0.0 : Mean(moves.Select(m => (double)MoveDamage(m)));
+
     public static EnemyProfile Profile(EnemyDefinition def)
     {
-        var enrage = def.EnrageMoves.Count > 0
-            ? Mean(def.EnrageMoves.Select(m => (double)MoveDamage(m)))
-            : 0.0;
+        var enrage = MeanMoveDamage(def.EnrageMoves);
         return new EnemyProfile(
             def.Id, def.Name, def.MaxHp, def.AiType,
             FlatDpt: FlatDpt(def),
@@ -110,9 +115,12 @@ public static class BalanceModel
     //    is solved below rather than waved at: three enemies have 3 moves
     //    (possessed_armor, pyre_warden, silent_judge) and their weights are
     //    lopsided enough that the difference is real.
+    //  - wake_on_damage steady-states on EnrageMoves, not Moves. Its dormant
+    //    list is what it does while nobody has hit it, and every fight this
+    //    model prices is one where the player is attacking - see the walk.
     private static IReadOnlyList<(EnemyMove Move, double P)> SteadyState(EnemyDefinition def)
     {
-        var moves = def.Moves;
+        var moves = SteadyMoves(def);
         if (moves.Count == 0) return Array.Empty<(EnemyMove, double)>();
 
         if (def.AiType == "weighted_random")
@@ -122,11 +130,25 @@ public static class BalanceModel
                 : AntiRepeatStationary(moves);
         }
 
-        // phase_threshold wraps to 0; sequential wraps to LoopFromIndex.
-        int from = def.AiType == "phase_threshold" ? 0 : Math.Clamp(def.LoopFromIndex, 0, moves.Count - 1);
+        // phase_threshold and wake_on_damage both wrap to 0 within their second
+        // phase; everything else wraps to LoopFromIndex - "everything else"
+        // rather than "sequential" because an unknown aiType falls back to the
+        // sequential picker in EnemyFactory, and this has to fall back with it.
+        int from = def.AiType is "phase_threshold" or "wake_on_damage"
+            ? 0
+            : Math.Clamp(def.LoopFromIndex, 0, moves.Count - 1);
         var loop = moves.Skip(from).ToList();
         return loop.Select(m => (m, 1.0 / loop.Count)).ToList();
     }
+
+    // The list an enemy actually spends a fight playing. Identical to Moves for
+    // everything except a sleeper, whose Moves are what it does while nobody has
+    // hit it - which in a priced fight is never. Read by SteadyState and by
+    // EscapeTurn, so the two cannot disagree about which list is in play.
+    private static IReadOnlyList<EnemyMove> SteadyMoves(EnemyDefinition def) =>
+        def.AiType == "wake_on_damage" && def.EnrageMoves.Count > 0
+            ? def.EnrageMoves
+            : def.Moves;
 
     private static IReadOnlyList<(EnemyMove Move, double P)> Weighted(IReadOnlyList<EnemyMove> moves)
     {
@@ -188,7 +210,12 @@ public static class BalanceModel
         {
             strength += ritual;
 
-            var dist = t == 1
+            // Turn 1 is the enemy's actual opening move where it has one - but
+            // a sleeper's Moves[0] is its dormant move, and a fight in which the
+            // player attacks wakes it before it ever acts (CombatManager
+            // re-telegraphs the moment damage lands). Its steady state is its
+            // opener.
+            var dist = t == 1 && def.AiType != "wake_on_damage"
                 ? new[] { (Move: def.Moves[0], P: 1.0) }.ToList()
                 : SteadyState(def).ToList();
 
@@ -307,6 +334,14 @@ public static class BalanceModel
                 // moves, i.e. every Defend intent in the game. Folding those in
                 // is a larger retune than this change and is the next thing to
                 // do to this method.
+                //
+                // Also outside this walk by construction: a sleeper's dormant
+                // phase. The reference deck always attacks, so a wake_on_damage
+                // enemy is awake from turn 1 here and its dormant moves are
+                // never priced. That is the honest reading rather than a gap -
+                // turns spent letting one sleep are a choice the player makes
+                // against a Strength counter they can watch climbing, not a
+                // property of the curve this file measures.
                 e.Hp -= Math.Max(0, sharedThroughput - e.Metallicize - e.Plating);
                 e.Plating = Math.Max(0, e.Plating - 1);
 
@@ -342,6 +377,23 @@ public static class BalanceModel
 
                 if (!e.Enraged && e.Def.EnrageHpPercent > 0 && e.Def.EnrageMoves.Count > 0
                     && e.Hp * 100 <= e.Def.MaxHp * e.Def.EnrageHpPercent)
+                {
+                    e.Enraged = true;
+                }
+
+                // The same flag, entered by the other trigger: a sleeper is in
+                // its second phase as soon as it has lost HP. Sitting after the
+                // drain above is what makes it act awake on turn 1, which is
+                // what the game does - the wake re-telegraphs mid-player-turn,
+                // so the move it resolves that turn is already an awake one.
+                //
+                // It also inherits the drain's Block subtraction for free: a
+                // sleeper whose own Block eats the whole turn's throughput loses
+                // no HP and stays asleep here, exactly as it would in a fight.
+                // Nothing dormant may grant Block (Phase4ContentSmokeTest), so
+                // in practice this only bites if that rule is ever relaxed.
+                if (!e.Enraged && e.Def.AiType == "wake_on_damage"
+                    && e.Def.EnrageMoves.Count > 0 && e.Hp < e.Def.MaxHp)
                 {
                     e.Enraged = true;
                 }
@@ -516,12 +568,13 @@ public static class BalanceModel
     // that is an approximation rather than a reading.
     private static int? EscapeTurn(EnemyDefinition def)
     {
-        int index = def.Moves.FindIndex(m => m.Effects.Any(e => e.Action == "escape"));
+        var moves = SteadyMoves(def);
+        int index = moves.ToList().FindIndex(m => m.Effects.Any(e => e.Action == "escape"));
         if (index < 0) return null;
 
         if (def.AiType != "weighted_random") return index + 1;
 
-        double p = SteadyState(def).Where(s => s.Move == def.Moves[index]).Sum(s => s.P);
+        double p = SteadyState(def).Where(s => s.Move == moves[index]).Sum(s => s.P);
         return p <= 0 ? null : (int)Math.Ceiling(1 / p);
     }
 
@@ -536,8 +589,11 @@ public static class BalanceModel
         if (moves.Count == 0) return Array.Empty<(EnemyMove, double)>();
 
         // PhaseThresholdIntentPicker resets its index on transition and wraps
-        // to 0, ignoring LoopFromIndex.
-        if (enraged || def.AiType == "phase_threshold")
+        // to 0, ignoring LoopFromIndex. WakeOnDamageIntentPicker does the same
+        // in both of its phases, which is why it joins this branch rather than
+        // the sequential one below - a dormant list is a loop from its first
+        // move, never an opener followed by a shorter cycle.
+        if (enraged || def.AiType == "phase_threshold" || def.AiType == "wake_on_damage")
         {
             return new[] { (moves[(turn - 1) % moves.Count], 1.0) };
         }
