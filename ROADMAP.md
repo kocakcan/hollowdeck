@@ -337,14 +337,25 @@ distribution held against 20k samples of the real picker).
     a second enemy draw at a second site. Concealment needed none.
 
   Three things the forecast did not contain:
-  - **Where the weight comes from mattered more than what it was.** Carved out of the whole
-    node-type table, an 18/128 `?` slot cost 1.1 reward picks and 51 gold a run and took
-    Encyclopedian from reachable on 23% of seeds to 15% — because a `?` comes back as a fight only
-    one time in five, so paying for it proportionally taxes fights. Carving it out of
-    Shop/Treasure/Rest/Event instead and leaving Combat/Elite untouched lands the whole encounter-
-    cost table byte-identical, fights at 16.2 against 16.6, Encyclopedian at 22% against 23% — and
-    Mystery Machine at 96% against 83%, which is the one threshold this moves and it moves it the
-    right way. Events go 1.6 → 2.1 per run, which is the texture the item was for.
+  - **Where the weight comes from mattered more than what it was, and it took two passes to get
+    right.** Carved out of the whole node-type table, an 18/128 `?` slot cost 1.1 reward picks and
+    51 gold a run and took Encyclopedian from reachable on 23% of seeds to 15% — because a `?` comes
+    back as a fight only one time in five, so paying for it proportionally taxes fights. Carving it
+    out of Shop/Treasure/Rest/Event instead fixed that.
+
+    **But leaving Combat and Elite's weights alone is not leaving their shares alone, and only one
+    of the two was actually protected.** The table grew 110 → 119, so an unchanged weight is a
+    smaller slice; Combat breaks even because the `?` table hands 20% back, and Elite — the one type
+    a `?` may never be — does not. Elite frequency quietly fell 6.8%, 1.9 elites a run to 1.8 and
+    the best path 10 to 8, and nothing in the repo would have said so: `BalanceSmokeTest` bands
+    elite *cost ratios* and has never measured how often an elite is offered. Elite 14 → 15 is the
+    fix, and the whole thing is the Phase 8 denominator lesson arriving in a table of weights rather
+    than in a report.
+
+    Landing: the encounter-cost, curve and boss tables byte-identical, fights 16.2 against 16.6,
+    elites 1.9 against 1.9, Encyclopedian 23% against 23% — and Mystery Machine 95% against 83%,
+    the one threshold this moves and it moves it the right way. Events go 1.6 → 2.1 per run, which
+    is the texture the item was for.
   - **A `?` may not be an Elite**, and that is the only exclusion in `PickConcealedType` that is a
     design rule rather than structure. An unadvertised elite is a fight the player committed to
     without the one fact that decides whether to take it: an ambush, not a gamble.

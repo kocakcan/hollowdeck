@@ -69,12 +69,21 @@ public static class MapGenerator
         // Elites don't show up on the first branching floor - too early for
         // a tougher-than-normal fight before the player has any relics/cards.
         // The four utility weights are down from a flat 12/12/12/10 to pay for
-        // the "?" slot below, and Combat/Elite are deliberately untouched. A
-        // "?" comes back as a fight only one time in five, so carving its
-        // weight out of the whole table taxes fights: measured, that cost 1.1
-        // reward picks and 51 gold a run and pushed RunScore's Encyclopedian
-        // from reachable on 23% of seeds to 15%. Paying for the fog out of the
-        // rooms it mostly turns into keeps the run the same length.
+        // the "?" slot below. A "?" comes back as a fight only one time in
+        // five, so carving its weight out of the whole table taxes fights:
+        // measured, that cost 1.1 reward picks and 51 gold a run and pushed
+        // RunScore's Encyclopedian from reachable on 23% of seeds to 15%.
+        // Paying for the fog out of the rooms it mostly turns into keeps the
+        // run the same length.
+        //
+        // Elite is 15 rather than 14 for the denominator, not for itself. An
+        // unchanged weight is not an unchanged share once the table grows
+        // 110 -> 119, and Elite is the one type the "?" table cannot hand back
+        // (see PickConcealedType), so Combat breaks even on its 20% share
+        // while Elite would quietly lose 7% of its frequency - measured, 1.9
+        // elites a run down to 1.8 and the best path 10 down to 8. Nothing
+        // would have caught it: BalanceSmokeTest bands elite *cost ratios*,
+        // never how often an elite is offered.
         var weights = new List<(MapNodeType type, int weight)>
         {
             (MapNodeType.Combat, 50),
@@ -83,7 +92,7 @@ public static class MapGenerator
             (MapNodeType.Rest, 11),
             (MapNodeType.Event, 5),
         };
-        weights.Add(floor >= 2 ? (MapNodeType.Elite, 14) : (MapNodeType.Combat, 14));
+        weights.Add(floor >= 2 ? (MapNodeType.Elite, 15) : (MapNodeType.Combat, 15));
 
         // A slot in this table rather than a coin flip layered on top of it, so
         // "how much of the map is unknown" is authored against the same

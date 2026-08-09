@@ -301,6 +301,7 @@ public partial class MapSmokeTest : Node
     {
         var seen = new HashSet<MapNodeType>();
         int concealedCount = 0;
+        int rollableCount = 0;
         var illegalType = new List<string>();
         var illegalFloor = new List<string>();
         var missingEnemies = new List<string>();
@@ -311,6 +312,12 @@ public partial class MapSmokeTest : Node
             {
                 var nodes = MapGenerator.Generate(new Random(seed), act);
                 int lastFloor = nodes.Max(n => n.Floor);
+
+                // Only the branching floors are eligible, so this is the
+                // denominator the "?" weight actually competes in - counting
+                // against every node would fold the three forced floors into
+                // the rate and make it drift with an act's floor count.
+                rollableCount += nodes.Count(n => n.Floor > 0 && n.Floor < lastFloor - 1);
 
                 foreach (var node in nodes.Where(n => n.Concealed))
                 {
@@ -337,9 +344,17 @@ public partial class MapSmokeTest : Node
             }
         }
 
-        // A weight that never fires is a table entry pretending to be a feature.
-        Check("generator_actually_produces_concealed_nodes", concealedCount > 0,
-            $"concealed={concealedCount} over 40 seeds x {ActDatabase.Count} acts");
+        // Banded, not just non-zero. "At least one over 120 maps" passes with
+        // the weight set to 1, where a "?" turns up in about one run in seven
+        // and the mechanic is effectively not in the game - and it passes just
+        // as well with the weight set high enough to fog half the map. Neither
+        // end is something the rest of the suite would notice, because every
+        // other assertion here is about the nodes that *are* concealed.
+        double rate = rollableCount == 0 ? 0 : concealedCount / (double)rollableCount;
+        Check("concealed_nodes_are_a_meaningful_share_of_the_branching_floors",
+            rate is > 0.08 and < 0.25,
+            $"{concealedCount}/{rollableCount} = {rate:P1} of eligible nodes over " +
+            $"40 seeds x {ActDatabase.Count} acts");
         Check("concealed_nodes_are_never_an_elite_or_the_boss", illegalType.Count == 0,
             string.Join("; ", illegalType.Take(5)));
         Check("concealed_nodes_never_land_on_a_forced_floor", illegalFloor.Count == 0,
