@@ -12,7 +12,14 @@ namespace Hollowdeck.Data;
 // apply_status/heal and an Attack to a deal_damage, and neither move has
 // either - so authored as a Buff a summon fails that sweep, correctly, because
 // the label it produced would be a lie.
-public enum IntentType { Attack, Defend, Buff, Debuff, Summon, Escape }
+//
+// Dormant is the same argument for the third time, and the one type whose whole
+// content is what the enemy is *not* doing to you: a sleeper telegraphing its
+// self-grant as a Buff would be true about the effect and silent about the
+// mechanic, which is the only thing the player needs to know (hitting it wakes
+// it). It resolves to the same Self-scoped grant a Buff does - that requirement
+// is load-bearing rather than inherited, see WakeOnDamageIntentPicker.
+public enum IntentType { Attack, Defend, Buff, Debuff, Summon, Escape, Dormant }
 
 public class EnemyIntent
 {

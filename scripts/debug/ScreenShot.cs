@@ -112,9 +112,11 @@ public partial class ScreenShot : Node
         // on, painting over the leftmost enemy - and with it the target-lock
         // glow, which is that enemy's own background.
         ["combatfull"] = new("res://scenes/CombatScreen.tscn", SeedCrowdedCombat, AfterCombatReady),
-        // The three telegraph shapes plain "combat" cannot show, since both of
-        // its enemies attack: a multi-hit count, a non-Strength buff, and a
-        // Debuff intent.
+        // The four telegraph shapes plain "combat" cannot show, since both of
+        // its enemies attack: a multi-hit count, a non-Strength buff, a Debuff
+        // intent, and a sleeper's Dormant row - the one intent that is not
+        // aimed at the player, and the one whose icon has to stay separable
+        // from the buff arrow it sits two columns away from.
         ["combatintents"] = new("res://scenes/CombatScreen.tscn", SeedIntentCombat, ShowNewIntents),
         ["combatsummon"] = new("res://scenes/CombatScreen.tscn", SeedSummonCombat, ShowFullRoster),
         // AwaitingTarget, which no other combat shot enters and which is the
@@ -347,12 +349,15 @@ public partial class ScreenShot : Node
     private static void SeedIntentCombat()
     {
         SeedCombat();
-        CombatContext.EnemyDefinitionIds = new List<string> { "drowned_thrall", "gaol_rat", "mire_leech" };
+        CombatContext.EnemyDefinitionIds = new List<string>
+        {
+            "drowned_thrall", "gaol_rat", "mire_leech", "gilded_husk",
+        };
     }
 
     private static void ShowNewIntents(Node screen)
     {
-        var pinned = new[] { "flailing_grasp", "bristle", "sap_will" };
+        var pinned = new[] { "flailing_grasp", "bristle", "sap_will", "slumber" };
         foreach (var view in EnemyView.Instances)
         {
             var definition = view.Combatant.Definition;
@@ -362,12 +367,20 @@ public partial class ScreenShot : Node
             view.Refresh();
         }
 
-        // Target-lock the last enemy so the shot also carries its intent hover
-        // panel - the row's icon and number are only half the telegraph now,
-        // and the prose half is the half a smoke test can only prove non-empty.
-        // Locking is also how keyboard target-cycling raises it, so this is the
-        // real path rather than a synthesised mouse event.
-        EnemyView.Instances.LastOrDefault()?.SetTargetLocked(true);
+        // Target-lock an enemy so the shot also carries its intent hover panel -
+        // the row's icon and number are only half the telegraph now, and the
+        // prose half is the half a smoke test can only prove non-empty. Locking
+        // is also how keyboard target-cycling raises it, so this is the real
+        // path rather than a synthesised mouse event.
+        //
+        // The *first* enemy, not the last. HoverTooltip.BesideAnchor clamps back
+        // inside the viewport rather than flipping to the other side, so on the
+        // rightmost of four the panel lands over the name and HP bar of the very
+        // enemy it is describing - which makes this shot unable to show what it
+        // is for. That clamp is worth fixing on its own (it is reachable in a
+        // real four-enemy fight, which a summon already produces); pinning the
+        // fixture to a column with room beside it is not the fix for it.
+        EnemyView.Instances.FirstOrDefault()?.SetTargetLocked(true);
     }
 
     // The roster at CombatManager.MaxEnemies, which is the widest the enemy row

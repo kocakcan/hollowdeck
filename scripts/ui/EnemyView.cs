@@ -325,6 +325,10 @@ public partial class EnemyView : Button
         // "this costs you something you own" surface in the game uses.
         IntentType.Summon => ("Summon", UiTheme.Palette.StatusBuff),
         IntentType.Escape => ("Escape", UiTheme.Palette.AccentGold),
+        // The one intent that is not aimed at the player, and the only one on a
+        // cold neutral rather than a signal colour: nothing is coming yet, and
+        // the row must not read as a threat the way the buff gold would.
+        IntentType.Dormant => ("Dormant", PixelSpec.Ramp.N6),
         _ => ("Intent", UiTheme.Palette.AccentGold),
     };
 
@@ -465,6 +469,11 @@ public partial class EnemyView : Button
             // the whole label. A move that steals nothing shows nothing, and
             // the "Escape" title carries it.
             IntentType.Escape => StolenGold(move) is int gold and > 0 ? $"-{gold}g" : "",
+            // A sleeper's row says what it gains while it is left alone, which
+            // is a Buff's label under a different icon - deliberately, because
+            // the number is the price of not waking it and the player has to be
+            // able to read that price. The icon carries the rest.
+            IntentType.Dormant => $"+{intent.DisplayAmount} {SelfGrantName(move)}",
             _ => "",
         };
     }

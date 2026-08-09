@@ -607,6 +607,7 @@ public partial class CombatManager : Node
     private bool ResolveDeathsAndSettle()
     {
         ResolveDeaths();
+        RetelegraphChangedPhases();
         CombatantsChanged?.Invoke();
 
         if (Player.IsDead)
@@ -659,6 +660,32 @@ public partial class CombatManager : Node
         // where the death-wins-over-escape rule lives.
         Enemies.RemoveAll(e => e.HasEscaped);
         EnemiesKilled += Enemies.RemoveAll(e => e.IsDead);
+    }
+
+    // Re-picks the intent of any enemy whose picker just changed phase because
+    // of what the player did - today that is a sleeper waking, and nothing else
+    // opts in (see IIntentPicker.TryAdvancePhase). Runs inside the settle pass
+    // and before its CombatantsChanged, so the enemy is already telegraphing
+    // its new phase on the refresh that same resolution triggers.
+    //
+    // The state gate is the load-bearing half. ResolvingCard is the player's own
+    // resolution (ResolveCard, ResolvePotion); the enemy turn settles from
+    // ResolvingEnemyIntent. Re-picking there would let an enemy further down
+    // _enemyTurnOrder resolve a move the player was never shown - the canonical
+    // bad bug of this genre, reached from the opposite direction to the usual
+    // one. An enemy woken mid-enemy-turn (a Poison tick, a Thorns prick) is not
+    // left holding a stale telegraph either: it resolves what it advertised and
+    // wakes at its own AdvanceEnemyIntent a few lines later, which is still
+    // before the player's next turn.
+    private void RetelegraphChangedPhases()
+    {
+        if (State != CombatState.ResolvingCard) return;
+
+        foreach (var enemy in Enemies)
+        {
+            if (enemy.IsGone) continue;
+            if (enemy.IntentPicker.TryAdvancePhase(enemy)) AdvanceEnemyIntent(enemy);
+        }
     }
 
     private void AdvanceEnemyIntent(EnemyCombatant enemy)
