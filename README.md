@@ -176,7 +176,9 @@ that only when the mechanic can't be composed from existing actions.
 (`data/enemies/enemies.json`) is HP plus a list of moves, each pairing a displayed `intent` with
 the `effects` it will actually resolve; `aiType` picks the intent strategy (`sequential`,
 `weighted_random`, `phase_threshold`, or `wake_on_damage` — the last two both switch to the
-`enrageMoves` list, one at an HP threshold and one the moment the enemy takes damage). An intent is
+`enrageMoves` list, one at an HP threshold and one the moment the enemy takes damage).
+`weighted_random` rolls each move's `weight` every turn but will not play one move more than twice
+running, so a lopsided pair reads a little flatter than its weights suggest. An intent is
 one of `Attack` / `Defend` / `Buff` / `Debuff` / `Summon` / `Escape` / `Dormant` plus a
 `displayAmount`, and that number is the *only* authored part of the telegraph — the hit count and
 the name of the status a Buff grants are derived from the move's own effects, so a move can't

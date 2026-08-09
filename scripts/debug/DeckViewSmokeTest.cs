@@ -247,20 +247,28 @@ public partial class DeckViewSmokeTest : Node
     // WeightedRandomIntentPicker used to strictly alternate lick/corrode -
     // the "exclude the last move" anti-repeat logic, with only 2 moves
     // total, left exactly one candidate every time, forcing every-other-
-    // turn Weak regardless of the 40% weight. 30 picks with true weighted
-    // randomness has an astronomically small chance of landing zero
-    // immediate repeats; strict alternation would guarantee zero.
+    // turn Weak regardless of the 40% weight. The run cap replaced that rule
+    // and still permits a repeat below MaxRun, so the guard holds: 30 picks
+    // has an astronomically small chance of landing zero immediate repeats,
+    // where strict alternation would guarantee zero.
+    //
+    // Phase4ContentSmokeTest.TestNoWeightedMoveRunsPastTheCap now sweeps both
+    // ends of the cap across all 12 weighted enemies and subsumes this one. It
+    // stays as the named regression for the bug that was actually shipped, on
+    // the enemy it was found on - a sweep says a rule holds, this says which
+    // mistake it was written against.
     private void TestSlimePickerIsntStrictAlternation()
     {
         var picker = new WeightedRandomIntentPicker();
         var slime = new EnemyCombatant { Name = "Acid Slime", Definition = EnemyDatabase.Get("slime") };
 
         bool sawRepeat = false;
+        string lastId = "";
         for (int i = 0; i < 30; i++)
         {
             var move = picker.PickNext(slime);
-            if (slime.LastMove is not null && move.MoveId == slime.LastMove.MoveId) sawRepeat = true;
-            slime.LastMove = move;
+            if (move.MoveId == lastId) sawRepeat = true;
+            lastId = move.MoveId;
         }
 
         Check("slime_picker_can_repeat_a_move_instead_of_forced_alternation", sawRepeat,

@@ -109,12 +109,13 @@ public static class BalanceModel
     //  - phase_threshold loops all of Moves until it enrages (and then all of
     //    EnrageMoves - reported separately, since when it flips depends on
     //    player throughput and so is not a property of the enemy alone).
-    //  - weighted_random is its Weight distribution, except that for 3+ move
-    //    enemies WeightedRandomIntentPicker excludes the last move played,
-    //    which makes it a Markov chain rather than i.i.d. sampling. That chain
-    //    is solved below rather than waved at: three enemies have 3 moves
-    //    (possessed_armor, pyre_warden, silent_judge) and their weights are
-    //    lopsided enough that the difference is real.
+    //  - weighted_random is its Weight distribution, except that
+    //    WeightedRandomIntentPicker refuses to play one move more than
+    //    MaxRun times running, which makes it a Markov chain rather than
+    //    i.i.d. sampling. That chain is solved below rather than waved at:
+    //    the cap pulls a lopsided 2-move enemy toward uniform (slime's 60/40
+    //    resolves to 53/47) and lets a 3-move enemy sit closer to its authored
+    //    weights than the old never-repeat rule allowed.
     //  - wake_on_damage steady-states on EnrageMoves, not Moves. Its dormant
     //    list is what it does while nobody has hit it, and every fight this
     //    model prices is one where the player is attacking - see the walk.
@@ -123,12 +124,7 @@ public static class BalanceModel
         var moves = SteadyMoves(def);
         if (moves.Count == 0) return Array.Empty<(EnemyMove, double)>();
 
-        if (def.AiType == "weighted_random")
-        {
-            return moves.Count <= 2
-                ? Weighted(moves)
-                : AntiRepeatStationary(moves);
-        }
+        if (def.AiType == "weighted_random") return RunCappedStationary(moves);
 
         // phase_threshold and wake_on_damage both wrap to 0 within their second
         // phase; everything else wraps to LoopFromIndex - "everything else"
@@ -150,41 +146,67 @@ public static class BalanceModel
             ? def.EnrageMoves
             : def.Moves;
 
-    private static IReadOnlyList<(EnemyMove Move, double P)> Weighted(IReadOnlyList<EnemyMove> moves)
-    {
-        double total = moves.Sum(m => m.Weight);
-        return total <= 0
-            ? moves.Select(m => (m, 1.0 / moves.Count)).ToList()
-            : moves.Select(m => (m, m.Weight / total)).ToList();
-    }
-
-    // Stationary distribution of "pick by weight from everything except what
-    // you just played". Power iteration on a 3-4 state chain converges in a
-    // few dozen steps; there is no need to be cleverer than this.
-    private static IReadOnlyList<(EnemyMove Move, double P)> AntiRepeatStationary(IReadOnlyList<EnemyMove> moves)
+    // What a weighted_random enemy does on an average turn, given that the
+    // picker will not play one move more than WeightedRandomIntentPicker.MaxRun
+    // times running. The cap makes the chain's state a pair - which move was
+    // last played, and how long the current run of it is - because "may I
+    // repeat?" is answerable from the run length alone. From (j, r) every move
+    // is a candidate except j itself at r == MaxRun; picking j again advances
+    // to (j, r+1), anything else starts a fresh run at (k, 1).
+    //
+    // Power iteration over n x MaxRun states - six for a 3-move enemy at a cap
+    // of 2 - converges in a few dozen steps; there is no need to be cleverer.
+    // BalanceSmokeTest samples the real picker against this rather than trusting
+    // the two to have been changed together.
+    private static IReadOnlyList<(EnemyMove Move, double P)> RunCappedStationary(IReadOnlyList<EnemyMove> moves)
     {
         int n = moves.Count;
-        var p = Enumerable.Repeat(1.0 / n, n).ToArray();
+        int cap = WeightedRandomIntentPicker.MaxRun;
+
+        // One move (or no weight anywhere) leaves the cap nothing to exclude
+        // into - the picker's own empty-candidates fallback yields the same way.
+        if (n == 1 || moves.Sum(m => m.Weight) <= 0)
+            return moves.Select(m => (m, 1.0 / n)).ToList();
+
+        // State (j, r) is index j * cap + (r - 1).
+        var p = Enumerable.Repeat(1.0 / (n * cap), n * cap).ToArray();
 
         for (int step = 0; step < 200; step++)
         {
-            var next = new double[n];
+            var next = new double[n * cap];
             for (int last = 0; last < n; last++)
             {
-                double total = 0;
-                for (int j = 0; j < n; j++) if (j != last) total += moves[j].Weight;
-                if (total <= 0) continue;
-                for (int j = 0; j < n; j++)
+                for (int run = 1; run <= cap; run++)
                 {
-                    if (j == last) continue;
-                    next[j] += p[last] * moves[j].Weight / total;
+                    double mass = p[last * cap + run - 1];
+                    if (mass <= 0) continue;
+
+                    bool capped = run == cap;
+                    double total = 0;
+                    for (int j = 0; j < n; j++) if (!(capped && j == last)) total += moves[j].Weight;
+                    if (total <= 0) continue;
+
+                    for (int j = 0; j < n; j++)
+                    {
+                        if (capped && j == last) continue;
+                        int nextRun = j == last ? run + 1 : 1;
+                        next[j * cap + nextRun - 1] += mass * moves[j].Weight / total;
+                    }
                 }
             }
             p = next;
         }
 
-        return moves.Select((m, i) => (m, p[i])).ToList();
+        return moves
+            .Select((m, i) => (m, Enumerable.Range(0, cap).Sum(r => p[i * cap + r])))
+            .ToList();
     }
+
+    // The steady state, exposed so a suite can hold it against what the picker
+    // actually samples. Everything above is private because it is only ever
+    // consumed through a damage number; this one exists to be compared.
+    public static IReadOnlyList<(EnemyMove Move, double P)> MoveDistribution(EnemyDefinition def) =>
+        SteadyState(def);
 
     public static double FlatDpt(EnemyDefinition def) =>
         SteadyState(def).Sum(s => s.P * MoveDamage(s.Move));
@@ -600,7 +622,7 @@ public static class BalanceModel
 
         if (def.AiType == "weighted_random")
         {
-            return moves.Count <= 2 ? Weighted(moves) : AntiRepeatStationary(moves);
+            return RunCappedStationary(moves);
         }
 
         int index = turn - 1;

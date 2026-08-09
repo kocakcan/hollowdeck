@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using Hollowdeck.Combat;
 using Hollowdeck.Data;
 using Hollowdeck.Run;
 
@@ -38,6 +39,7 @@ public partial class BalanceSmokeTest : Node
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
+        TestTheModelAgreesWithThePicker();
         TestEveryEnemyCanFight();
         TestActCurveRises();
         TestEnrageIsAnEscalation();
@@ -50,6 +52,47 @@ public partial class BalanceSmokeTest : Node
 
         GD.Print($"BalanceSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
+    }
+
+    // Every damage number in this file rests on BalanceModel's claim about what
+    // an enemy does on an average turn, and for weighted_random that claim is a
+    // solved Markov chain rather than a reading of the weights - the picker's
+    // run cap makes it one. Two hand-written mirrors of one rule is the seam
+    // this codebase actually produces: change the cap in the picker alone and
+    // every suite here stays green while the whole curve is measured against a
+    // chain the game no longer plays. So drive the real picker and hold the
+    // frequencies against the model.
+    //
+    // 20k samples puts the standard error near 0.0035, so a 2pt tolerance is
+    // ~6 sigma of sampling noise and comfortably inside the smallest real
+    // disagreement (the cap moves slime's 60/40 by 6.7pt).
+    private void TestTheModelAgreesWithThePicker()
+    {
+        const int samples = 20000;
+        const double tolerance = 0.02;
+
+        var problems = new List<string>();
+        foreach (var def in EnemyDatabase.All.Where(d => d.AiType == "weighted_random"))
+        {
+            var picker = new WeightedRandomIntentPicker();
+            var enemy = new EnemyCombatant { Name = def.Name, Definition = def };
+
+            var counts = new Dictionary<string, int>();
+            for (int i = 0; i < samples; i++)
+            {
+                string id = picker.PickNext(enemy).MoveId;
+                counts[id] = counts.GetValueOrDefault(id) + 1;
+            }
+
+            foreach (var (move, p) in BalanceModel.MoveDistribution(def))
+            {
+                double observed = counts.GetValueOrDefault(move.MoveId) / (double)samples;
+                if (System.Math.Abs(observed - p) > tolerance)
+                    problems.Add($"{def.Id}:{move.MoveId} model {p:F3} vs picker {observed:F3}");
+            }
+        }
+
+        Check("balance_model_agrees_with_the_picker", problems.Count == 0, Join(problems));
     }
 
     // An enemy that never deals damage, or an encounter group that sums to no

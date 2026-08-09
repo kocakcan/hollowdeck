@@ -262,6 +262,27 @@ the turn it first loses HP, because the reference deck always attacks. Its dorma
 unpriced by design — turns spent letting one sleep are a choice made against a visible Strength
 counter, not a property of the curve.
 
+**`WeightedRandomIntentPicker` will not play one move more than `MaxRun` (2) times running, and that
+one rule replaced two that were each honest at a single move count.** Excluding the last-played move
+outright is a cap of 1, and at exactly two moves it leaves one candidate — strict alternation, with
+the excluded move's weight ignored every other turn. Disabling it below three moves fixed that and
+made a two-move enemy unbounded i.i.d. sampling, free to play the same move four times running. A run
+cap means something at every move count. Three things about it:
+
+- **The picker owns its own memory** (`_lastMoveId`, `_run`), the way the other three own `_index` /
+  `_enraged` / `_awake` — `EnemyFactory.Create` news one per enemy per combat, including each summon.
+  `EnemyCombatant.LastMove` existed only to feed the old rule and is gone; splitting "which move" onto
+  the combatant and "how long a run" onto the picker would be two sources for one fact.
+- **The cap yields rather than starving.** A one-move enemy, or a move list whose `MoveId`s collide,
+  would filter itself down to nothing; the empty-candidates fallback is what makes that terminate, and
+  `Phase4ContentSmokeTest.TestAOneMovePickerTerminates` covers the arm no authored enemy reaches.
+- **`BalanceModel.RunCappedStationary` solves the resulting chain, over `(move, runLength)` pairs
+  rather than moves** — "may I repeat?" is answerable from the run length alone. It reads
+  `WeightedRandomIntentPicker.MaxRun` rather than copying it, and `BalanceSmokeTest` samples the real
+  picker 20k times per weighted enemy and holds the frequencies against the model, because a cap
+  changed in the picker alone leaves every suite green while the whole curve is measured against a
+  chain the game no longer plays.
+
 **The roster mutates mid-fight, and everything about that lives in one settle pass.** `Enemies` was
 fixed for the length of a fight until Phase 8's behaviour half — set once in `StartCombat`, only ever
 shrunk by a dead-enemy sweep. Three things change it now: `summon_enemy` appends, `escape` removes an
@@ -409,9 +430,9 @@ above.
 balance retune, the *card* half of the vocabulary — keywords, per-effect targeting, the `add_card`
 primitive, unplayable card types, X-cost — and now the *status* half — `Artifact`, `Thorns`,
 `Intangible`, `Plating` — and the *behaviour* half — `summon_enemy`, `onDeath`, escape, and now the
-`wake_on_damage` picker — have all shipped. What's open of the enemy vocabulary is the two-move
-`WeightedRandomIntentPicker` run cap; after that, relic tiers, potion rarity and combat drops, the
-`?` node, an ascension ladder. Don't treat this section as a to-do list.
+`wake_on_damage` picker, and the `WeightedRandomIntentPicker` run cap that closed it — have all
+shipped. What's open is relic tiers, potion rarity and combat drops, the `?` node, an ascension
+ladder. Don't treat this section as a to-do list.
 
 One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap
 is next read:

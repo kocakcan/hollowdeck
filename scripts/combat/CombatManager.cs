@@ -688,11 +688,8 @@ public partial class CombatManager : Node
         }
     }
 
-    private void AdvanceEnemyIntent(EnemyCombatant enemy)
-    {
-        enemy.LastMove = enemy.CurrentMove;
+    private void AdvanceEnemyIntent(EnemyCombatant enemy) =>
         enemy.CurrentMove = enemy.IntentPicker.PickNext(enemy);
-    }
 
     private void EndCombat(CombatOutcome outcome)
     {
