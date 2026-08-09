@@ -214,7 +214,12 @@ public partial class LibraryScreen : Control
         // tile here renders unlocked, unconditionally.
         foreach (var def in PotionDatabase.All)
         {
-            string description = EffectDescriptionFormatter.Describe(
+            // The tier is named on the tile because this screen's whole job is
+            // explaining the content. A potion rarity the player can only ever
+            // meet as a frequency is a number that exists for PotionPool and
+            // for nobody else - cards get theirs through CardView's border, and
+            // a potion has no CardView.
+            string description = $"{def.Rarity}. " + EffectDescriptionFormatter.Describe(
                 def.Effects, new DescribeContext(TargetType: def.Target));
             var tile = BuildInfoTile(def.Name, ArtAssets.PotionIcon(def.Id), description, unlocked: true, threshold: null,
                 () => LibraryInspectPopup.OpenItem(this, def.Name, ArtAssets.PotionIcon(def.Id), description));

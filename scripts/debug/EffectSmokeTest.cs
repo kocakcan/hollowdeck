@@ -44,6 +44,9 @@ public partial class EffectSmokeTest : Node
         TestLiveTargetDamage();
         TestEveryCardDeclaresARarity();
         TestCardPoolIsRarityWeighted();
+        TestRarityPoolAlgorithm();
+        TestEveryPotionDeclaresARarity();
+        TestPotionPoolIsRarityWeighted();
         TestPowerCardsLeavePlay();
         TestDexterityAndFrailBlock();
         TestDiscardAndExhaustHand();
@@ -468,6 +471,141 @@ public partial class EffectSmokeTest : Node
         var everything = CardPool.Sample(CardDatabase.All, CardDatabase.All.Count + 5, rng);
         Check("card_pool_caps_at_offerable_pool_size", everything.Count == offerableCount,
             $"got {everything.Count} of {offerableCount}");
+    }
+
+    // The potion half of TestEveryCardDeclaresARarity, plus one check cards do
+    // not have and should: that the key is actually *authored*.
+    private void TestEveryPotionDeclaresARarity()
+    {
+        // Read the file as text rather than trusting the deserialized objects.
+        // Rarity has no null and defaults to Common, so a row that simply
+        // forgot the key is indistinguishable from a row deliberately tiered
+        // Common once DataFile has run - which is the single silent seam in
+        // this whole feature. Same source-scan shape PixelSpecSmokeTest uses
+        // for literal font-size calls, and for the same reason: the fact being
+        // asserted is about the source, not about the loaded object.
+        string json = Godot.FileAccess.GetFileAsString("res://data/potions/potions.json");
+        int authored = System.Text.RegularExpressions.Regex.Matches(json, "\"rarity\"").Count;
+        Check("every_potion_row_authors_a_rarity", authored == PotionDatabase.All.Count,
+            $"{authored} rarity keys for {PotionDatabase.All.Count} potions");
+
+        var byRarity = PotionDatabase.All.GroupBy(p => p.Rarity).ToDictionary(g => g.Key, g => g.Count());
+        foreach (var rarity in new[] { Rarity.Common, Rarity.Uncommon, Rarity.Rare })
+        {
+            Check($"potion_pool_has_{rarity.ToString().ToLowerInvariant()}_potions",
+                byRarity.GetValueOrDefault(rarity) > 0, $"none authored at {rarity}");
+        }
+
+        // The tiers have to stay monotone *per row*, not per tier. A tier's
+        // weight is split among its members, so authoring rows into one tier
+        // and not the others silently re-orders how likely a named potion is -
+        // and at these numbers it does not take much: two more Uncommons puts
+        // an Uncommon potion below a Rare one. Nothing else in the repo would
+        // notice, because every other assertion here is about a tier's share.
+        double PerRow(Rarity r) => (double)PotionPool.WeightOf(r) / byRarity.GetValueOrDefault(r, 1);
+        double common = PerRow(Rarity.Common), uncommon = PerRow(Rarity.Uncommon), rare = PerRow(Rarity.Rare);
+        Check("potion_tiers_stay_monotone_by_row", common > uncommon && uncommon > rare,
+            $"per-row odds C={common:F2} U={uncommon:F2} R={rare:F2} "
+            + $"over {byRarity.GetValueOrDefault(Rarity.Common)}/"
+            + $"{byRarity.GetValueOrDefault(Rarity.Uncommon)}/{byRarity.GetValueOrDefault(Rarity.Rare)} rows");
+    }
+
+    // The potion half of TestCardPoolIsRarityWeighted. Same argument: uniform
+    // sampling - which is what the shop and the event outcome both did before
+    // PotionPool - would put Rares at their share of the pool, 2 of 12 or
+    // ~17%, rather than the 10% the weights ask for.
+    private void TestPotionPoolIsRarityWeighted()
+    {
+        var rng = new System.Random(4321);
+        int rares = 0, draws = 0;
+        for (int trial = 0; trial < 600; trial++)
+        {
+            var picked = PotionPool.SampleOne(PotionDatabase.All, rng);
+            draws++;
+            if (picked!.Rarity == Rarity.Rare) rares++;
+        }
+
+        // Band, not a point: this asserts the weighting is applied, not that a
+        // seeded RNG hits 10% exactly. Uniform would land near 17%.
+        double share = (double)rares / draws;
+        Check("potion_pool_keeps_rares_rare", share is > 0.03 and < 0.15,
+            $"rare share={share:P1} over {draws} draws");
+
+        // Without replacement: the shop must never stock the same potion twice.
+        var stock = PotionPool.Sample(PotionDatabase.All, 2, rng);
+        Check("potion_pool_samples_without_replacement",
+            stock.Select(p => p.Id).Distinct().Count() == stock.Count,
+            string.Join(", ", stock.Select(p => p.Id)));
+    }
+
+    // A tiered row for the synthetic pools below. Deliberately not a card or a
+    // potion: RarityPool is generic, and pinning its behaviour against real
+    // content would produce an assertion that goes red every time someone
+    // authors a row and therefore gets deleted the second time it does.
+    private sealed record Tiered(string Id, Rarity Rarity);
+
+    // RarityPool is the draw CardPool and PotionPool share. Both of them assert
+    // their *weights* elsewhere; what is pinned here is the algorithm, because
+    // that is the half an extraction can break silently and the half neither
+    // caller would notice - a band on a rare share still passes if the draw
+    // stopped being without-replacement or started biasing an exhausted tier.
+    private void TestRarityPoolAlgorithm()
+    {
+        // Six rows, three tiers, uneven - the shape both real pools have.
+        var pool = new List<Tiered>
+        {
+            new("c1", Rarity.Common), new("c2", Rarity.Common), new("c3", Rarity.Common),
+            new("u1", Rarity.Uncommon), new("u2", Rarity.Uncommon),
+            new("r1", Rarity.Rare),
+        };
+        static Rarity TierOf(Tiered t) => t.Rarity;
+        static int Weight(Rarity r) => r switch { Rarity.Rare => 10, Rarity.Uncommon => 25, _ => 65 };
+
+        // Asking for more than exists drains the pool exactly once each rather
+        // than looping forever or repeating a row. This is the assertion that
+        // covers both remove-on-pick and the tier being dropped when it empties.
+        var drained = RarityPool.Sample(pool, 20, new System.Random(5), TierOf, Weight);
+        Check("rarity_pool_drains_every_tier_exactly_once",
+            drained.Count == pool.Count && drained.Select(t => t.Id).Distinct().Count() == pool.Count,
+            $"got {drained.Count} of {pool.Count}: {string.Join(",", drained.Select(t => t.Id))}");
+
+        // Same seed, same sequence. RarityPool groups into a Dictionary, whose
+        // key order is not guaranteed - PickTier's OrderBy is what makes this
+        // hold, and it is the single line an extraction is most likely to drop.
+        string first = string.Join(",", RarityPool.Sample(pool, 6, new System.Random(11), TierOf, Weight)
+            .Select(t => t.Id));
+        string second = string.Join(",", RarityPool.Sample(pool, 6, new System.Random(11), TierOf, Weight)
+            .Select(t => t.Id));
+        Check("rarity_pool_draws_in_a_fixed_order", first == second, $"{first} then {second}");
+
+        // An exhausted tier is *removed*, not re-rolled: with a 99:1 split, a
+        // two-row pool must still hand back both rows on a two-draw. If the
+        // tier stayed in the roulette after emptying, this would come back
+        // short (Sample breaks when PickTier can find nothing to draw).
+        var lopsided = new List<Tiered> { new("c", Rarity.Common), new("r", Rarity.Rare) };
+        static int Lopsided(Rarity r) => r == Rarity.Rare ? 1 : 99;
+        bool bothEveryTime = true;
+        for (int seed = 0; seed < 50; seed++)
+        {
+            var drawn = RarityPool.Sample(lopsided, 2, new System.Random(seed), TierOf, Lopsided);
+            if (drawn.Count != 2) bothEveryTime = false;
+        }
+        Check("rarity_pool_renormalises_an_exhausted_tier", bothEveryTime,
+            "a two-draw on a two-row pool came back short");
+
+        // The weight function is honoured rather than ignored: inverting it has
+        // to invert which tier dominates. Without this, a sampler that quietly
+        // drew uniformly would pass every other check here.
+        static int Inverted(Rarity r) => r switch { Rarity.Rare => 65, Rarity.Uncommon => 25, _ => 10 };
+        int raresNormal = 0, raresInverted = 0;
+        var rng = new System.Random(77);
+        for (int trial = 0; trial < 400; trial++)
+        {
+            if (RarityPool.SampleOne(pool, rng, TierOf, Weight)!.Rarity == Rarity.Rare) raresNormal++;
+            if (RarityPool.SampleOne(pool, rng, TierOf, Inverted)!.Rarity == Rarity.Rare) raresInverted++;
+        }
+        Check("rarity_pool_actually_reads_the_weight_table", raresInverted > raresNormal * 3,
+            $"rare draws: {raresNormal} weighted vs {raresInverted} inverted of 400 each");
     }
 
     // A Power leaves the fight when played: not to Discard (it would cycle

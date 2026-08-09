@@ -54,6 +54,18 @@ existing effects.
 to `PileManager.Powers`, which is neither Discard (it would cycle back) nor Exhaust (a cost the HUD
 renders as one).
 
+`Rarity` is shared with `PotionDefinition`, and **the weight tables are not**. Cards are 60/37/3;
+potions are 65/25/10 in `PotionPool`, because a card is a permanent deck slot and a potion is one
+shot out of a three-slot belt — at the card weights a *named* Rare potion would sit under 1% against
+a 12-row pool, i.e. authored and never seen. The tier-first draw itself is shared
+(`RarityPool.Sample`, which takes the weight function as a required parameter so a potion draw
+silently running on the card table is unrepresentable); the `IsPlayable` filter stays in
+`CardPool.Sample`, since it is a card rule. **The number that matters as content grows is per
+*row*, not per tier** — a tier's weight is divided among its members, so authoring two more Uncommon
+potions alone would put an Uncommon below a Rare. `EffectSmokeTest.TestEveryPotionDeclaresARarity`
+watches for that, and reads `potions.json` as *text* to count `"rarity"` keys, because the enum has
+no null and a forgotten tier is otherwise indistinguishable from an authored Common.
+
 **What a Power buys is a status that pays out every turn.** `Metallicize` (Block), `Ritual`
 (Strength) and `Regen` (HP) are granted in `CombatManager.ApplyTurnStartGrants` and never decay,
 which is what no recurring Skill can offer. They are statuses rather than a `PowerBehavior` hook
@@ -166,6 +178,57 @@ nothing and be gone.
 resolution nor an amount that does not exist yet. `Phase4ContentSmokeTest` refuses any enemy move
 that declares them or `PerX`. That is an assertion rather than a comment because a drifted telegraph
 is the canonical bad bug in this genre.
+
+**The reward screen is a list you claim from, and every reward on it is an *offer*.** `RewardContext`
+carries what a fight is offering — gold, a relic, a potion drop, three card choices — plus a
+`HashSet<RewardKind> Claimed`; `RewardScreen` renders one row per offer and grants on the click.
+Nothing in `CombatScreen.OnContinuePressed` touches `RunState` any more, which is a change from how
+this worked for eight phases: gold was banked before the screen loaded and the relic was granted
+inside the same call that picked it (`GrantRewardRelic` → `PickRewardRelic`), so two of the four
+rows were things the player already had.
+
+That was invisible while a card was the only thing being offered, and stopped being invisible the
+moment a second claimable thing landed on the screen — whichever the player touched first silently
+forfeited the other, because taking a card called `Advance()`. Four things about the shape that
+replaced it:
+
+- **A claim is idempotent, and the guard is `RewardContext.Claimed`, not the Button.** A row that is
+  somehow still enabled cannot pay twice.
+- **`MarkClaimed` re-saves.** `RunManager` autosaves on *entering* a screen (`AutoSaveScreens`), so
+  the save taken when Reward opened has none of the claims in it — without the re-save, claiming
+  gold and then quitting would return to a run that had never been paid. What is still *unclaimed*
+  is still forfeited by quitting, which is the deal the card pick has always offered.
+- **The card fan is a modal over the list, and opening it is the one case `Regrab` cannot handle.**
+  `ScreenKeyboardNavListener.RegrabNow` deliberately leaves an existing focus owner alone, so the
+  row that was just pressed keeps the ring and it sits on the list *behind* the dim. `OpenCardOverlay`
+  grabs into the fan explicitly; `CloseCardOverlay` uses `Regrab`, which is correct there because the
+  focused `CardView` has just been freed. The list also leaves the focus chain
+  (`FocusModeEnum.None`, not `Disabled` — they are not illegal choices) and is faded to 0.3, because
+  a 0.75 scrim alone left a column of gold headings perfectly legible behind the cards.
+- **`CombatScreen._continueResolved` guards the whole Continue handler**, not just the stats fold it
+  started life as. There are two independent ways in — the button's `Pressed` and
+  `hd_confirm`/`hd_end_turn` in `_UnhandledInput`, which is deliberately not focus-based — and
+  `ChangeScreen` is not instant because `ScreenFade` holds the scene up. A click plus an Enter inside
+  that window used to award the gold twice and grant *two* relics.
+
+**A won fight rolls for a potion, at a rate authored per act.** `ActDefinition.PotionDropPercent` /
+`ElitePotionDropPercent` sit beside the gold dials in `data/acts/acts.json`, and
+`CombatScreen.RollPotionDrop` reads them off `RngStreams.Drops`. **A boss never rolls** — it already
+guarantees a relic and an act clear. Three things:
+
+- **Both fields default to 0, and that is the wrong reading of an act that forgot the key.** Unlike
+  every other absent-is-zero field in the data layer, a silent 0 disables the feature for that act
+  with nothing thrown and every suite green. `ActSmokeTest` asserts both are authored above zero, in
+  range, and that the elite rate is not *below* the normal one — that last catches the transposed
+  pair, which is otherwise invisible.
+- **`BalanceModel.NodePotionPercent` mirrors `RollPotionDrop`** and must keep mirroring it, or the
+  report prices a drop table the game does not play. `BalanceSmokeTest` pins the boss arm rather
+  than leaving a reader to trust a `_ =>`, and bands the yield at both ends: under one drop a run the
+  belt is still empty (the problem, unfixed), over two beltfuls every extra drop meets a full belt
+  and ships as a greyed row.
+- **The rates are printed in `BalanceReport`, not just their consequence.** Both Phase 8 balance
+  incidents and the Phase 9 node-weight one hid the same way — a data number moved and only its
+  effect was visible.
 
 **Autoloads** (declared in `project.godot`, in this order — `AudioManager` must come before
 `SettingsManager` because the settings sliders address audio bus indices):
@@ -413,8 +476,12 @@ navigated differently *on purpose*:
 so a badge or tooltip can't drift from the key that actually fires.
 
 **RNG** is split into separate seeded streams in `RngStreams` — `Combat`, `EnemyAI`, `Shop`,
-`Map` — all derived from the run seed, so drawing an extra card can't shift what the shop stocks
-and cosmetic jitter can never desync a deterministic run.
+`Map`, `Drops` — all derived from the run seed, so drawing an extra card can't shift what the shop
+stocks and cosmetic jitter can never desync a deterministic run. The derivation is per-stream
+(`runSeed * 397 + n`) rather than sequential, which is what makes appending one free: `Drops`
+landed at `+4` and moved no existing seed's map, shop or shuffles. `Drops` owns the post-fight
+potion roll alone — the shop's stock and the `gain_potion` event stay on `Shop`, which is where
+every non-combat grant already draws from.
 
 ## Current state
 
@@ -468,9 +535,10 @@ balance retune, the *card* half of the vocabulary — keywords, per-effect targe
 primitive, unplayable card types, X-cost — and now the *status* half — `Artifact`, `Thorns`,
 `Intangible`, `Plating` — and the *behaviour* half — `summon_enemy`, `onDeath`, escape, and now the
 `wake_on_damage` picker, and the `WeightedRandomIntentPicker` run cap that closed it — have all
-shipped, as has the `?` node that opened Phase 9. What's open is relic tiers, potion rarity and
-combat drops, the boss-relic choice, a start-of-run screen, an ascension ladder. Don't treat this
-section as a to-do list.
+shipped, as has the `?` node that opened Phase 9 and the potion pass that followed it — rarity,
+per-act combat drops, and the reward screen those drops forced. What's open is relic tiers, the
+boss-relic choice, a start-of-run screen, an ascension ladder. Don't treat this section as a to-do
+list.
 
 One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap
 is next read:
@@ -503,10 +571,18 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   hard cut lives on exactly one path
 - `scripts/run/RunState.cs`, `RunSaveManager.cs` — in-run state and its save/resume
 - `scripts/run/MetaProgressionManager.cs` + `RunScore.cs` — score-driven unlock track, meta save
-- `scripts/run/RngStreams.cs` — the four seeded RNG streams
+- `scripts/run/RngStreams.cs` — the five seeded RNG streams
+- `scripts/run/RarityPool.cs` — the tier-first weighted draw `CardPool` and `PotionPool` share.
+  Generic on purpose (unlike `BlockMath`/`DamageMath`): what is duplicated here is an algorithm
+  whose every step is a correctness property, not a hazard worth two copies. The *weights* stay
+  split, which is the `BlockMath` argument doing its job one level down
 - `scripts/run/CardPool.cs` — rarity-weighted sampling; the single place "which cards does the
   player get offered" is decided (reward picks, shop stock, the random-card event outcome), and
-  therefore the single place unplayable cards are excluded from being offered at all
+  therefore the single place unplayable cards are excluded from being offered at all — that
+  `IsPlayable` filter lives here rather than in `RarityPool`, because it is a card rule
+- `scripts/run/PotionPool.cs` — the same for potions, at 65/25/10, across all four grant sites: the
+  combat drop, the shop's two-potion stock, and the `gain_potion` event. No `IsPlayable` analogue —
+  every potion in the database is offerable and none is unlock-gated
 - `scripts/combat/CombatManager.cs` — turn loop, intent telegraphing, targeting sub-state
 - `scripts/effects/EffectRegistry.cs` + `IEffect.cs` — the composable effect system every
   card/relic/potion/enemy-move definition keys into

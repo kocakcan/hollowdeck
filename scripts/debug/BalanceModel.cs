@@ -891,20 +891,23 @@ public static class BalanceModel
     // fights, and a path through a 10-floor act visits 10 nodes regardless of
     // how wide the act is.
     public readonly record struct PathCounts(
-        int Combat, int Elite, int Boss, int Rest, int Shop, int Treasure, int Event, int Gold)
+        int Combat, int Elite, int Boss, int Rest, int Shop, int Treasure, int Event, int Gold,
+        int PotionPercent)
     {
         public int Fights => Combat + Elite + Boss;
 
         public static PathCounts operator +(PathCounts a, PathCounts b) => new(
             a.Combat + b.Combat, a.Elite + b.Elite, a.Boss + b.Boss, a.Rest + b.Rest,
-            a.Shop + b.Shop, a.Treasure + b.Treasure, a.Event + b.Event, a.Gold + b.Gold);
+            a.Shop + b.Shop, a.Treasure + b.Treasure, a.Event + b.Event, a.Gold + b.Gold,
+            a.PotionPercent + b.PotionPercent);
     }
 
     // A category is reachable if *some* path reaches it, so each of these is
     // maximised independently - a player routing for events is not also
     // routing for gold, and asking whether they could is the wrong question.
     public readonly record struct PathMaxima(
-        int Combat, int Elite, int Rest, int Shop, int Treasure, int Event, int Gold, int Fights);
+        int Combat, int Elite, int Rest, int Shop, int Treasure, int Event, int Gold, int Fights,
+        int PotionPercent);
 
     // Means are fractional on purpose: "1.6 event rooms" is the whole point of
     // the Mystery Machine finding, and an integer PathCounts would report 1.
@@ -926,6 +929,10 @@ public static class BalanceModel
         {
             ["combat"] = 0, ["elite"] = 0, ["boss"] = 0, ["rest"] = 0,
             ["shop"] = 0, ["treasure"] = 0, ["event"] = 0, ["gold"] = 0, ["fights"] = 0,
+            // Summed as percent-per-node and divided by 100 once, at the point
+            // it is printed - so PathCounts stays integral and the sum along a
+            // path is exact rather than accumulating float error per node.
+            ["potionpct"] = 0,
         };
         var max = new PathMaxima();
 
@@ -948,6 +955,7 @@ public static class BalanceModel
                 sums["event"] += c.Event;
                 sums["gold"] += c.Gold;
                 sums["fights"] += c.Fights;
+                sums["potionpct"] += c.PotionPercent;
 
                 runMax = new PathMaxima(
                     runMax.Combat + MaxAlong(nodes, n => n.Type == MapNodeType.Combat ? 1 : 0),
@@ -958,14 +966,16 @@ public static class BalanceModel
                     runMax.Event + MaxAlong(nodes, n => n.Type == MapNodeType.Event ? 1 : 0),
                     runMax.Gold + MaxAlong(nodes, n => NodeGold(n, act)),
                     runMax.Fights + MaxAlong(nodes, n =>
-                        n.Type is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss ? 1 : 0));
+                        n.Type is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss ? 1 : 0),
+                    runMax.PotionPercent + MaxAlong(nodes, n => NodePotionPercent(n, act)));
             }
 
             max = new PathMaxima(
                 Math.Max(max.Combat, runMax.Combat), Math.Max(max.Elite, runMax.Elite),
                 Math.Max(max.Rest, runMax.Rest), Math.Max(max.Shop, runMax.Shop),
                 Math.Max(max.Treasure, runMax.Treasure), Math.Max(max.Event, runMax.Event),
-                Math.Max(max.Gold, runMax.Gold), Math.Max(max.Fights, runMax.Fights));
+                Math.Max(max.Gold, runMax.Gold), Math.Max(max.Fights, runMax.Fights),
+                Math.Max(max.PotionPercent, runMax.PotionPercent));
         }
 
         return new RunPaths(seeds, sums.ToDictionary(kv => kv.Key, kv => kv.Value / seeds), max);
@@ -996,7 +1006,8 @@ public static class BalanceModel
         n.Type == MapNodeType.Shop ? 1 : 0,
         n.Type == MapNodeType.Treasure ? 1 : 0,
         n.Type == MapNodeType.Event ? 1 : 0,
-        NodeGold(n, act));
+        NodeGold(n, act),
+        NodePotionPercent(n, act));
 
     // Mirrors MapScreen's three award sites. Boss gold is 0 in the final act
     // by design (nothing left to spend it on), which is data, not a bug.
@@ -1005,6 +1016,18 @@ public static class BalanceModel
         MapNodeType.Combat => act.NormalGoldBase + n.EnemyIds.Count * act.GoldPerEnemy,
         MapNodeType.Elite => act.EliteGold,
         MapNodeType.Boss => act.BossGold,
+        _ => 0,
+    };
+
+    // Mirrors CombatScreen.RollPotionDrop, and has to keep mirroring it: the
+    // two agreeing is what makes the printed drop rate a statement about the
+    // game rather than about this file. A boss is in the default arm on purpose
+    // - it already guarantees a relic and an act clear, and BalanceSmokeTest
+    // pins that rather than leaving it to a reader to trust a `_ =>`.
+    public static int NodePotionPercent(MapNode n, ActDefinition act) => n.Type switch
+    {
+        MapNodeType.Combat => act.PotionDropPercent,
+        MapNodeType.Elite => act.ElitePotionDropPercent,
         _ => 0,
     };
 

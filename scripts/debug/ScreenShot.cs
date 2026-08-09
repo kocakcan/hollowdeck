@@ -74,6 +74,21 @@ public partial class ScreenShot : Node
         // ever holds, so this is where it would run into the deck button or
         // wrap into the cards.
         ["rewardactclear"] = new("res://scenes/RewardScreen.tscn", SeedActClearedReward),
+        // The list at its fullest: gold, relic, potion and card all on offer at
+        // once, which is what an elite that also dropped a potion pays. Seeded
+        // with the longest potion name in the content, since a row's name and
+        // its rules text share the width left over by the icon.
+        ["rewardpotion"] = new("res://scenes/RewardScreen.tscn", SeedPotionReward),
+        // The same list against a belt that is already full: the potion row
+        // still renders, but it is refused. This is the state a screenshot is
+        // worth most, because a disabled row under a dim is the half no
+        // assertion can look at.
+        ["rewardpotionfull"] = new("res://scenes/RewardScreen.tscn", SeedFullBeltPotionReward),
+        // The card fan, which is a modal over the list rather than the screen
+        // itself now - so it is only reachable by pressing its row, and the
+        // thing to look at is whether the list reads correctly *through* the
+        // dim behind it.
+        ["rewardcards"] = new("res://scenes/RewardScreen.tscn", SeedPotionReward, OpenRewardCards),
         ["shop"] = new("res://scenes/ShopScreen.tscn", SeedShop),
         // The shop's card-removal picker, which like the rest site's Smith and
         // the event grid is unreachable without the click. Seeded with a
@@ -250,8 +265,11 @@ public partial class ScreenShot : Node
 
         // Same reason as the cover above: RewardContext is a static that
         // outlives a shot, so without this the act-cleared banner would leak
-        // onto every reward-screen shot taken after "rewardactclear".
+        // onto every reward-screen shot taken after "rewardactclear", and the
+        // potion tile onto every one taken after "rewardpotion".
         RewardContext.ActCleared = null;
+        RewardContext.PotionDrop = null;
+        RewardContext.Claimed.Clear();
 
         RunState.Gold = 129;
         RunState.PlayerMaxHp = 50;
@@ -524,6 +542,39 @@ public partial class ScreenShot : Node
         {
             CardDatabase.Get("twin_strike"), CardDatabase.Get("shrug_it_off"), CardDatabase.Get("inflame"),
         };
+    }
+
+    // A drop on offer beside the relic SeedReward already sets, so all four row
+    // kinds are on screen at once. greater_block_potion is the longest potion
+    // name in the content (19 characters), and it is an Uncommon - so the
+    // rarity tint on the row's name is something other than the Common grey a
+    // lucky roll would usually show.
+    private static void SeedPotionReward()
+    {
+        SeedReward();
+        RewardContext.PotionDrop = PotionDatabase.Get("greater_block_potion");
+        RewardContext.Claimed.Clear();
+    }
+
+    // The same offer with nowhere to put it. Three potions is
+    // RunState.MaxPotionSlots, so the row has to refuse the claim rather than
+    // accepting a fourth the combat HUD would never draw.
+    private static void SeedFullBeltPotionReward()
+    {
+        SeedPotionReward();
+        RunState.Potions = new List<PotionInstance>
+        {
+            new(PotionDatabase.Get("fire_potion")),
+            new(PotionDatabase.Get("block_potion")),
+            new(PotionDatabase.Get("swift_potion")),
+        };
+    }
+
+    // Presses the card row, which is the only way the fan is reachable now.
+    private static void OpenRewardCards(Node screen)
+    {
+        var row = screen.FindChild(RewardScreen.RowName(RewardKind.Card), recursive: true, owned: false);
+        (row as Button)?.EmitSignal(BaseButton.SignalName.Pressed);
     }
 
     // Act 2 cleared, i.e. the widest case: the longest act name of the three

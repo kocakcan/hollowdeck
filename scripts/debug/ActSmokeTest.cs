@@ -38,6 +38,7 @@ public partial class ActSmokeTest : Node
         PotionDatabase.LoadAll();
 
         TestActsLoad();
+        TestEveryActAuthorsItsPotionDropRates();
         TestActContentIsDistinct();
         TestNoSummonCrossesAnAct();
         TestNewRunStartsInFirstAct();
@@ -77,6 +78,39 @@ public partial class ActSmokeTest : Node
             .Where(tile => !ResourceLoader.Exists($"res://assets/backgrounds/{tile}.png"))
             .ToList();
         Check("every_act_backdrop_tile_exists", missingArt.Count == 0, string.Join(", ", missingArt));
+    }
+
+    // The potion drop rates, and the reason these three checks exist at all:
+    // both fields default to 0, and unlike every other absent-is-zero field in
+    // the data layer, 0 here is not a benign reading of an older act - it
+    // silently switches the whole drop feature off for that act. Nothing
+    // throws, no screen changes, and every other suite stays green. A typo in
+    // one key in acts.json is the entire failure mode.
+    private void TestEveryActAuthorsItsPotionDropRates()
+    {
+        var unauthored = ActDatabase.All
+            .Where(a => a.PotionDropPercent <= 0 || a.ElitePotionDropPercent <= 0)
+            .Select(a => $"{a.Id} {a.PotionDropPercent}/{a.ElitePotionDropPercent}")
+            .ToList();
+        Check("every_act_authors_a_potion_drop_rate", unauthored.Count == 0,
+            string.Join(", ", unauthored));
+
+        var overHundred = ActDatabase.All
+            .Where(a => a.PotionDropPercent > 100 || a.ElitePotionDropPercent > 100)
+            .Select(a => $"{a.Id} {a.PotionDropPercent}/{a.ElitePotionDropPercent}")
+            .ToList();
+        Check("potion_drop_rates_are_percentages", overHundred.Count == 0,
+            string.Join(", ", overHundred));
+
+        // Catches the transposed pair, which is otherwise invisible: both keys
+        // present, both in range, both plausible, and elites quietly the
+        // stingier room. An elite is where a potion actually gets spent.
+        var inverted = ActDatabase.All
+            .Where(a => a.ElitePotionDropPercent < a.PotionDropPercent)
+            .Select(a => $"{a.Id} normal={a.PotionDropPercent} elite={a.ElitePotionDropPercent}")
+            .ToList();
+        Check("elite_potion_drops_at_least_as_often_as_a_normal_fight", inverted.Count == 0,
+            string.Join(", ", inverted));
     }
 
     // Three acts that draw from the same enemies would make a longer run feel

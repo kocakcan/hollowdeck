@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/RewardScreen.cs" id="1"]
 
@@ -17,10 +17,10 @@ anchor_left = 0.5
 anchor_top = 0.0
 anchor_right = 0.5
 anchor_bottom = 0.0
-offset_left = -210.0
+offset_left = -260.0
 offset_top = 24.0
-offset_right = 210.0
-offset_bottom = 160.0
+offset_right = 260.0
+offset_bottom = 120.0
 
 [node name="TitleLabel" type="Label" parent="TitleBlock"]
 layout_mode = 2
@@ -36,29 +36,17 @@ autowrap_mode = 3
 visible = false
 text = ""
 
-[node name="GoldLabel" type="Label" parent="TitleBlock"]
-layout_mode = 2
-horizontal_alignment = 1
-text = "You found 0 gold."
-
-[node name="RelicLabel" type="Label" parent="TitleBlock"]
-layout_mode = 2
-horizontal_alignment = 1
-autowrap_mode = 3
-visible = false
-text = "Relic: "
-
-[node name="CardChoicesArea" type="Control" parent="."]
+[node name="RewardListArea" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -400.0
-offset_top = -154.0
-offset_right = 400.0
-offset_bottom = 154.0
+offset_left = -260.0
+offset_top = -190.0
+offset_right = 260.0
+offset_bottom = 170.0
 mouse_filter = 2
 
 [node name="SkipButton" type="Button" parent="."]
@@ -68,9 +56,54 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -50.0
+offset_left = -90.0
 offset_top = -56.0
-offset_right = 50.0
+offset_right = 90.0
 offset_bottom = -24.0
 theme_override_font_sizes/font_size = 16
-text = "Skip"
+text = "Skip Rewards"
+
+[node name="CardOverlay" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+visible = false
+
+[node name="Dim" type="ColorRect" parent="CardOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.75)
+
+[node name="CardChoicesArea" type="Control" parent="CardOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -400.0
+offset_top = -174.0
+offset_right = 400.0
+offset_bottom = 134.0
+mouse_filter = 2
+
+[node name="CardCancelButton" type="Button" parent="CardOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -60.0
+offset_top = -108.0
+offset_right = 60.0
+offset_bottom = -76.0
+theme_override_font_sizes/font_size = 16
+text = "Back"

@@ -1,4 +1,3 @@
-using System.Linq;
 using Hollowdeck.Data;
 using Hollowdeck.Run;
 
@@ -17,10 +16,15 @@ public class GainPotionOutcome : IEventOutcome
             return "Your potion belt is full; you leave it where it lies.";
         }
 
-        var pool = PotionDatabase.All.ToList();
-        if (pool.Count == 0) return "There was nothing left worth drinking.";
+        // Rarity-weighted like the shop's stock and the combat drop, rather
+        // than the uniform pick this used to do - PotionPool is the single
+        // place "which potion is offered" is answered, so all four grant sites
+        // agree on how rare a Rare is. Stays on RngStreams.Shop, which is the
+        // stream every non-combat grant already draws from; RngStreams.Drops
+        // is for the combat roll alone.
+        var picked = PotionPool.SampleOne(PotionDatabase.All, RngStreams.Shop);
+        if (picked is null) return "There was nothing left worth drinking.";
 
-        var picked = pool[RngStreams.Shop.Next(pool.Count)];
         RunState.Potions.Add(new PotionInstance(picked));
         return null;
     }

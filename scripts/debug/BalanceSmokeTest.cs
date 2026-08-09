@@ -3,6 +3,7 @@ using System.Linq;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
+using Hollowdeck.Map;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.Debug;
@@ -48,6 +49,7 @@ public partial class BalanceSmokeTest : Node
         TestEncounterCostsStayInTheirBand();
         TestAnEscapeCostsMoreThanTheNodeItLeaves();
         TestScoreThresholdsAreReachable();
+        TestPotionDropYield();
         TestUpgradeGrantsAreWhatTheDocsClaim();
 
         GD.Print($"BalanceSmokeTest: {_pass} passed, {_fail} failed");
@@ -391,6 +393,43 @@ public partial class BalanceSmokeTest : Node
             Check($"score_{label}_is_reachable", metric.Best >= needs,
                 $"needs {needs}, best over {Seeds} seeds is {metric.Best}");
         }
+    }
+
+    // The potion drop yield. Potions were shop- and event-only until Phase 9,
+    // which is why the three-slot belt was almost always empty and why this
+    // number is worth a band rather than just a printed line.
+    private void TestPotionDropYield()
+    {
+        // A boss is the one fight type that never rolls, and it is expressed as
+        // the default arm of a switch - so it is pinned here rather than left
+        // to a reader trusting `_ => 0`. Driven over every act, since the arm
+        // is per-act data.
+        var bossRolls = ActDatabase.All
+            .Where(act => BalanceModel.NodePotionPercent(
+                new MapNode { Type = MapNodeType.Boss }, act) != 0)
+            .Select(act => act.Id)
+            .ToList();
+        Check("a_boss_never_drops_a_potion", bossRolls.Count == 0, Join(bossRolls));
+
+        // And the rooms that do roll actually do, per act - the mirror of
+        // ActSmokeTest's authoring check, one layer down, so a rate that landed
+        // in acts.json but never reached the model still fails something.
+        var silentActs = ActDatabase.All
+            .Where(act => BalanceModel.NodePotionPercent(new MapNode { Type = MapNodeType.Combat }, act) <= 0
+                || BalanceModel.NodePotionPercent(new MapNode { Type = MapNodeType.Elite }, act) <= 0)
+            .Select(act => act.Id)
+            .ToList();
+        Check("fights_actually_roll_for_a_potion_in_every_act", silentActs.Count == 0, Join(silentActs));
+
+        // The yield itself, banded at both ends because both ends are real
+        // failures. Below one drop a run the belt is still empty and the whole
+        // item did nothing; above two beltfuls every extra drop arrives at a
+        // full belt and ships as a greyed-out row, which reads as broken rather
+        // than as generous.
+        double drops = BalanceModel.SampleRuns(Seeds)["potionpct"] / 100.0;
+        Check("expected_potion_drops_per_run_is_worth_the_belt",
+            drops is >= 1.0 && drops <= RunState.MaxPotionSlots * 2,
+            $"{drops:F1} drops per run against a {RunState.MaxPotionSlots}-slot belt");
     }
 
     // Pins the two upgrade deltas CardUpgrade's comment describes, by id and

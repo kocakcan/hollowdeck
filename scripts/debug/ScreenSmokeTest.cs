@@ -41,6 +41,7 @@ public partial class ScreenSmokeTest : Node
         await TestRewardScreenOpensQuietly();
         TestRewardScreenActClearedBanner();
         TestRewardScreen();
+        TestRewardPotionDrop();
         TestTreasureScreen();
         TestShopScreen();
         await TestShopOffersClearTheRunStatusBlock();
@@ -64,6 +65,12 @@ public partial class ScreenSmokeTest : Node
         AddChild(instance);
         return instance;
     }
+
+    // A reward row by the reward it is for. owned: false because the rows are
+    // built in code and so have no scene owner - the default (true) finds
+    // nothing, which reads as "the row is missing" rather than as a bad query.
+    private static Button? Row(Node screen, RewardKind kind) =>
+        screen.FindChild(RewardScreen.RowName(kind), recursive: true, owned: false) as Button;
 
     // Every non-combat screen shows its cards with Interactive = false, and for
     // a long time that single flag was also what suppressed the keyword hover
@@ -197,6 +204,7 @@ public partial class ScreenSmokeTest : Node
     {
         var tree = GetTree();
         RewardContext.ActCleared = null;
+        RewardContext.PotionDrop = null;
         RewardContext.GoldAwarded = 25;
         // Bash first, deliberately: it applies Vulnerable, so the card that
         // gets the automatic focus is one that *has* something to say. A
@@ -214,10 +222,19 @@ public partial class ScreenSmokeTest : Node
         await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
 
-        var cards = screen.GetNode<Control>("CardChoicesArea").GetChildren().OfType<CardView>().ToList();
+        // The fan is behind the "Add a card to your deck" row now rather than
+        // being the screen itself, so the quiet-open property has to be checked
+        // where the cards actually are: on the overlay that row opens. Same
+        // grab, one view further in.
+        Row(screen, RewardKind.Card)!.EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        var cards = screen.GetNode<Control>("CardOverlay/CardChoicesArea")
+            .GetChildren().OfType<CardView>().ToList();
         var focused = GetViewport().GuiGetFocusOwner();
 
-        Check("reward_auto_focuses_its_first_card",
+        Check("reward_card_overlay_auto_focuses_its_first_card",
             cards.Count > 1 && ReferenceEquals(focused, cards[0]),
             $"focus landed on '{focused?.Name}' - the rest of this test needs it on a keyworded card");
         Check("reward_opens_without_a_keyword_tooltip", CountTooltips() == 0,
@@ -245,6 +262,7 @@ public partial class ScreenSmokeTest : Node
     private void TestRewardScreenActClearedBanner()
     {
         RewardContext.GoldAwarded = 60;
+        RewardContext.PotionDrop = null;
         RewardContext.CardChoices = new List<CardDefinition> { CardDatabase.Get("strike") };
         RewardContext.ActCleared = new ActClear(
             ClearedNumber: 1, ClearedName: "The Sunken Ward",
@@ -273,9 +291,20 @@ public partial class ScreenSmokeTest : Node
         plain.QueueFree();
     }
 
+    // The reward list: one row per reward the fight actually offered, claimed
+    // one at a time. Nothing here is granted before the screen loads any more -
+    // gold used to be banked in CombatScreen and the relic granted as it was
+    // picked, so two of the four rows were things the player already had.
     private void TestRewardScreen()
     {
+        RunState.Gold = 0;
+        RunState.Relics = new List<RelicInstance>();
+        RunState.Potions = new List<PotionInstance>();
+        RewardContext.ActCleared = null;
         RewardContext.GoldAwarded = 25;
+        RewardContext.GuaranteedRelic = RelicDatabase.Get("anchor_stone");
+        RewardContext.PotionDrop = null;
+        RewardContext.Claimed.Clear();
         RewardContext.CardChoices = new List<CardDefinition>
         {
             CardDatabase.Get("strike"),
@@ -284,19 +313,155 @@ public partial class ScreenSmokeTest : Node
         };
 
         var screen = LoadScene("res://scenes/RewardScreen.tscn");
-        var goldLabel = screen.GetNode<Label>("TitleBlock/GoldLabel");
-        var choicesArea = screen.GetNode<Control>("CardChoicesArea");
-        var cardViews = choicesArea.GetChildren().OfType<CardView>().ToList();
         var skip = screen.GetNode<Button>("SkipButton");
 
-        Check("reward_gold_label_shows_awarded_amount", goldLabel.Text.Contains("25"), $"text='{goldLabel.Text}'");
-        Check("reward_has_a_card_view_per_choice", cardViews.Count == 3, $"cards={cardViews.Count}");
+        Check("reward_lists_a_row_per_offered_reward",
+            Row(screen, RewardKind.Gold) is not null && Row(screen, RewardKind.Relic) is not null
+            && Row(screen, RewardKind.Card) is not null,
+            "gold, relic and card rows should all be present");
+        // The one this fight did not drop has no row at all, rather than a
+        // disabled row explaining an absence.
+        Check("reward_omits_a_row_for_a_reward_not_offered", Row(screen, RewardKind.Potion) is null,
+            "a potion row appeared for a fight that dropped nothing");
+        Check("reward_gold_row_shows_the_amount",
+            Row(screen, RewardKind.Gold)!.FindChildren("*", "Label", recursive: true, owned: false)
+                .OfType<Label>().Any(l => l.Text.Contains("25")),
+            "the gold row does not name the amount");
+        Check("reward_skip_button_has_a_handler", skip.GetSignalConnectionList("pressed").Count > 0,
+            "no pressed connections");
+
+        // Claiming pays out exactly once. The second press is the real check:
+        // RewardContext.Claimed is what refuses it, so the payout cannot be
+        // repeated even by a row that is somehow still enabled.
+        Row(screen, RewardKind.Gold)!.EmitSignal(BaseButton.SignalName.Pressed);
+        int afterFirst = RunState.Gold;
+        Row(screen, RewardKind.Gold)!.EmitSignal(BaseButton.SignalName.Pressed);
+        Check("reward_gold_is_only_banked_when_claimed", afterFirst == 25 && RunState.Gold == 25,
+            $"gold={RunState.Gold} after two presses of a 25 gold row");
+        Check("reward_claimed_row_refuses_further_focus",
+            Row(screen, RewardKind.Gold) is { Disabled: true, FocusMode: Control.FocusModeEnum.None },
+            $"disabled={Row(screen, RewardKind.Gold)?.Disabled} focus={Row(screen, RewardKind.Gold)?.FocusMode}");
+
+        Row(screen, RewardKind.Relic)!.EmitSignal(BaseButton.SignalName.Pressed);
+        Check("reward_relic_is_only_granted_when_claimed",
+            RunState.Relics.Count == 1 && RunState.Relics[0].Definition.Id == "anchor_stone",
+            $"relics={RunState.Relics.Count}");
+
+        // The card row opens the fan rather than resolving in place, and
+        // picking there closes it and returns to the list. A pick that left the
+        // screen would forfeit every row the player had not reached yet, which
+        // is the whole reason this screen is a list.
+        var overlay = screen.GetNode<Control>("CardOverlay");
+        Check("reward_card_overlay_starts_closed", !overlay.Visible, "the fan is open before the row was pressed");
+
+        Row(screen, RewardKind.Card)!.EmitSignal(BaseButton.SignalName.Pressed);
+        var cardViews = screen.GetNode<Control>("CardOverlay/CardChoicesArea")
+            .GetChildren().OfType<CardView>().ToList();
+        Check("reward_card_row_opens_the_fan", overlay.Visible && cardViews.Count == 3,
+            $"visible={overlay.Visible} cards={cardViews.Count}");
         Check("reward_card_views_are_non_interactive", cardViews.All(c => !c.Interactive),
             "a reward CardView still has Interactive=true (would try to drag-to-play)");
-        Check("reward_first_card_is_strike", cardViews.Count > 0 && cardViews[0].CardInstance?.Definition.Id == "strike",
+        Check("reward_first_card_is_strike",
+            cardViews.Count > 0 && cardViews[0].CardInstance?.Definition.Id == "strike",
             $"id='{cardViews.ElementAtOrDefault(0)?.CardInstance?.Definition.Id}'");
-        Check("reward_skip_button_has_a_handler", skip.GetSignalConnectionList("pressed").Count > 0, "no pressed connections");
+
+        int deckBefore = RunState.Deck.Count;
+        cardViews[0]._GuiInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+
+        Check("reward_card_pick_adds_to_the_deck", RunState.Deck.Count == deckBefore + 1,
+            $"deck went {deckBefore} -> {RunState.Deck.Count}");
+        Check("reward_card_pick_closes_the_fan", !overlay.Visible, "the fan stayed open after a pick");
+        // WATCHDOG NOTE: this one fails as a TIMEOUT rather than a FAIL.
+        // LoadScene parents the screen under this test node, so a pick that
+        // wrongly called Advance() would run ChangeSceneToFile and replace the
+        // test scene itself - the suite hangs, and the last PASS line printed
+        // names the check before the culprit.
+        Check("reward_card_pick_does_not_leave_the_screen", screen.IsInsideTree(),
+            "picking a card advanced the screen - every unclaimed row would be forfeited");
+        Check("reward_exit_button_reads_continue_once_everything_is_claimed",
+            skip.Text == "Continue", $"text='{skip.Text}' with nothing left to skip");
         screen.QueueFree();
+    }
+
+    // The potion drop's own row, and the belt cap it has to respect.
+    private void TestRewardPotionDrop()
+    {
+        RunState.Gold = 0;
+        RunState.Relics = new List<RelicInstance>();
+        RunState.Potions = new List<PotionInstance>();
+        RewardContext.ActCleared = null;
+        RewardContext.GoldAwarded = 0;
+        RewardContext.GuaranteedRelic = null;
+        RewardContext.CardChoices = new List<CardDefinition>();
+        RewardContext.PotionDrop = PotionDatabase.Get("fire_potion");
+        RewardContext.Claimed.Clear();
+
+        var screen = LoadScene("res://scenes/RewardScreen.tscn");
+        var row = Row(screen, RewardKind.Potion);
+        var labels = row?.FindChildren("*", "Label", recursive: true, owned: false).OfType<Label>().ToList()
+            ?? new List<Label>();
+
+        Check("reward_shows_a_potion_row_when_one_dropped", row is not null, "no potion row");
+        // The tier has to be readable, or PotionDefinition.Rarity is a number
+        // that exists only for the sampler. Common is fire_potion's tier.
+        Check("reward_potion_row_shows_its_name_and_rarity",
+            labels.Any(l => l.Text.Contains("Fire Potion")) && labels.Any(l => l.Text.Contains("Common")),
+            string.Join(" | ", labels.Select(l => l.Text)));
+
+        row!.EmitSignal(BaseButton.SignalName.Pressed);
+        int afterFirst = RunState.Potions.Count;
+        row.EmitSignal(BaseButton.SignalName.Pressed);
+        Check("reward_potion_claim_adds_it_to_the_belt",
+            afterFirst == 1 && RunState.Potions[0].DefinitionId == "fire_potion",
+            $"count={afterFirst} first='{RunState.Potions.FirstOrDefault()?.DefinitionId}'");
+        Check("reward_potion_claim_is_not_repeatable", RunState.Potions.Count == 1,
+            $"a second press left {RunState.Potions.Count} potions on the belt");
+        screen.QueueFree();
+
+        // A drop against a belt that is already full. The row still renders -
+        // silently dropping the offer is what the shop does and it reads as a
+        // broken button - but it refuses and says why. Both flags together:
+        // Disabled alone excludes a control from neither Tab nor arrow nav.
+        RunState.Potions = new List<PotionInstance>
+        {
+            new(PotionDatabase.Get("fire_potion")),
+            new(PotionDatabase.Get("block_potion")),
+            new(PotionDatabase.Get("swift_potion")),
+        };
+        RewardContext.Claimed.Clear();
+        var fullBelt = LoadScene("res://scenes/RewardScreen.tscn");
+        var fullRow = Row(fullBelt, RewardKind.Potion);
+
+        Check("reward_full_belt_still_shows_the_potion_row", fullRow is not null, "no potion row");
+        Check("reward_full_belt_disables_the_claim",
+            fullRow is { Disabled: true, FocusMode: Control.FocusModeEnum.None },
+            $"disabled={fullRow?.Disabled} focusMode={fullRow?.FocusMode}");
+        // On the row, not only in the tooltip. A blocked row is
+        // FocusModeEnum.None, so a keyboard player can never reach it to raise
+        // one - asserting the tooltip alone would pass a version of this screen
+        // that explains itself to the mouse and to nobody else.
+        var fullLabels = fullRow!.FindChildren("*", "Label", recursive: true, owned: false)
+            .OfType<Label>().Select(l => l.Text).ToList();
+        Check("reward_full_belt_says_why_on_the_row",
+            fullLabels.Any(t => t.Contains("Belt full")),
+            string.Join(" | ", fullLabels));
+
+        fullRow!.EmitSignal(BaseButton.SignalName.Pressed);
+        Check("reward_full_belt_claim_grants_nothing", RunState.Potions.Count == RunState.MaxPotionSlots,
+            $"belt went to {RunState.Potions.Count} against a cap of {RunState.MaxPotionSlots}");
+        fullBelt.QueueFree();
+
+        // Deliberately last, and deliberately after the two above set it:
+        // RewardContext is a static that outlives a screen, so a fight that
+        // dropped nothing rendering a potion row is a *leak*, and nulling the
+        // field in the same test that reads it would prove nothing.
+        RunState.Potions = new List<PotionInstance>();
+        RewardContext.PotionDrop = null;
+        RewardContext.Claimed.Clear();
+        var noDrop = LoadScene("res://scenes/RewardScreen.tscn");
+        Check("reward_has_no_potion_row_when_none_dropped", Row(noDrop, RewardKind.Potion) is null,
+            "a potion row survived from the previous fight");
+        noDrop.QueueFree();
     }
 
     private void TestTreasureScreen()

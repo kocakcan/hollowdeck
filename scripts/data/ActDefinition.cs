@@ -44,6 +44,21 @@ public class ActDefinition
     public int EliteGold { get; set; } = 45;
     public int BossGold { get; set; }
 
+    // Chance out of 100 that a won fight offers a potion, rolled off
+    // RngStreams.Drops in CombatScreen.RollPotionDrop. Per act rather than one
+    // constant for the same reason the gold above is: how much a room pays is
+    // a pacing dial, and act I is where the belt is emptiest. There is no Boss
+    // field because a boss never rolls - it already guarantees a relic and an
+    // act clear.
+    //
+    // The defaults are 0, and that is the wrong reading of an act that forgot
+    // the key - unlike every other absent-is-zero field in the data layer, a
+    // silent 0 here disables the whole feature for that act with nothing
+    // thrown and every suite green. ActSmokeTest asserts both are authored
+    // above zero for exactly that reason.
+    public int PotionDropPercent { get; set; }
+    public int ElitePotionDropPercent { get; set; }
+
     // Applied by RunState.AdvanceAct when this act is cleared. A run that has
     // to survive three acts on the 50 HP one act was tuned for would be
     // hopeless, so clearing an act raises the ceiling and heals - currently to

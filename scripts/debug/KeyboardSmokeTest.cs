@@ -62,6 +62,7 @@ public partial class KeyboardSmokeTest : Node
         TestFocusModeSplit();
         TestOnlyFocusModeExcludesAControlFromTheKeyboard();
         await TestEveryNonCombatScreenTakesFocus(tree);
+        await TestRewardListFocus(tree);
         await TestEventPickerTakesFocus(tree);
         await TestRestPickerGridNavigation(tree);
         await TestCombatKeyboard(tree);
@@ -262,6 +263,7 @@ public partial class KeyboardSmokeTest : Node
         RunState.Potions = new List<PotionInstance>();
         RewardContext.GoldAwarded = 25;
         RewardContext.GuaranteedRelic = null;
+        RewardContext.PotionDrop = null;
         RewardContext.CardChoices = new List<CardDefinition>
         {
             CardDatabase.Get("strike"), CardDatabase.Get("defend"), CardDatabase.Get("bash"),
@@ -277,7 +279,11 @@ public partial class KeyboardSmokeTest : Node
                 (f, _) => f.Name.ToString() is "ContinueButton" or "StartButton"),
             ("res://scenes/MapScreen.tscn", "a reachable map node",
                 (f, screen) => f.GetParent() == screen.GetNode("NodeButtons") && f is BaseButton { Disabled: false }),
-            ("res://scenes/RewardScreen.tscn", "a card choice", (f, _) => f is CardView),
+            // The first unclaimed reward row, not a card: the reward screen is a
+            // list you claim from now, and the card fan lives behind the "Add a
+            // card to your deck" row rather than being the screen itself.
+            ("res://scenes/RewardScreen.tscn", "the first unclaimed reward row",
+                (f, _) => f is Button { Disabled: false } && f.Name.ToString().EndsWith("Row")),
             ("res://scenes/ShopScreen.tscn", "an affordable Buy button",
                 (f, _) => f is Button { Disabled: false } b && b.Text.StartsWith("Buy")),
             ("res://scenes/RestScreen.tscn", "HealButton", (f, _) => f.Name.ToString() == "HealButton"),
@@ -309,6 +315,85 @@ public partial class KeyboardSmokeTest : Node
             instance.QueueFree();
             await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         }
+    }
+
+    // The reward list is the second place a non-combat screen swaps views
+    // mid-visit (the event picker below is the first), and it does it twice:
+    // claiming a row disables the control the player is standing on, and the
+    // card row opens a modal fan over the list. Both are moments a screen ends
+    // up with focus nowhere, or - worse, because it looks like it works - with
+    // the ring on a control the player cannot see.
+    private async Task TestRewardListFocus(SceneTree tree)
+    {
+        using var saveGuard = RunSaveGuard.Protect();
+        using var cutGuard = HardCutGuard.Protect();
+
+        RunState.Gold = 0;
+        RunState.Potions = new List<PotionInstance>();
+        RunState.Relics = new List<RelicInstance>();
+        RewardContext.ActCleared = null;
+        RewardContext.GoldAwarded = 25;
+        RewardContext.GuaranteedRelic = null;
+        RewardContext.PotionDrop = PotionDatabase.Get("fire_potion");
+        RewardContext.Claimed.Clear();
+        RewardContext.CardChoices = new List<CardDefinition>
+        {
+            CardDatabase.Get("strike"), CardDatabase.Get("defend"), CardDatabase.Get("bash"),
+        };
+
+        var screen = GD.Load<PackedScene>("res://scenes/RewardScreen.tscn").Instantiate();
+        AddChild(screen);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        Button? Row(RewardKind kind) =>
+            screen.FindChild(RewardScreen.RowName(kind), recursive: true, owned: false) as Button;
+
+        // Claiming the row the ring is standing on. RefreshRows sets
+        // FocusModeEnum.None on it, which *releases* the focus - so without the
+        // Regrab that follows, the next arrow key would go nowhere.
+        Row(RewardKind.Gold)!.EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        var afterClaim = GetViewport().GuiGetFocusOwner();
+        Check("reward_claiming_a_row_leaves_focus_somewhere_legal",
+            ScreenKeyboardNav.CanTakeFocus(afterClaim),
+            $"focus is on '{afterClaim?.Name}' - claiming a row left the ring nowhere");
+        Check("reward_claimed_row_does_not_keep_focus",
+            !ReferenceEquals(afterClaim, Row(RewardKind.Gold)),
+            "the ring stayed on the row that was just claimed and disabled");
+
+        // Opening the card fan is a modal: focus has to move *into* it, and the
+        // list behind the dim has to leave the focus chain or Tab walks back
+        // out onto rows the player cannot see.
+        Row(RewardKind.Card)!.EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        Check("reward_card_overlay_takes_the_focus", GetViewport().GuiGetFocusOwner() is CardView,
+            $"focus is on '{GetViewport().GuiGetFocusOwner()?.Name}', not a card in the fan");
+        Check("reward_list_leaves_the_focus_chain_behind_the_overlay",
+            Row(RewardKind.Potion)!.FocusMode == Control.FocusModeEnum.None
+            && screen.GetNode<Button>("SkipButton").FocusMode == Control.FocusModeEnum.None,
+            "a row behind the dim can still be tabbed to");
+
+        // Backing out restores it, in both directions.
+        screen.GetNode<Button>("CardOverlay/CardCancelButton").EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        Check("reward_closing_the_overlay_returns_focus_to_the_list",
+            GetViewport().GuiGetFocusOwner() is Button { Disabled: false } b
+            && b.Name.ToString().EndsWith("Row"),
+            $"focus is on '{GetViewport().GuiGetFocusOwner()?.Name}' after backing out of the fan");
+        Check("reward_closing_the_overlay_restores_the_list_to_the_focus_chain",
+            Row(RewardKind.Potion)!.FocusMode == Control.FocusModeEnum.All
+            && screen.GetNode<Button>("SkipButton").FocusMode == Control.FocusModeEnum.All,
+            "the list stayed out of the focus chain after the fan closed");
+
+        screen.QueueFree();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
     }
 
     // An event's card picker is the one place a non-combat screen swaps its

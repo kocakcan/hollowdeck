@@ -257,6 +257,22 @@ public partial class BalanceReport : Node
         GD.Print("");
         GD.Print($"  fights (= three-card reward picks)  {paths["fights"],6:F1} mean, {paths.Max.Fights} best");
         GD.Print($"  gold earned                         {paths["gold"],6:F0} mean, {paths.Max.Gold} best");
+
+        // Drops only. Shop stock is deliberately not counted, for the same
+        // reason the fights line above is captioned "three-card reward picks"
+        // rather than "cards": this table is what the *nodes* pay, and what a
+        // shop sells depends on gold the player may spend on something else.
+        GD.Print($"  potion drops (expected)             {paths["potionpct"] / 100.0,6:F1} mean, "
+                 + $"{paths.Max.PotionPercent / 100.0:F1} best   (drops only; shop stock not counted)");
+
+        // Printed rather than left to be inferred from the line above, because
+        // the two Phase 8 balance incidents and the Phase 9 node-weight one all
+        // hid the same way: a data number moved, and only its consequence was
+        // visible. An acts.json edit shows up here directly.
+        var rates = string.Join("   ", ActDatabase.All.Select((act, i) =>
+            $"act {new[] { "I", "II", "III" }.ElementAtOrDefault(i) ?? (i + 1).ToString()} "
+            + $"{act.PotionDropPercent}/{act.ElitePotionDropPercent}"));
+        GD.Print($"  drop rates normal/elite             {rates}");
     }
 
     private void PrintScoreReachability(BalanceModel.Reachability reach)
