@@ -16,7 +16,7 @@ than as this genre.
 
 **Phase 7 closed the card half of that, and Phase 8 has since closed both of its own — the status
 roster and the enemy behaviours.** The five struck rows below are done; the live ones are what the
-rest of Phases 8 through 10 own.
+rest of Phases 9 through 10 own. Phase 9 is open and its first item, the `?` node, has landed.
 
 ### The diagnosis
 
@@ -315,11 +315,46 @@ distribution held against 20k samples of the real picker).
 
 ## Phase 9 — The map, and the run's texture
 
-- **The `?` node.** The most genre-defining map feature that is entirely absent — every node today
-  renders its true type from generation onward, so the map is a plan rather than a gamble. Add
-  `MapNodeType.Unknown`, resolved at *visit* time from `RngStreams.Map`. **The save implication is
-  real:** the resolution has to be recorded into `RunState`, or a save/resume re-rolls the room the
-  player already walked into (risk 3). Run save v3 → v4.
+- ~~**The `?` node.**~~ **Shipped**, and the forecast above was wrong about the mechanism in a way
+  worth keeping. It called for `MapNodeType.Unknown` resolved at *visit* time from `RngStreams.Map`,
+  with the resolution recorded into `RunState`. What shipped is the same feature with the roll left
+  where it already was: `MapNode.Concealed` is a bool beside `Type`, `MapGenerator` rolls the truth
+  as it always did, and `MapScreen.EnterNode` clears the fog. Run save v3 → v4, no migration code,
+  no `MapNodeType` member, no new icon.
+
+  The two are indistinguishable to a player — nobody can observe when the die was cast — and the
+  difference is entirely in what visit-time resolution would have cost:
+  - **`BalanceModel` reads `Type` in a dozen places** (`Count`, `NodeGold`, `CardsAt`, `RelicsAt`,
+    five `MaxAlong` sweeps). A node with no type yet is not an unknown to them, it is a *zero*: no
+    fight, no gold, no reward card. Every printed curve number would have deflated silently, with
+    every suite green — the Phase 8 denominator trap arriving through a third door.
+  - **The re-roll window is real and the roadmap named the wrong fix for it.** Recording the
+    resolution into `RunState` does not close it, because Combat is deliberately excluded from
+    `RunManager.AutoSaveScreens` — a `?` that resolved to an Elite would never be persisted before
+    the fight, so quitting mid-fight would re-roll it. Rolling at generation is what makes that
+    unrepresentable rather than guarded.
+  - `MapGenerator.MakeNode` already draws `EnemyIds` at generation, so visit-time resolution needed
+    a second enemy draw at a second site. Concealment needed none.
+
+  Three things the forecast did not contain:
+  - **Where the weight comes from mattered more than what it was.** Carved out of the whole
+    node-type table, an 18/128 `?` slot cost 1.1 reward picks and 51 gold a run and took
+    Encyclopedian from reachable on 23% of seeds to 15% — because a `?` comes back as a fight only
+    one time in five, so paying for it proportionally taxes fights. Carving it out of
+    Shop/Treasure/Rest/Event instead and leaving Combat/Elite untouched lands the whole encounter-
+    cost table byte-identical, fights at 16.2 against 16.6, Encyclopedian at 22% against 23% — and
+    Mystery Machine at 96% against 83%, which is the one threshold this moves and it moves it the
+    right way. Events go 1.6 → 2.1 per run, which is the texture the item was for.
+  - **A `?` may not be an Elite**, and that is the only exclusion in `PickConcealedType` that is a
+    design rule rather than structure. An unadvertised elite is a fight the player committed to
+    without the one fact that decides whether to take it: an ambush, not a gamble.
+    `MapSmokeTest` holds its own copy of the legal set, so widening the generator's table fails
+    there and has to be argued rather than inherited.
+  - **The type→screen router had no `default:` arm and could not be tested at all**, because it
+    ended in `RunManager.ChangeScreen`. An unhandled `MapNodeType` advanced `CurrentNodeId` onto a
+    node nothing routes from and changed no screen — a soft-lock rather than a crash. Split out as
+    `MapScreen.EnterNode`, which is also where the reveal lives (not `BuildButtons`: revealing on
+    render would show every `?` a floor early), and every enum member is now driven through it.
 - **Potion drops from combat.** The three-slot belt is nearly always empty because potions are shop-
   and event-only — `RunState.Potions.Add` has exactly two call sites in the whole tree. A per-fight
   drop roll is what turns potions into a live combat resource instead of a shop line item. Ships with
@@ -342,9 +377,13 @@ distribution held against 20k samples of the real picker).
 - Smaller: a skip streak or rarity boost on card rewards, so skipping is a strategy rather than a
   shrug.
 
-*Proven by:* `MapSmokeTest` (an Unknown resolves once, only once, and only at visit),
-`RunSaveSmokeTest` (v3 → v4 tolerance, and a resolved Unknown surviving a round trip),
-`ScreenSmokeTest` for the boss-relic choice and RunSetup, `EffectSmokeTest` for potion-tier weighting.
+*Proven by:* `MapSmokeTest` (concealed nodes actually appear, are never an Elite or the boss, never
+land on a forced floor, still carry enemies when they are a Combat, roll more than one type, hide
+their type in the tooltip as well as the icon while their neighbours still show theirs, and reveal
+on entry — plus every `MapNodeType` routing to a screen through the extracted `EnterNode`),
+`RunSaveSmokeTest` (a concealed node surviving a round trip in both directions, and a v3 save whose
+map nodes omit the flag loading as visible), `ScreenSmokeTest` for the boss-relic choice and
+RunSetup, `EffectSmokeTest` for potion-tier weighting.
 
 ## Phase 10 — Ascension
 
@@ -441,8 +480,8 @@ Deferred by choice, not dropped. Ordered by whether it blocks a player.
 
 ## Sequencing notes
 
-- ~~**Phase 7 before Phase 9's `?` node.**~~ Satisfied: `add_card` ships, so an unknown room can now
-  cost something other than HP. Phase 9's `?` node is unblocked.
+- ~~**Phase 7 before Phase 9's `?` node.**~~ Satisfied, and spent: `add_card` shipped first, so the
+  `?` node landed into a vocabulary where an unknown room can cost something other than HP.
 - **Phase 8 and Phase 11 can run in parallel** — one is the combat model, the other is UI widgets.
 - **Phase 10 after 8 and 9** (7 is done). A ladder of modifiers stacked on a thin mechanic set only multiplies
   numbers; the rungs are only interesting once there is something for them to change.

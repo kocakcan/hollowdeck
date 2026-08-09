@@ -620,12 +620,19 @@ public partial class ScreenShot : Node
         RunState.MapNodes = MapGenerator.Generate(new Random(7), RunState.CurrentAct);
         var node = RunState.MapNodes.First(n => n.Floor == 0);
         RunState.VisitedNodeIds = new HashSet<string> { node.Id };
+        node.Concealed = false;
         for (int i = 0; i < floors; i++)
         {
             var next = node.NextNodeIds.Select(RunState.GetMapNode).FirstOrDefault();
             if (next is null || next.Type == MapNodeType.Boss) break;
             node = next;
             RunState.VisitedNodeIds.Add(node.Id);
+
+            // Walking a node is what reveals it (MapScreen.EnterNode), so a
+            // trail that only set VisitedNodeIds would leave a "?" sitting
+            // under the current-node ring - a state no real run reaches, in
+            // the one image a human checks this screen against.
+            node.Concealed = false;
         }
         RunState.CurrentNodeId = node.Id;
     }

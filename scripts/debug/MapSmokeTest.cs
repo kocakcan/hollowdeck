@@ -30,9 +30,11 @@ public partial class MapSmokeTest : Node
         TestSingleSeedShape();
         TestManySeedsStayConnected();
         TestBossPickIsSeedDeterministic();
+        TestConcealedNodesAreLegal();
         TestEncounterPoolsResolve();
         TestMapScreenRendersGraph();
         TestMapScreenNodeStates();
+        TestConcealedNodesHideTheirTypeUntilEntered();
         TestLongestActFitsOnScreen();
         TestNodesClearTheRunStatusBlock();
 
@@ -279,6 +281,183 @@ public partial class MapSmokeTest : Node
 
         instance.QueueFree();
     }
+
+    // Every type a "?" is allowed to turn out to be. Held here rather than
+    // read back off MapGenerator on purpose: the exclusions are the design
+    // (an unadvertised Elite is an ambush, not a gamble), so widening the
+    // generator's table has to fail here and be argued for, not inherited.
+    private static readonly HashSet<MapNodeType> LegalConcealedTypes = new()
+    {
+        MapNodeType.Event, MapNodeType.Combat, MapNodeType.Shop,
+        MapNodeType.Treasure, MapNodeType.Rest,
+    };
+
+    // A "?" node hides its type from the player, not from the rest of the
+    // codebase: MapNode.Type is rolled at generation like everything else, so
+    // BalanceModel keeps counting the node correctly and quitting mid-fight
+    // cannot re-roll it. What that buys has to be paid for with these
+    // invariants, none of which the generator's shape enforces on its own.
+    private void TestConcealedNodesAreLegal()
+    {
+        var seen = new HashSet<MapNodeType>();
+        int concealedCount = 0;
+        var illegalType = new List<string>();
+        var illegalFloor = new List<string>();
+        var missingEnemies = new List<string>();
+
+        foreach (var act in ActDatabase.All)
+        {
+            for (int seed = 0; seed < 40; seed++)
+            {
+                var nodes = MapGenerator.Generate(new Random(seed), act);
+                int lastFloor = nodes.Max(n => n.Floor);
+
+                foreach (var node in nodes.Where(n => n.Concealed))
+                {
+                    concealedCount++;
+                    seen.Add(node.Type);
+
+                    if (!LegalConcealedTypes.Contains(node.Type))
+                        illegalType.Add($"{act.Id} seed {seed}: {node.Id} is {node.Type}");
+
+                    // Floor 0, the forced pre-boss Rest and the boss itself all
+                    // bypass PickNodeType, so this is asserting the bypass rather
+                    // than a filter - and it is the assertion that notices if
+                    // BuildFloor's forced floors are ever routed through it.
+                    if (node.Floor == 0 || node.Floor >= lastFloor - 1)
+                        illegalFloor.Add($"{act.Id} seed {seed}: {node.Id} on floor {node.Floor}");
+
+                    // The seam the whole design exists to avoid. EnemyIds are
+                    // drawn in MakeNode off the act's pools; a concealed Combat
+                    // that skipped that draw would open as an empty fight, and
+                    // nothing between here and CombatManager would say so.
+                    if (node.Type == MapNodeType.Combat && node.EnemyIds.Count == 0)
+                        missingEnemies.Add($"{act.Id} seed {seed}: {node.Id}");
+                }
+            }
+        }
+
+        // A weight that never fires is a table entry pretending to be a feature.
+        Check("generator_actually_produces_concealed_nodes", concealedCount > 0,
+            $"concealed={concealedCount} over 40 seeds x {ActDatabase.Count} acts");
+        Check("concealed_nodes_are_never_an_elite_or_the_boss", illegalType.Count == 0,
+            string.Join("; ", illegalType.Take(5)));
+        Check("concealed_nodes_never_land_on_a_forced_floor", illegalFloor.Count == 0,
+            string.Join("; ", illegalFloor.Take(5)));
+        Check("concealed_combat_nodes_still_carry_enemies", missingEnemies.Count == 0,
+            string.Join("; ", missingEnemies.Take(5)));
+
+        // ...and the second table is a table, not one type with decoration.
+        Check("concealed_nodes_roll_more_than_one_type", seen.Count > 1,
+            $"types=[{string.Join(",", seen)}]");
+    }
+
+    // The two halves of the mechanic that live outside the generator: the
+    // screen must not paint the answer, and walking in must reveal it.
+    private void TestConcealedNodesHideTheirTypeUntilEntered()
+    {
+        RunState.Gold = 0;
+        RunState.PlayerMaxHp = 50;
+        RunState.PlayerCurrentHp = 40;
+        RunState.Relics = new List<RelicInstance>();
+        RunState.ActIndex = 0;
+        RunState.Stats = new RunStats();
+
+        // Searched rather than pinned to one lucky seed, so retuning the "?"
+        // weight cannot silently turn this test into a no-op against a map with
+        // nothing concealed in it.
+        var act = ActDatabase.At(0);
+        List<MapNode>? nodes = null;
+        for (int seed = 0; seed < 40 && nodes is null; seed++)
+        {
+            var candidate = MapGenerator.Generate(new Random(seed), act);
+            if (candidate.Any(n => n.Concealed)) nodes = candidate;
+        }
+        if (!Check("a_seeded_act_one_map_contains_a_concealed_node", nodes is not null,
+                "no concealed node in 40 seeds of act 1"))
+            return;
+
+        RunState.MapNodes = nodes!;
+        RunState.CurrentNodeId = "";
+        RunState.VisitedNodeIds = new HashSet<string>();
+
+        var packed = GD.Load<PackedScene>("res://scenes/MapScreen.tscn");
+        var instance = packed.Instantiate();
+        AddChild(instance);
+
+        var buttons = instance.GetNode<Control>("NodeButtons").GetChildren().OfType<Button>().ToList();
+        if (!Check("concealed_map_pairs_every_node_with_a_button",
+                buttons.Count == RunState.MapNodes.Count,
+                $"buttons={buttons.Count}, nodes={RunState.MapNodes.Count}"))
+        {
+            instance.QueueFree();
+            return;
+        }
+
+        var paired = RunState.MapNodes.Zip(buttons, (node, button) => (node, button)).ToList();
+        var hidden = paired.Where(p => p.node.Concealed).ToList();
+
+        // The tooltip is the easy leak: node.Type holds the truth all along, so
+        // the unguarded NodeLabel(node.Type) this replaced would have named the
+        // room while the icon still said "?".
+        Check("concealed_nodes_do_not_name_their_type_in_the_tooltip",
+            hidden.All(p => p.button.TooltipText == "?"),
+            $"leaked=[{string.Join(",", hidden.Where(p => p.button.TooltipText != "?").Select(p => $"{p.node.Id}='{p.button.TooltipText}'"))}]");
+
+        var hiddenIcons = hidden
+            .Select(p => (p.node, Rect: p.button.GetChildren().OfType<TextureRect>().FirstOrDefault()))
+            .ToList();
+        Check("concealed_nodes_draw_the_question_mark_icon",
+            hiddenIcons.All(h => h.Rect?.Texture?.ResourcePath == "res://assets/icons/map/unknown.png"),
+            $"wrong=[{string.Join(",", hiddenIcons.Where(h => h.Rect?.Texture?.ResourcePath != "res://assets/icons/map/unknown.png").Select(h => $"{h.node.Id}='{h.Rect?.Texture?.ResourcePath}'"))}]");
+
+        // ...while an unconcealed node next to it still shows its own, or the
+        // check above would pass just as well with every icon replaced.
+        var shown = paired.Where(p => !p.node.Concealed).ToList();
+        Check("unconcealed_nodes_still_draw_their_own_icon",
+            shown.Count > 0 && shown.All(p =>
+                p.button.GetChildren().OfType<TextureRect>().FirstOrDefault()?.Texture?.ResourcePath
+                    == ArtAssets.MapIcon(p.node.Type)?.ResourcePath),
+            $"visible={shown.Count}");
+
+        instance.QueueFree();
+
+        // Entering is what reveals it, and EnterNode is also the type -> screen
+        // router - the arm a new MapNodeType silently falls out of. Driving the
+        // real method covers both, which is why it was split out of the version
+        // that ended in RunManager.ChangeScreen and could not be called here.
+        var target = hidden[0].node;
+        var screen = MapScreen.EnterNode(target);
+        Check("entering_a_concealed_node_reveals_it", !target.Concealed, $"node={target.Id}");
+        Check("entering_a_concealed_node_routes_by_its_real_type",
+            screen == ExpectedScreen(target.Type),
+            $"{target.Type} routed to {screen}, expected {ExpectedScreen(target.Type)}");
+
+        // Every type, not just whichever one this seed happened to conceal: the
+        // router is a switch and one sampled arm says nothing about the rest.
+        var misrouted = System.Enum.GetValues<MapNodeType>()
+            .Where(t => MapScreen.EnterNode(new MapNode { Id = "probe", Type = t }) != ExpectedScreen(t))
+            .ToList();
+        Check("every_node_type_routes_to_a_screen", misrouted.Count == 0,
+            $"unrouted=[{string.Join(",", misrouted)}]");
+
+        RunState.CurrentNodeId = "";
+        RunState.VisitedNodeIds = new HashSet<string>();
+        RunState.Stats = new RunStats();
+    }
+
+    private static RunManager.ScreenState ExpectedScreen(MapNodeType type) => type switch
+    {
+        MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss => RunManager.ScreenState.Combat,
+        MapNodeType.Rest => RunManager.ScreenState.Rest,
+        MapNodeType.Shop => RunManager.ScreenState.Shop,
+        MapNodeType.Treasure => RunManager.ScreenState.Treasure,
+        MapNodeType.Event => RunManager.ScreenState.Event,
+        // Deliberately not ScreenState.Map, which is EnterNode's error arm: a
+        // new MapNodeType has to be added here as well, and until it is this
+        // check fails rather than agreeing with the fallback.
+        _ => RunManager.ScreenState.MainMenu,
+    };
 
     // Node ids are only ever resolved through EnemyDatabase at fight start, so
     // a typo in an act's encounter pool would otherwise surface as a crash on

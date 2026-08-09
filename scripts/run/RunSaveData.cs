@@ -20,7 +20,14 @@ public class RunSaveData
     // v3 added ActIndex. A v2 save deserializes it as 0, which is exactly
     // right: every save written before acts existed is an act-1 run, and its
     // MapNodes are already act 1's graph. No migration code needed.
-    public int SaveVersion { get; set; } = 3;
+    //
+    // v4 added MapNode.Concealed - the "?" node's fog. Nothing changed on this
+    // DTO for it: MapNodes serializes the domain class and RunSaveManager sets
+    // IncludeFields, so the flag round-trips on its own. A v3 save's nodes
+    // carry no `concealed` key and deserialize as false, which is again exactly
+    // right - every map drawn before this feature was fully visible, and that
+    // is what resuming one should show. No migration code needed.
+    public int SaveVersion { get; set; } = 4;
     public int RunSeed { get; set; }
     public int Gold { get; set; }
     public int PlayerMaxHp { get; set; }

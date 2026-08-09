@@ -111,6 +111,12 @@ so balance tweaks don't invalidate existing saves.
 `EnemyAI`, `Shop`, `Map` — so drawing an extra card can't shift what the shop stocks. The `Map`
 stream also picks which of an act's bosses a run gets, so that's reproducible from the seed too.
 
+Some map nodes are drawn as a `?` and only show what they are once you walk in. That's
+`MapNode.Concealed`, not a `MapNodeType` — the type is rolled at generation like every other
+node's, and concealment only withholds it from the player. Rolling at visit time instead would
+leave `BalanceModel` counting the node as nothing and, since combat is never autosaved, would let
+a `?` be re-rolled by quitting mid-fight.
+
 A run is three acts (`data/acts/acts.json`). Each act owns its floor count, encounter pools, boss
 pool, backdrops and gold rewards; clearing a non-final boss calls `RunState.AdvanceAct`, which
 regenerates the map for the next act and carries the deck, relics, gold and (raised) HP across.

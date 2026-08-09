@@ -28,6 +28,7 @@ public partial class RunSaveSmokeTest : Node
 
         TestSaveThenLoadRoundTrip();
         TestActIndexToleratesOldAndOutOfRangeSaves();
+        TestConcealedFlagToleratesOldSaves();
         TestCorruptedFileFallsBackToNull();
         TestStaleCardRelicPotionIdsAreDropped();
         TestDeleteRemovesFile();
@@ -75,7 +76,11 @@ public partial class RunSaveSmokeTest : Node
         RunState.MapNodes = new List<MapNode>
         {
             new() { Id = "n0", Floor = 0, Column = 1.5f, Type = MapNodeType.Combat, NextNodeIds = { "n1" }, EnemyIds = { "cultist" } },
-            new() { Id = "n1", Floor = 1, Column = 0.5f, Type = MapNodeType.Rest },
+            // Concealed, because the "?" node's whole safety argument is that
+            // the fog persists while the type underneath it never re-rolls. A
+            // flag that quietly reset on resume would hand the player a fresh
+            // gamble on a room they had already committed to.
+            new() { Id = "n1", Floor = 1, Column = 0.5f, Type = MapNodeType.Rest, Concealed = true },
         };
         RunState.CurrentNodeId = "n0";
         RunState.VisitedNodeIds = new HashSet<string> { "n0" };
@@ -125,6 +130,14 @@ public partial class RunSaveSmokeTest : Node
             $"mapNodes={RunState.MapNodes.Count}");
         Check("round_trip_map_node_enemy_ids", RunState.MapNodes.First(n => n.Id == "n0").EnemyIds.Contains("cultist"),
             "expected n0's EnemyIds to survive the round trip (MapNode uses fields, needs IncludeFields)");
+        // Both directions, because `false` is the default a lost field also
+        // produces: asserting only that n1 stayed concealed would pass just as
+        // well against a save that dropped the flag and one that never set it.
+        Check("round_trip_map_node_concealed",
+            RunState.MapNodes.First(n => n.Id == "n1").Concealed
+            && !RunState.MapNodes.First(n => n.Id == "n0").Concealed,
+            $"n1={RunState.MapNodes.First(n => n.Id == "n1").Concealed}, " +
+            $"n0={RunState.MapNodes.First(n => n.Id == "n0").Concealed}");
         Check("round_trip_current_node", RunState.CurrentNodeId == "n0", $"currentNodeId={RunState.CurrentNodeId}");
         Check("round_trip_visited_nodes", RunState.VisitedNodeIds.Contains("n0"), $"visited={string.Join(",", RunState.VisitedNodeIds)}");
         Check("round_trip_act_index", RunState.ActIndex == 1, $"actIndex={RunState.ActIndex}");
@@ -160,6 +173,38 @@ public partial class RunSaveSmokeTest : Node
             $"actIndex={RunState.ActIndex}, acts={ActDatabase.Count}");
 
         RunState.ActIndex = 0;
+    }
+
+    // Save v3 predates the "?" node, so its map nodes carry no `concealed` key.
+    // Deserializing that as false is the whole migration: every map drawn
+    // before this feature was fully visible, and a resumed run should show what
+    // it always showed. The failure this guards against is the opposite one -
+    // a default of true would fog a v3 map the player had already read.
+    private void TestConcealedFlagToleratesOldSaves()
+    {
+        ResetScratch();
+        WriteScratchRaw("""
+            { "saveVersion": 3, "runSeed": 9, "gold": 10, "playerMaxHp": 50, "playerCurrentHp": 50,
+              "actIndex": 0, "deckCardIds": ["strike"], "relicIds": [], "potions": [],
+              "mapNodes": [{ "Id": "n0", "Floor": 0, "Column": 0, "Type": "Combat",
+                             "NextNodeIds": [], "EnemyIds": ["cultist"] }],
+              "currentNodeId": "n0", "visitedNodeIds": ["n0"] }
+            """);
+
+        // Poisoned first, so a load that silently kept the old list rather than
+        // replacing it cannot pass this by leaving a `false` of its own behind.
+        RunState.MapNodes = new List<MapNode> { new() { Id = "poison", Concealed = true } };
+
+        var seed = RunSaveManager.TryLoad(ScratchPath);
+        Check("v3_save_loads", seed == 9, $"seed={seed}");
+        Check("v3_map_nodes_without_concealed_load_as_visible",
+            RunState.MapNodes.Count == 1 && RunState.MapNodes[0].Id == "n0"
+            && !RunState.MapNodes[0].Concealed,
+            $"nodes=[{string.Join(",", RunState.MapNodes.Select(n => $"{n.Id}:{n.Concealed}"))}]");
+
+        RunState.MapNodes = new List<MapNode>();
+        RunState.CurrentNodeId = "";
+        RunState.VisitedNodeIds = new HashSet<string>();
     }
 
     private void TestCorruptedFileFallsBackToNull()

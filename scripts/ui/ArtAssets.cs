@@ -35,6 +35,15 @@ public static class ArtAssets
         _ => "unknown",
     }}.png");
 
+    // The "?" a concealed map node draws instead of its real type. Deliberately
+    // the same file MapIcon falls back to: the glyph is drawn as "the ? of an
+    // unresolved node type" (tools/artgen/src/icons/misc.rs) and that is
+    // exactly what this is. PixelSpecSmokeTest's two map sweeps are unaffected
+    // - the coverage one drives MapIcon over enum members, and the orphan one
+    // already exempts `unknown` - so this is not a way of smuggling a missing
+    // switch arm past them.
+    public static Texture2D? ConcealedMapIcon() => Load("res://assets/icons/map/unknown.png");
+
     public static Texture2D? IntentIcon(IntentType type) => Load($"res://assets/icons/intents/{type switch
     {
         IntentType.Attack => "attack",
