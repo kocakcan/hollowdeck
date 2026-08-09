@@ -40,6 +40,8 @@ public partial class Phase4ContentSmokeTest : Node
         TestEnragePickerSwitchesAtThreshold();
         TestWakePickerSleepsUntilDamaged();
         TestEveryAiTypeMapsToItsOwnPicker();
+        TestNoWeightedMoveRunsPastTheCap();
+        TestAOneMovePickerTerminates();
         TestNoDormantMoveGrantsBlock();
         TestDormantAndWakeOnDamageImplyEachOther();
         TestEveryIntentTelegraphsWhatItResolves();
@@ -239,6 +241,70 @@ public partial class Phase4ContentSmokeTest : Node
             .ToList();
 
         Check("every_aitype_maps_to_its_own_picker", problems.Count == 0, string.Join("; ", problems));
+    }
+
+    // The run cap is the whole of WeightedRandomIntentPicker's anti-repeat rule
+    // now, and it is the one property of it a player can actually observe.
+    // Driven over every authored weighted_random enemy rather than a chosen one,
+    // because the two rules this replaced were each correct at one move count
+    // and wrong at the other - a sweep is what notices a cap that only binds at
+    // three moves. 400 picks per enemy is far past the point an uncapped chain
+    // would have run one move MaxRun + 1 times.
+    private void TestNoWeightedMoveRunsPastTheCap()
+    {
+        var problems = new List<string>();
+        foreach (var def in EnemyDatabase.All.Where(d => d.AiType == "weighted_random"))
+        {
+            var picker = new WeightedRandomIntentPicker();
+            var enemy = new EnemyCombatant { Name = def.Name, Definition = def };
+
+            string lastId = "";
+            int run = 0;
+            int longest = 0;
+            for (int i = 0; i < 400; i++)
+            {
+                string id = picker.PickNext(enemy).MoveId;
+                run = id == lastId ? run + 1 : 1;
+                lastId = id;
+                if (run > longest) longest = run;
+            }
+
+            if (longest > WeightedRandomIntentPicker.MaxRun)
+                problems.Add($"{def.Id}: ran '{lastId}' {longest} times, cap is {WeightedRandomIntentPicker.MaxRun}");
+
+            // A cap that binds every turn is alternation wearing a new name -
+            // the exact bug the old rule shipped. Two moves must both be live.
+            if (def.Moves.Count > 1 && longest < 2)
+                problems.Add($"{def.Id}: never repeated a move in 400 picks - the cap is behaving as alternation");
+        }
+
+        Check("no_weighted_move_runs_past_the_cap", problems.Count == 0, string.Join("; ", problems));
+    }
+
+    // The cap has nothing to exclude into when an enemy has one move, and the
+    // candidate filter would empty the list rather than yield. Nothing in
+    // enemies.json reaches this today, which is exactly why it is worth an
+    // assertion: a one-move weighted enemy is authorable and would hang or
+    // throw on its second pick.
+    private void TestAOneMovePickerTerminates()
+    {
+        var lonely = new EnemyDefinition
+        {
+            Id = "lonely",
+            Name = "Lonely",
+            MaxHp = 10,
+            AiType = "weighted_random",
+            Moves = new List<EnemyMove> { Dormant("only_move") },
+        };
+        var picker = new WeightedRandomIntentPicker();
+        var enemy = new EnemyCombatant { Name = lonely.Name, Definition = lonely };
+
+        var played = new List<string>();
+        for (int i = 0; i < 5; i++) played.Add(picker.PickNext(enemy).MoveId);
+
+        Check("a_one_move_weighted_picker_keeps_playing_its_only_move",
+            played.TrueForAll(id => id == "only_move"),
+            $"played {string.Join(", ", played)}");
     }
 
     // The one authoring rule WakeOnDamageIntentPicker cannot enforce for itself,

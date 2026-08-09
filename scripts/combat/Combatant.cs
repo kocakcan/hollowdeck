@@ -40,7 +40,6 @@ public class EnemyCombatant : Combatant
     public EnemyDefinition Definition = null!;
     public IIntentPicker IntentPicker = null!;
     public EnemyMove? CurrentMove;
-    public EnemyMove? LastMove;
 
     // Left the fight alive, via an escape move. Set by EscapeEffect and acted
     // on one pass later in CombatManager.ResolveDeathsAndSettle, so an enemy

@@ -4,7 +4,7 @@
 
 The run is complete and playable end to end: three acts of branching map, telegraphed-intent combat,
 relics, potions, events, a shop, mid-run save/resume, a score-driven unlock track, 13 screens on one
-pixel-art spec, 20 smoke suites, CI, and packaged exports for three platforms. Content stands at 101
+pixel-art spec, 21 smoke suites, CI, and packaged exports for three platforms. Content stands at 101
 cards (97 offerable), 36 enemies, 27 relics, 12 potions, 15 events.
 
 **The gating problem is no longer presentation, and it is no longer content volume. It is
@@ -147,8 +147,8 @@ may declare a card-only scope — the telegraph-honesty guard), `EventSmokeTest`
 Phase 6 took the roster 24 → 36 by widening the *telegraph* vocabulary. The behaviour vocabulary was
 not: all 36 were a list of moves picked by one of three pickers, and `EnemyDefinition` had no hook
 for anything else, which is why 36 enemies felt like a dozen. That is now closed — an enemy can bring
-in minions, react to its own death, leave a fight alive, and lie dormant until it is struck. What is
-left is one honesty fix inside a picker that already exists.
+in minions, react to its own death, leave a fight alive, and lie dormant until it is struck, and the
+one picker that could still repeat itself indefinitely no longer can.
 
 - ~~**`summon_enemy`**, **`onDeath: [EffectSpec]`** and **escape.**~~ **Shipped**, as one branch,
   because all three are the same change: `CombatManager.Enemies` mutating mid-fight. Effect actions
@@ -266,27 +266,52 @@ left is one honesty fix inside a picker that already exists.
 
   Still unmodelled in `EncounterCost` and the next thing to do to it: one-off `gain_block` moves,
   i.e. every Defend intent in the game.
-- **Give `WeightedRandomIntentPicker` a run cap.** The wording this bullet carried for two phases was
-  stale and worth correcting: the two-move *alternation* it described was fixed long ago, by
-  disabling the anti-repeat rule below three moves. What is left is the other end of that trade — a
-  two-move enemy is now unbounded i.i.d. sampling and can play the same move four times running. A
-  per-move "not more than N times in a row" cap is honest at every move count, where both of the
-  rules that have shipped so far are honest at one. `BalanceModel.AntiRepeatStationary` has to follow
-  in the same change or the analyser silently reports the old chain.
+- ~~**Give `WeightedRandomIntentPicker` a run cap.**~~ **Shipped**, at `MaxRun = 2` — a move may
+  repeat once, never twice — held as one constant that `BalanceModel` reads rather than an authored
+  per-enemy field, since no content wanted the knob yet. No schema change, no new content row, no
+  save version bump. Four things the forecast did not contain:
+  - **A third rule was not added; two were removed.** The rules this replaced are the same rule at
+    the ends of its range — excluding the last-played move is a cap of 1, and the two-move
+    free-for-all is a cap of infinity — so the cap applies at every move count and both
+    `moves.Count <= 2 ? Weighted(...) : AntiRepeatStationary(...)` branches in `BalanceModel`
+    collapsed to one call. `Weighted` lost its last caller and went with them.
+  - **`EnemyCombatant.LastMove` was dead the moment the picker got a run counter.** It existed only
+    to feed the old rule, and keeping the move identity on the combatant while the run length lived
+    on the picker would have been two sources for one fact. The picker owns both now, the way the
+    other three own their cursors, and `AdvanceEnemyIntent` is one line.
+  - **The chain's state is a pair, not a move.** "May I repeat?" is answerable from the run length
+    alone, so `RunCappedStationary` power-iterates over `(move, runLength)` — six states for a
+    3-move enemy at a cap of 2. The `n == 1` short-circuit is not decoration: the cap has nothing to
+    exclude into there, and both the model and the picker have to yield rather than starve.
+  - **The measured move came from the three-move enemies, not the two-move ones this bullet was
+    about.** The cap loosens a 3-move enemy *toward* its authored weights, where the old rule forbade
+    repeats outright: `possessed_armor` went .403/.339/.258 → .446/.325/.229 and its encounter cost
+    48 → 53, which lifts a known-marginal elite 1.09x → 1.22x — off the floor of its band rather than
+    out of it. Everything the bullet actually named moved by under 1%: act 1's mean normal cost 44 →
+    43, incoming damage across the run 1.97x → 1.99x, and act 1's costliest normal flipping back to
+    `cultist + cultist` on a tie at 90. No content number needed retuning.
+
+  The genuinely useful outcome is the assertion, not the cap. `BalanceModel` mirrors the pickers
+  rather than approximating them, and until now it was kept in step with them **by comment** — the
+  bullet above had to say "in the same change or the analyser silently reports the old chain"
+  precisely because nothing would have caught it. `BalanceSmokeTest.TestTheModelAgreesWithThePicker`
+  now samples the real picker 20k times per weighted enemy and holds the frequencies against
+  `BalanceModel.MoveDistribution`, which is the seam itself rather than one crossing of it.
 
 *Proven by:* `Phase4ContentSmokeTest` (Summon, Escape and Dormant telegraphs, the wake picker's
 latch, the wake landing on the player's turn and *not* mid-enemy-turn, every aiType resolving to its
 own picker, no dormant move granting Block, every `summon_enemy` naming a
 real enemy that does not itself summon, a summon arriving telegraphed but not acting that turn, an
-escape leaving without a kill, `onDeath` firing before the fight is scored),
-`CombatTargetingSmokeTest` (mid-fight `EnemyView` creation and `Instances` order, hit test skipping a
-runaway as well as a corpse, the HUD clear of a full four-enemy row), `ActSmokeTest` (no summon
-crossing an act), `EffectSmokeTest` (negative `gain_gold`, enemy-only actions off cards),
-`BalanceSmokeTest` (a sleeper with no awake phase, and an awake phase that fails to out-damage its
-dormant one).
+escape leaving without a kill, `onDeath` firing before the fight is scored, no weighted move running
+past the cap — nor the cap binding so hard it reverts to alternation — and a one-move picker
+terminating), `CombatTargetingSmokeTest` (mid-fight `EnemyView` creation and `Instances` order, hit
+test skipping a runaway as well as a corpse, the HUD clear of a full four-enemy row), `ActSmokeTest`
+(no summon crossing an act), `EffectSmokeTest` (negative `gain_gold`, enemy-only actions off cards),
+`DeckViewSmokeTest` (the slime picker still able to repeat), `BalanceSmokeTest` (a sleeper with no
+awake phase, an awake phase that fails to out-damage its dormant one, and the analyser's move
+distribution held against 20k samples of the real picker).
 
-One of the five bullets remains: the `WeightedRandomIntentPicker` run cap. It is picker-local and
-shares no plumbing with what shipped.
+**Phase 8 is closed.** All five bullets shipped.
 
 ## Phase 9 — The map, and the run's texture
 
