@@ -58,13 +58,52 @@ renders as one).
 potions are 65/25/10 in `PotionPool`, because a card is a permanent deck slot and a potion is one
 shot out of a three-slot belt — at the card weights a *named* Rare potion would sit under 1% against
 a 12-row pool, i.e. authored and never seen. The tier-first draw itself is shared
-(`RarityPool.Sample`, which takes the weight function as a required parameter so a potion draw
+(`TierPool.Sample`, which takes the weight function as a required parameter so a potion draw
 silently running on the card table is unrepresentable); the `IsPlayable` filter stays in
 `CardPool.Sample`, since it is a card rule. **The number that matters as content grows is per
 *row*, not per tier** — a tier's weight is divided among its members, so authoring two more Uncommon
 potions alone would put an Uncommon below a Rare. `EffectSmokeTest.TestEveryPotionDeclaresARarity`
 watches for that, and reads `potions.json` as *text* to count `"rarity"` keys, because the enum has
 no null and a forgotten tier is otherwise indistinguishable from an authored Common.
+
+**A relic tier is two axes wearing one enum, and that is why it is not `Rarity`.** `RelicTier
+{ Common, Uncommon, Rare, Boss, Shop, Event }` — the first three are a power ladder weighted
+50/33/17 in `RelicPool`; the last three name a *source*. A site is therefore expressed as which
+tiers it may see (`RelicPool.TiersFor`), and `TierPool` renormalises over whatever is actually in
+the pool it is handed, which is what lets "a boss draws the Boss tier alone" and "a shop draws the
+ladder plus its own tier" be the same function. Reusing `Rarity` would also have quietly
+under-covered the two hardcoded three-element `Rarity` sweeps in `EffectSmokeTest`; the relic sweep
+drives `Enum.GetValues<RelicTier>()` instead, so a seventh tier authored on nothing fails.
+
+Four things around it:
+
+- **Boss is the only site that leaves the ladder, and `BossWeight` only has to be positive.** It is
+  never mixed, so it is always renormalised to the whole draw and says nothing about how a Boss
+  relic compares to a Rare one — but at `0`, `PickTier` finds a total weight of 0, returns null, and
+  the boss reward silently vanishes. Shop and Event *add* to the ladder rather than replacing it,
+  because a shop stocking only its three exclusives would be empty by act II.
+- **The empty-pool fallback is a design rule.** Own every Boss relic and a boss pays from the ladder
+  rather than paying nothing — silence would deny the reward to precisely the player who earned it.
+- **A tier-scaled price required rendering the tier first, and that order is not a preference.**
+  `ShopScreen.cs` already says a price moving with an attribute the tile does not render reads as a
+  bug rather than as a tier; so the sub-label became `Relic - Rare` and `RelicPriceFor` followed it.
+  `BalanceModel` **reads** that function rather than mirroring it — the flat 150 it used to copy sat
+  under a "mirrors ShopScreen" comment with nothing asserting the mirror held.
+- **The owned-and-unlocked filter moved into `RelicPool`** from the four byte-identical LINQ copies
+  at the grant sites, which is what retired `ShopScreen`'s local uniform `Sample<T>`.
+
+**The reward screen carries a tip, and it is a rotation rather than a roll.** `data/tips/tips.json`
+plus `TipDatabase.ForVisit(runSeed, RunState.VisitedNodeIds.Count)`, rendered into `TipLine` in
+`RewardScreen.tscn` — the band between the framed list and the Skip button, which is empty at every
+row count because the list is centred in its own area. Three reasons it does not draw from
+`RngStreams`, and appending a sixth stream would have been free: a stream's position is not
+serialized and `Init` re-runs on load, so a draw outside the deterministic run pipeline replays
+differently after a resume; five `ScreenShot` fixtures re-render this screen; and a rotation visits
+every tip once before repeating, which a roll does not. Tip text may carry one substitution —
+`{hd_some_action}` resolved through `ScreenKeyboardNav.ResolveKeyHints`, so a tip naming a key
+cannot drift from `project.godot`'s `[input]`. The line is **hidden**, not faded, while the card fan
+is open: it sits directly under the fan's Back button, and dimmed body text behind a modal reads as
+something the player failed to dismiss.
 
 **What a Power buys is a status that pays out every turn.** `Metallicize` (Block), `Ritual`
 (Strength) and `Regen` (HP) are granted in `CombatManager.ApplyTurnStartGrants` and never decay,
@@ -521,7 +560,7 @@ to catch committed art drifting from its source. The one command, for all three 
 
 ```bash
 cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
-#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 186
+#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 192
 #   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
 #   validate           what run-smoke-tests.sh calls; nonzero exit on failure
 ```
@@ -572,21 +611,29 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
 - `scripts/run/RunState.cs`, `RunSaveManager.cs` — in-run state and its save/resume
 - `scripts/run/MetaProgressionManager.cs` + `RunScore.cs` — score-driven unlock track, meta save
 - `scripts/run/RngStreams.cs` — the five seeded RNG streams
-- `scripts/run/RarityPool.cs` — the tier-first weighted draw `CardPool` and `PotionPool` share.
-  Generic on purpose (unlike `BlockMath`/`DamageMath`): what is duplicated here is an algorithm
-  whose every step is a correctness property, not a hazard worth two copies. The *weights* stay
-  split, which is the `BlockMath` argument doing its job one level down
+- `scripts/run/TierPool.cs` — the tier-first weighted draw `CardPool`, `PotionPool` and `RelicPool`
+  share (named `RarityPool` until relic tiers, and hard-typed to `Rarity` with it). Generic on
+  purpose (unlike `BlockMath`/`DamageMath`): what is duplicated here is an algorithm whose every
+  step is a correctness property, not a hazard worth two copies. The *weights* stay split, which is
+  the `BlockMath` argument doing its job one level down
 - `scripts/run/CardPool.cs` — rarity-weighted sampling; the single place "which cards does the
   player get offered" is decided (reward picks, shop stock, the random-card event outcome), and
   therefore the single place unplayable cards are excluded from being offered at all — that
-  `IsPlayable` filter lives here rather than in `RarityPool`, because it is a card rule
+  `IsPlayable` filter lives here rather than in `TierPool`, because it is a card rule
 - `scripts/run/PotionPool.cs` — the same for potions, at 65/25/10, across all four grant sites: the
   combat drop, the shop's two-potion stock, and the `gain_potion` event. No `IsPlayable` analogue —
   every potion in the database is offerable and none is unlock-gated
+- `scripts/run/RelicPool.cs` — the same for relics, at 50/33/17 across the ladder, plus the
+  per-site tier filter that is the actual feature (`RelicSite` → `TiersFor`). Holds the
+  owned-and-unlocked filter that four grant sites each carried a copy of, which is the `IsPlayable`
+  argument one content type over
+- `scripts/data/TipDatabase.cs` — the reward screen's tip line. `ForVisit` is a *rotation* off the
+  run seed rather than an `RngStreams` draw, and the comment there says why: a stream's position is
+  not serialized, and five `ScreenShot` fixtures re-render that screen
 - `scripts/combat/CombatManager.cs` — turn loop, intent telegraphing, targeting sub-state
 - `scripts/effects/EffectRegistry.cs` + `IEffect.cs` — the composable effect system every
   card/relic/potion/enemy-move definition keys into
-- `scripts/relics/RelicBehavior.cs` — the 7 relic hooks; `SimpleHookEffectRelic.cs` drives all 27
+- `scripts/relics/RelicBehavior.cs` — the 7 relic hooks; `SimpleHookEffectRelic.cs` drives all 33
   relics off all 7, using the `target`/`condition`/`limit` vocabulary in
   `scripts/data/RelicTrigger.cs`. Subclassing `RelicBehavior` is the escape hatch and nothing
   currently uses it — `RelicRegistry` has one factory

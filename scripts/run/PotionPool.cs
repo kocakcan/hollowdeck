@@ -16,7 +16,7 @@ namespace Hollowdeck.Run;
 // "no rarity field".
 public static class PotionPool
 {
-    // Relative weights, not percentages - RarityPool normalises them over
+    // Relative weights, not percentages - TierPool normalises them over
     // whatever tiers still have stock.
     //
     // Flatter than CardPool's 60/37/3 on purpose. A card is a permanent deck
@@ -49,10 +49,10 @@ public static class PotionPool
     /// the unlock track gates one (see LibraryScreen, where UnlockKind has no
     /// Potion case). If that ever changes, this is the single place it goes.
     public static List<PotionDefinition> Sample(IEnumerable<PotionDefinition> pool, int count, Random rng) =>
-        RarityPool.Sample(pool, count, rng, p => p.Rarity, WeightOf);
+        TierPool.Sample(pool, count, rng, p => p.Rarity, WeightOf);
 
     /// One potion, weighted the same way - the combat drop and the event
     /// outcome, both of which grant exactly one.
     public static PotionDefinition? SampleOne(IEnumerable<PotionDefinition> pool, Random rng) =>
-        RarityPool.SampleOne(pool, rng, p => p.Rarity, WeightOf);
+        TierPool.SampleOne(pool, rng, p => p.Rarity, WeightOf);
 }

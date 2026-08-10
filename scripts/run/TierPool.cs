@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Hollowdeck.Data;
 
 namespace Hollowdeck.Run;
 
-// The tier-first weighted draw, shared by CardPool and PotionPool.
+// The tier-first weighted draw, shared by CardPool, PotionPool and RelicPool.
 //
 // This is deliberately generic rather than copied per item type, which is the
 // opposite call to BlockMath-vs-DamageMath and for the opposite reason. That
@@ -22,24 +21,37 @@ namespace Hollowdeck.Run;
 // the shape CombatManager.DecayAtTurnEnd was collapsed out of.
 //
 // What is *not* shared is the weight table. That one genuinely is the
-// BlockMath hazard - cards are 60/37/3 and potions are 65/25/10, and a potion
-// draw quietly running on the card weights is exactly the bug worth making
-// impossible. So weightOf is a required parameter with no default and this
-// class holds no weights of its own.
-public static class RarityPool
+// BlockMath hazard - cards are 60/37/3, potions are 65/25/10 and relics are
+// 50/33/17, and a potion draw quietly running on the card weights is exactly
+// the bug worth making impossible. So weightOf is a required parameter with no
+// default and this class holds no weights of its own.
+//
+// Generic in the *tier* as well as the item since relics arrived: RelicTier has
+// six members against Rarity's three, and this file was named RarityPool and
+// hard-typed to Rarity until then. The rename is not cosmetic - three of
+// RelicTier's members name a source rather than a power level, so a class
+// called RarityPool sampling one would be a name that lies about what it holds.
+public static class TierPool
 {
-    /// `count` distinct items drawn without replacement, weighted by rarity.
+    /// `count` distinct items drawn without replacement, weighted by tier.
     /// Returns fewer only if the pool itself is smaller.
     ///
     /// Draws a *tier* first and then a uniform item within it, rather than
-    /// weighting each item by its own rarity. The difference matters: a tier
+    /// weighting each item by its own tier. The difference matters: a tier
     /// with more rows in it would otherwise collect more total probability
     /// purely because there are more of them, and every row authored later
     /// would silently re-tune the odds of every tier.
-    public static List<T> Sample<T>(
-        IEnumerable<T> pool, int count, Random rng, Func<T, Rarity> rarityOf, Func<Rarity, int> weightOf)
+    ///
+    /// A caller restricts which tiers may come back by filtering the pool it
+    /// passes in, not by zeroing a weight: the roulette below renormalises over
+    /// the tiers actually present, so a pool holding one tier returns that tier
+    /// whatever its weight says. That is what lets RelicPool express "a boss
+    /// draws from the Boss tier alone" without a second sampler.
+    public static List<T> Sample<T, TTier>(
+        IEnumerable<T> pool, int count, Random rng, Func<T, TTier> tierOf, Func<TTier, int> weightOf)
+        where TTier : struct, Enum
     {
-        var remaining = pool.GroupBy(rarityOf).ToDictionary(g => g.Key, g => g.ToList());
+        var remaining = pool.GroupBy(tierOf).ToDictionary(g => g.Key, g => g.ToList());
         var picked = new List<T>();
 
         while (picked.Count < count)
@@ -57,14 +69,16 @@ public static class RarityPool
     }
 
     /// One item, weighted the same way.
-    public static T? SampleOne<T>(
-        IEnumerable<T> pool, Random rng, Func<T, Rarity> rarityOf, Func<Rarity, int> weightOf)
-        where T : class =>
-        Sample(pool, 1, rng, rarityOf, weightOf).FirstOrDefault();
+    public static T? SampleOne<T, TTier>(
+        IEnumerable<T> pool, Random rng, Func<T, TTier> tierOf, Func<TTier, int> weightOf)
+        where T : class
+        where TTier : struct, Enum =>
+        Sample(pool, 1, rng, tierOf, weightOf).FirstOrDefault();
 
     // Roulette over the tiers that still have stock in them.
-    private static Rarity? PickTier<T>(
-        Dictionary<Rarity, List<T>> remaining, Random rng, Func<Rarity, int> weightOf)
+    private static TTier? PickTier<T, TTier>(
+        Dictionary<TTier, List<T>> remaining, Random rng, Func<TTier, int> weightOf)
+        where TTier : struct, Enum
     {
         int total = remaining.Keys.Sum(weightOf);
         if (total <= 0) return null;

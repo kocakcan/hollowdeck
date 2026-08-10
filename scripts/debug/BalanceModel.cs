@@ -6,6 +6,7 @@ using Hollowdeck.Data;
 using Hollowdeck.Effects;
 using Hollowdeck.Map;
 using Hollowdeck.Run;
+using Hollowdeck.UI;
 
 namespace Hollowdeck.Debug;
 
@@ -1094,8 +1095,26 @@ public static class BalanceModel
     // Mirrors ShopScreen's prices and stock sizes.
     public const int ShopCardPrice = 50;
     public const int ShopCardsInStock = 4;
-    public const int ShopRelicPrice = 150;
     public const int ShopRelicsInStock = 2;
+
+    // A relic's price moves with its tier now, so what this model needs is not
+    // a price but an expectation over the tiers a shop can actually stock,
+    // weighted the way RelicPool weights them.
+    //
+    // Note it *reads* ShopScreen.RelicPriceFor and RelicPool.WeightOf rather
+    // than copying either. The flat 150 that used to sit here was a copy under
+    // a "mirrors ShopScreen" comment with nothing asserting the mirror held -
+    // exactly the shape of the NodePotionPercent hazard, one file over. A
+    // number the analyser computes from the same function the shop charges
+    // from cannot drift from it at all, which is strictly better than a test
+    // that notices afterwards.
+    public static double ExpectedShopRelicPrice()
+    {
+        var tiers = RelicPool.TiersFor(RelicSite.Shop);
+        double weight = tiers.Sum(t => (double)RelicPool.WeightOf(t));
+        if (weight <= 0) return ShopScreen.CommonRelicPrice;
+        return tiers.Sum(t => RelicPool.WeightOf(t) * (double)ShopScreen.RelicPriceFor(t)) / weight;
+    }
 
     public static Reachability Reachable(int seeds = 500, int startingGold = 99,
         int startingRelics = 1, int startingDeckSize = 10)
@@ -1169,8 +1188,13 @@ public static class BalanceModel
     {
         if (n.Type is MapNodeType.Elite or MapNodeType.Boss or MapNodeType.Treasure) return (1, 0);
         if (n.Type != MapNodeType.Shop) return (0, 0);
-        int bought = Math.Min(ShopRelicsInStock, gold / ShopRelicPrice);
-        return (bought, bought * ShopRelicPrice);
+        // The expected price rather than any one tier's, because which tiers a
+        // shop rolls is not something a route can choose. Rounded up, so a
+        // purse that can only afford the cheap end is not credited with a
+        // relic it would half the time fail to buy.
+        int price = (int)Math.Ceiling(ExpectedShopRelicPrice());
+        int bought = Math.Min(ShopRelicsInStock, gold / price);
+        return (bought, bought * price);
     }
 
     // Forward pass over one act's DAG carrying (score, gold) from floor 0.

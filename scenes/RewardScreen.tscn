@@ -49,6 +49,34 @@ offset_right = 260.0
 offset_bottom = 170.0
 mouse_filter = 2
 
+[node name="TipLine" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -400.0
+offset_top = -148.0
+offset_right = 400.0
+offset_bottom = -108.0
+mouse_filter = 2
+alignment = 1
+theme_override_constants/separation = 8
+
+[node name="TipTag" type="Label" parent="TipLine"]
+layout_mode = 2
+theme_type_variation = &"CombatDisplayLabel"
+theme_override_font_sizes/font_size = 16
+vertical_alignment = 1
+text = "TIP"
+
+[node name="TipLabel" type="Label" parent="TipLine"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+vertical_alignment = 1
+text = ""
+
 [node name="SkipButton" type="Button" parent="."]
 layout_mode = 1
 anchors_preset = 8

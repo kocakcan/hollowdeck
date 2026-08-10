@@ -1,0 +1,62 @@
+[
+  {
+    "id": "block_expires",
+    "text": "Block does not carry over. Both sides clear it at the start of their own turn."
+  },
+  {
+    "id": "ethereal_beats_retain",
+    "text": "A card with both Ethereal and Retain still burns at the end of your turn."
+  },
+  {
+    "id": "artifact_one_application",
+    "text": "Artifact refuses one application, not one stack. Vulnerable 3 costs it all."
+  },
+  {
+    "id": "intangible_floors_last",
+    "text": "Vulnerable amplifies a hit before Intangible floors it, so the floor holds."
+  },
+  {
+    "id": "poison_ticks_early",
+    "text": "Poison ticks at the start of its holder's turn, and loses a stack as it ticks."
+  },
+  {
+    "id": "innate_opening_hand",
+    "text": "An Innate card is in your opening hand however deep the shuffle buried it."
+  },
+  {
+    "id": "dormant_wakes",
+    "text": "A sleeping enemy re-telegraphs the moment it loses HP, while you hold the turn."
+  },
+  {
+    "id": "retain_no_smaller_draw",
+    "text": "Retain does not shrink your next draw. A retained card makes it a six-card hand."
+  },
+  {
+    "id": "powers_leave_play",
+    "text": "A Power leaves the fight when you play it. It is neither discarded nor exhausted."
+  },
+  {
+    "id": "x_cost_at_zero",
+    "text": "An X-cost card at zero energy is refused rather than wasted."
+  },
+  {
+    "id": "thorns_bills_blocked",
+    "text": "Thorns bills an attacker even when your Block absorbed the whole hit."
+  },
+  {
+    "id": "boss_relic_pool",
+    "text": "Every Elite and Boss pays a relic, and a Boss pays from a pool of its own."
+  },
+  {
+    "id": "unknown_never_elite",
+    "text": "A ? room is never an Elite. It is a gamble, never an ambush."
+  },
+  {
+    "id": "view_draw_pile",
+    "text": "Press {hd_pile_draw} to read your draw pile before you commit a card."
+  },
+  {
+    "id": "potion_belt_three",
+    "text": "The belt holds three potions. A drop against a full belt is forfeited."
+  }
+]

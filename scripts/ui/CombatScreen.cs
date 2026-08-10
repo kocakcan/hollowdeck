@@ -1454,24 +1454,22 @@ public partial class CombatScreen : Control
     }
 
     // Elite and boss fights guarantee a relic on top of the usual card/gold
-    // reward - same unowned+unlock-filtered pool ShopScreen/TreasureScreen
-    // already draw from, sampled from the dedicated Shop RNG stream.
+    // reward, sampled from the dedicated Shop RNG stream.
+    //
+    // The boss branch is the whole point of relic tiers. Both fights used to
+    // call one uniform draw over the whole database, so the act's final fight
+    // paid out of the same pool a chest did - which is the ROADMAP line about a
+    // boss handing over what 150 gold would have. A boss now draws the Boss
+    // tier and nothing else; an elite draws the ordinary ladder. Same shape as
+    // RollPotionDrop below, which also branches on IsBoss first.
     //
     // Picks, and stops there. This was GrantRewardRelic and added to
     // RunState.Relics in the same breath, which is why a double Continue press
     // used to hand over two (see _continueResolved) - and why the reward screen
     // was announcing a relic the player already had. Claiming the row is what
     // grants it now.
-    private static RelicDefinition? PickRewardRelic()
-    {
-        var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
-        var available = RelicDatabase.All
-            .Where(r => !ownedRelicIds.Contains(r.Id) && MetaProgressionManager.Instance.IsRelicUnlocked(r.Id))
-            .ToList();
-        if (available.Count == 0) return null;
-
-        return available[RngStreams.Shop.Next(available.Count)];
-    }
+    private static RelicDefinition? PickRewardRelic() =>
+        RelicPool.SampleOne(CombatContext.IsBoss ? RelicSite.Boss : RelicSite.Reward, RngStreams.Shop);
 
     // Whether this fight offers a potion, and which one. Returns the offer;
     // RewardScreen's tile is what actually grants it, so nothing here touches

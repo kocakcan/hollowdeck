@@ -1,4 +1,4 @@
-//! The twenty-seven relics.
+//! The thirty-three relics.
 //!
 //! Unlike the potions these are *objects*, not variations on one container.
 //! The relic row already frames each one in a `ChromeStyles.SlotStyle` bezel,
@@ -23,16 +23,21 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "relics", name: "bulwark_charm", draw: bulwark_charm },
         Icon { category: "relics", name: "clockwork_gear", draw: clockwork_gear },
         Icon { category: "relics", name: "coiled_serpent", draw: coiled_serpent },
+        Icon { category: "relics", name: "coin_press", draw: coin_press },
         Icon { category: "relics", name: "conduit_sigil", draw: conduit_sigil },
         Icon { category: "relics", name: "cracked_hourglass", draw: cracked_hourglass },
         Icon { category: "relics", name: "focusing_lens", draw: focusing_lens },
         Icon { category: "relics", name: "frugal_satchel", draw: frugal_satchel },
         Icon { category: "relics", name: "gamblers_deck", draw: gamblers_deck },
+        Icon { category: "relics", name: "grave_moss", draw: grave_moss },
+        Icon { category: "relics", name: "hollow_crown", draw: hollow_crown },
         Icon { category: "relics", name: "iron_resolve", draw: iron_resolve },
         Icon { category: "relics", name: "ledger_of_ruin", draw: ledger_of_ruin },
+        Icon { category: "relics", name: "merchants_scale", draw: merchants_scale },
         Icon { category: "relics", name: "momentum_token", draw: momentum_token },
         Icon { category: "relics", name: "ossuary_bell", draw: ossuary_bell },
         Icon { category: "relics", name: "palsy_shackle", draw: palsy_shackle },
+        Icon { category: "relics", name: "pilgrims_ash", draw: pilgrims_ash },
         Icon { category: "relics", name: "reapers_tally", draw: reapers_tally },
         Icon { category: "relics", name: "restless_grimoire", draw: restless_grimoire },
         Icon { category: "relics", name: "rusted_portcullis", draw: rusted_portcullis },
@@ -45,6 +50,7 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "relics", name: "vampire_fang", draw: vampire_fang },
         Icon { category: "relics", name: "vengeful_spirit", draw: vengeful_spirit },
         Icon { category: "relics", name: "warded_bracer", draw: warded_bracer },
+        Icon { category: "relics", name: "whispering_coin", draw: whispering_coin },
     ]
 }
 
@@ -118,6 +124,34 @@ fn coiled_serpent() -> Canvas {
     canvas.set(21, 6, N0);
     canvas.set(25, 6, N0);
     canvas.line(27, 10, 30, 12, R4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Gold for every kill — a coin *being struck*, not a coin. The Shop tier is
+/// three gold-economy relics and the set already has two coins in it
+/// (`momentum_token`, `whispering_coin`), so this one is the machine around
+/// the coin: the press reads at 1x by its frame, and the disc under the plate
+/// is small enough that it never competes with the other two.
+fn coin_press() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.rect(4, 3, 24, 3, N5);
+    canvas.rect(4, 6, 2, 21, N5);
+    canvas.rect(26, 6, 2, 21, N5);
+    // A threaded shaft rather than a plain post: two posts and a crossbar on
+    // their own read as a picture frame, which is what the first pass did.
+    canvas.rect(15, 6, 2, 8, N6);
+    for y in (7..14).step_by(2) {
+        canvas.hline(13, y, 6, N4);
+    }
+    canvas.rect(9, 14, 14, 3, N6);
+    canvas.hline(9, 14, 14, N7);
+    canvas.disc(16, 23, 5, G2);
+    canvas.disc(16, 23, 3, G4);
+    canvas.disc(16, 23, 1, G0);
+    canvas.line(9, 18, 7, 20, G4);
+    canvas.line(23, 18, 25, 20, G4);
+    canvas.rect(4, 27, 24, 3, N4);
     finish(&mut canvas);
     canvas
 }
@@ -203,6 +237,43 @@ fn playing_card(canvas: &mut Canvas, x: i32, y: i32, face: Rgb) {
     canvas.rect(x + 1, y + 1, 10, 20, face);
 }
 
+/// Poison to whatever hits you — a grave marker gone green. `palsy_shackle`
+/// is the other "punish the attacker" relic and it is iron and violet, so this
+/// one is stone and V-ramp: at 1x the two never resolve to the same smudge.
+fn grave_moss() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.poly(&[(9, 11), (12, 6), (20, 6), (23, 11), (23, 27), (9, 27)], N5);
+    canvas.poly(&[(11, 12), (13, 8), (19, 8), (21, 12), (21, 25), (11, 25)], N6);
+    canvas.hline(13, 14, 6, N4);
+    canvas.hline(13, 17, 6, N4);
+    canvas.disc(10, 24, 3, V2);
+    canvas.disc(14, 26, 3, V2);
+    canvas.disc(21, 23, 3, V2);
+    canvas.disc(10, 23, 1, V3);
+    canvas.disc(21, 22, 1, V3);
+    canvas.rect(6, 28, 20, 2, N4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// The Boss tier's Strength engine. A crown for the tier that only a boss
+/// hands over, and *hollow* is the whole read: the centre stone is a void in
+/// the N0 the outline is drawn in, so the gap is a hole rather than a gem that
+/// failed to render.
+fn hollow_crown() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.poly(&[(4, 22), (4, 8), (10, 16), (16, 5), (22, 16), (28, 8), (28, 22)], G2);
+    canvas.poly(&[(6, 20), (6, 12), (10, 18), (16, 8), (22, 18), (26, 12), (26, 20)], G3);
+    canvas.rect(4, 22, 25, 5, G2);
+    canvas.hline(4, 22, 25, G4);
+    canvas.disc(9, 25, 1, R3);
+    canvas.disc(23, 25, 1, R3);
+    canvas.ring(16, 24, 3, 1, G4);
+    canvas.erase_disc(16, 24, 2);
+    finish(&mut canvas);
+    canvas
+}
+
 /// 12 Block at combat start — the heaviest defensive relic, so a full tower
 /// shield with a centre ridge rather than the heater shape the lighter ones
 /// use. A plain rectangle was tried and read as a door.
@@ -225,6 +296,26 @@ fn ledger_of_ruin() -> Canvas {
     book_closed(&mut canvas, R2, R3);
     canvas.rect(14, 10, 5, 12, G3);
     canvas.disc(16, 16, 2, G5);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Bonus gold for every win — balance scales, which is the one shape in the
+/// set that says "commerce" without being a coin. Loaded on one side: a
+/// perfectly level beam reads as a justice emblem rather than a trade.
+fn merchants_scale() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.vline(16, 5, 21, N5);
+    canvas.rect(11, 26, 11, 3, N5);
+    canvas.rect(13, 24, 7, 2, N4);
+    canvas.disc(16, 5, 2, G3);
+    canvas.line(5, 12, 27, 8, G2);
+    canvas.line(5, 13, 27, 9, G2);
+    canvas.vline(6, 13, 4, N6);
+    canvas.vline(26, 9, 4, N6);
+    canvas.poly(&[(2, 17), (10, 17), (8, 21), (4, 21)], G2);
+    canvas.poly(&[(22, 13), (30, 13), (28, 17), (24, 17)], G2);
+    canvas.disc(6, 15, 2, G4);
     finish(&mut canvas);
     canvas
 }
@@ -283,6 +374,32 @@ fn palsy_shackle() -> Canvas {
     canvas.ring(22, 10, 4, 2, N5);
     canvas.ring(27, 5, 3, 2, N4);
     sparkle(&mut canvas, 13, 19, 5, P4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// 1 Artifact at combat start — the only relic that grants a ward, so it is
+/// the only one drawn as something *carried on a pilgrimage* rather than worn
+/// or wielded: a stoppered urn with the ash still rising out of it. The
+/// sparkle is P-ramp to match how `Artifact` is framed everywhere else.
+fn pilgrims_ash() -> Canvas {
+    let mut canvas = new_icon();
+    // A bellied urn with handles and a narrow foot. The taper is the whole
+    // difference: the first pass was a straight-sided pot widening upward,
+    // which is a flowerpot, and no amount of drifting ash above it read as
+    // anything but a plant.
+    canvas.disc(16, 20, 7, N4);
+    canvas.rect(10, 17, 13, 6, N4);
+    canvas.disc(15, 19, 4, N5);
+    canvas.ring(9, 15, 3, 1, N5);
+    canvas.ring(23, 15, 3, 1, N5);
+    canvas.rect(13, 11, 7, 4, N5);
+    canvas.rect(11, 9, 11, 2, N6);
+    canvas.rect(12, 26, 9, 2, N5);
+    canvas.rect(10, 28, 13, 2, N4);
+    canvas.disc(11, 6, 1, N7);
+    canvas.disc(21, 5, 1, N6);
+    sparkle(&mut canvas, 16, 4, 3, P4);
     finish(&mut canvas);
     canvas
 }
@@ -480,6 +597,25 @@ fn warded_bracer() -> Canvas {
     canvas.vline(16, 16, 7, B4);
     canvas.hline(12, 18, 9, B4);
     canvas.line(13, 16, 19, 22, B4);
+    finish(&mut canvas);
+    canvas
+}
+
+/// Gold for unspent Energy — a coin that talks, so the sound is the icon.
+/// `momentum_token` is the set's other coin and is centred and struck; this
+/// one sits left with its arcs to the right, which is the only reliable way to
+/// tell two gold discs apart in a HUD row at 1x.
+fn whispering_coin() -> Canvas {
+    let mut canvas = new_icon();
+    canvas.disc(12, 16, 9, G2);
+    canvas.disc(12, 16, 7, G3);
+    canvas.disc(9, 13, 1, G0);
+    canvas.hline(8, 20, 6, G0);
+    canvas.disc(14, 20, 1, G0);
+    canvas.line(23, 10, 26, 16, B3);
+    canvas.line(26, 16, 23, 22, B3);
+    canvas.line(27, 7, 31, 16, B4);
+    canvas.line(31, 16, 27, 25, B4);
     finish(&mut canvas);
     canvas
 }

@@ -190,6 +190,7 @@ public partial class ScreenShot : Node
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         EventDatabase.LoadAll();
+        TipDatabase.LoadAll();
 
         var requested = OS.GetCmdlineUserArgs().Where(a => !string.IsNullOrWhiteSpace(a)).ToList();
         var unknown = requested.Where(name => !Fixtures.ContainsKey(name)).ToList();
@@ -584,6 +585,11 @@ public partial class ScreenShot : Node
     {
         SeedReward();
         RewardContext.GoldAwarded = 60;
+        // A boss reward, so a Boss-tier relic - which is also the only shot
+        // that shows that tier's colour on a row. SeedReward's anchor_stone is
+        // Common, and leaving it here would make the one screenshot of a boss
+        // payout a picture of the thing relic tiers exist to stop.
+        RewardContext.GuaranteedRelic = RelicDatabase.Get("clockwork_gear");
         var cleared = ActDatabase.At(1);
         var next = ActDatabase.At(2);
         RewardContext.ActCleared = new ActClear(

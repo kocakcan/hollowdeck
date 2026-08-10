@@ -19,10 +19,10 @@ public partial class TreasureScreen : Control
         ScreenChrome.AddTitle(this, "Treasure");
         ScreenChrome.AddRunStatus(this);
 
-        var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
-        var available = RelicDatabase.All
-            .Where(r => !ownedRelicIds.Contains(r.Id) && MetaProgressionManager.Instance.IsRelicUnlocked(r.Id))
-            .ToList();
+        // A chest draws the ordinary Common/Uncommon/Rare ladder - the owned
+        // and unlock filters that used to be spelled out here live in
+        // RelicPool now, along with the tier weighting.
+        var picked = RelicPool.SampleOne(RelicSite.Treasure, RngStreams.Shop);
 
         var column = GetNode<VBoxContainer>("CenterContainer/VBoxContainer");
         var artSlot = GetNode<CenterContainer>("CenterContainer/VBoxContainer/ArtSlot");
@@ -34,7 +34,7 @@ public partial class TreasureScreen : Control
         nameLabel.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
         descriptionLabel.AddThemeColorOverride("font_color", PixelSpec.Ramp.N7);
 
-        if (available.Count == 0)
+        if (picked is null)
         {
             // The empty case gets the chest itself, so the screen still has a
             // subject. Falling back to no art at all is what made "the chest
@@ -48,7 +48,6 @@ public partial class TreasureScreen : Control
         }
         else
         {
-            var picked = available[RngStreams.Shop.Next(available.Count)];
             RunState.Relics.Add(new RelicInstance(picked));
 
             if (ArtAssets.RelicIcon(picked.Id) is { } icon)
