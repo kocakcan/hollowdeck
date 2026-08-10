@@ -4,6 +4,7 @@ using System.Linq;
 using Godot;
 using Hollowdeck.Data;
 using Hollowdeck.Run;
+using Hollowdeck.UI;
 
 namespace Hollowdeck.Debug;
 
@@ -273,6 +274,23 @@ public partial class BalanceReport : Node
             $"act {new[] { "I", "II", "III" }.ElementAtOrDefault(i) ?? (i + 1).ToString()} "
             + $"{act.PotionDropPercent}/{act.ElitePotionDropPercent}"));
         GD.Print($"  drop rates normal/elite             {rates}");
+
+        // Same argument as the drop rates above, one feature later. A relic's
+        // price is now a function of its tier and the shop's expected price is
+        // a function of RelicPool's weights, so two data numbers stand between
+        // an edit and the reachability table below - print both rather than
+        // leaving the reader to infer them from a moved "I Like Shiny" row.
+        var tiers = RelicPool.TiersFor(RelicSite.Shop);
+        GD.Print($"  relic prices by tier                "
+                 + string.Join("  ", tiers.Select(t => $"{t} {ShopScreen.RelicPriceFor(t)}g")));
+        GD.Print($"  shop relic expected price           "
+                 + $"{BalanceModel.ExpectedShopRelicPrice(),6:F0}g over "
+                 + string.Join("/", tiers.Select(t => RelicPool.WeightOf(t))));
+
+        var byTier = RelicDatabase.All.GroupBy(r => r.Tier)
+            .OrderBy(g => g.Key)
+            .Select(g => $"{g.Key} {g.Count()}");
+        GD.Print($"  relic rows by tier                  {string.Join("  ", byTier)}");
     }
 
     private void PrintScoreReachability(BalanceModel.Reachability reach)

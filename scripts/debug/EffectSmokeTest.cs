@@ -29,6 +29,7 @@ public partial class EffectSmokeTest : Node
         ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
+        TipDatabase.LoadAll();
 
         TestRelicAndPotionDatabasesLoad();
         TestPileShuffleAndDraw();
@@ -44,9 +45,12 @@ public partial class EffectSmokeTest : Node
         TestLiveTargetDamage();
         TestEveryCardDeclaresARarity();
         TestCardPoolIsRarityWeighted();
-        TestRarityPoolAlgorithm();
+        TestTierPoolAlgorithm();
         TestEveryPotionDeclaresARarity();
         TestPotionPoolIsRarityWeighted();
+        TestEveryRelicDeclaresATier();
+        TestRelicSitesDrawFromTheirOwnPools();
+        TestTipsAreAuthoredAndFit();
         TestPowerCardsLeavePlay();
         TestDexterityAndFrailBlock();
         TestDiscardAndExhaustHand();
@@ -83,7 +87,7 @@ public partial class EffectSmokeTest : Node
 
     private void TestRelicAndPotionDatabasesLoad()
     {
-        Check("relics_loaded", RelicDatabase.All.Count == 27, $"count={RelicDatabase.All.Count}");
+        Check("relics_loaded", RelicDatabase.All.Count == 33, $"count={RelicDatabase.All.Count}");
         Check("potions_loaded", PotionDatabase.All.Count == 12, $"count={PotionDatabase.All.Count}");
 
         int created = 0;
@@ -510,6 +514,151 @@ public partial class EffectSmokeTest : Node
             + $"{byRarity.GetValueOrDefault(Rarity.Uncommon)}/{byRarity.GetValueOrDefault(Rarity.Rare)} rows");
     }
 
+    // The relic half of the two above, plus the one assertion that is actually
+    // about relic tiers rather than about tiering in general: which pool each
+    // grant site draws from. That is the whole feature - the tier field exists
+    // so a boss cannot hand over what 150 gold would have - and it is the part
+    // no other suite looks at.
+    private void TestEveryRelicDeclaresATier()
+    {
+        // Text, not the loaded objects, for the reason the potion version
+        // spells out: RelicTier has no null and defaults to Common, so a
+        // forgotten key and an authored Common are the same object afterwards.
+        string json = Godot.FileAccess.GetFileAsString("res://data/relics/relics.json");
+        int authored = System.Text.RegularExpressions.Regex.Matches(json, "\"tier\"").Count;
+        Check("every_relic_row_authors_a_tier", authored == RelicDatabase.All.Count,
+            $"{authored} tier keys for {RelicDatabase.All.Count} relics");
+
+        var byTier = RelicDatabase.All.GroupBy(r => r.Tier).ToDictionary(g => g.Key, g => g.Count());
+
+        // Driven over every enum member rather than a hand-written list. A
+        // seventh RelicTier added later and authored on nothing is a pool that
+        // silently never yields, and the shape of test that would miss it is
+        // exactly the hardcoded three-element Rarity arrays elsewhere in this
+        // file - which is also why RelicTier is not Rarity.
+        foreach (RelicTier tier in System.Enum.GetValues<RelicTier>())
+        {
+            Check($"relic_pool_has_{tier.ToString().ToLowerInvariant()}_relics",
+                byTier.GetValueOrDefault(tier) > 0, $"none authored at {tier}");
+        }
+
+        // Monotone per *row*, over the Common/Uncommon/Rare ladder only. Boss,
+        // Shop and Event are deliberately excluded: they are sources rather
+        // than power levels, they are never weighed against the ladder except
+        // at one site each, and Boss is never weighed against anything at all.
+        double PerRow(RelicTier t) => (double)RelicPool.WeightOf(t) / byTier.GetValueOrDefault(t, 1);
+        double common = PerRow(RelicTier.Common), uncommon = PerRow(RelicTier.Uncommon);
+        double rare = PerRow(RelicTier.Rare);
+        Check("relic_tiers_stay_monotone_by_row", common > uncommon && uncommon > rare,
+            $"per-row odds C={common:F2} U={uncommon:F2} R={rare:F2} "
+            + $"over {byTier.GetValueOrDefault(RelicTier.Common)}/"
+            + $"{byTier.GetValueOrDefault(RelicTier.Uncommon)}/{byTier.GetValueOrDefault(RelicTier.Rare)} rows");
+    }
+
+    // Which pool each site draws from, sampled rather than asserted about
+    // RelicPool.TiersFor - reading the table back would pass against a Sample
+    // that ignored it entirely.
+    private void TestRelicSitesDrawFromTheirOwnPools()
+    {
+        RunState.Relics = new List<RelicInstance>();
+
+        List<RelicTier> Drawn(RelicSite site, int draws)
+        {
+            var rng = new System.Random(90210);
+            var seen = new List<RelicTier>();
+            for (int i = 0; i < draws; i++)
+            {
+                if (RelicPool.SampleOne(site, rng) is { } relic) seen.Add(relic.Tier);
+            }
+            return seen;
+        }
+
+        var boss = Drawn(RelicSite.Boss, 400);
+        Check("boss_reward_draws_only_boss_relics",
+            boss.Count == 400 && boss.All(t => t == RelicTier.Boss),
+            $"{boss.Count} draws, tiers seen: {string.Join(",", boss.Distinct())}");
+
+        // The other half of the same claim, and the one a player would notice:
+        // a Boss relic turning up in a chest is the feature not working.
+        foreach (var site in new[] { RelicSite.Reward, RelicSite.Treasure, RelicSite.Shop, RelicSite.Event })
+        {
+            var drawn = Drawn(site, 400);
+            var illegal = drawn.Distinct().Except(RelicPool.TiersFor(site)).ToList();
+            Check($"{site.ToString().ToLowerInvariant()}_never_draws_outside_its_tiers",
+                illegal.Count == 0, $"leaked: {string.Join(",", illegal)}");
+        }
+
+        // Each exclusive tier is reachable from its own site and from nowhere
+        // else. Authoring a Shop relic that no shop ever stocks is the failure
+        // this catches, and it is silent: every other assertion here passes.
+        var shopDraws = Drawn(RelicSite.Shop, 400);
+        var eventDraws = Drawn(RelicSite.Event, 400);
+        Check("shop_actually_reaches_its_own_tier", shopDraws.Contains(RelicTier.Shop),
+            "400 shop draws yielded no Shop-tier relic");
+        Check("event_actually_reaches_its_own_tier", eventDraws.Contains(RelicTier.Event),
+            "400 event draws yielded no Event-tier relic");
+
+        // Own every Boss relic and a boss must still pay - from the ladder,
+        // since its own tier is spent. Silence is the wrong failure here: it
+        // would deny the reward to precisely the player who earned it most.
+        RunState.Relics = RelicDatabase.All
+            .Where(r => r.Tier == RelicTier.Boss)
+            .Select(r => new RelicInstance(r))
+            .ToList();
+        var fallback = RelicPool.SampleOne(RelicSite.Boss, new System.Random(7));
+        Check("boss_falls_back_to_the_ladder_when_its_tier_is_owned_out",
+            fallback is not null && fallback.Tier != RelicTier.Boss,
+            $"got {fallback?.Id ?? "null"} with every Boss relic already owned");
+        RunState.Relics = new List<RelicInstance>();
+    }
+
+    // The tip line's data, which has no other guard: RewardScreen hides the row
+    // when nothing loads, so a broken tips.json is invisible in the game.
+    private void TestTipsAreAuthoredAndFit()
+    {
+        Check("tips_loaded", TipDatabase.All.Count > 0, "no tips authored");
+
+        var badId = TipDatabase.All.Where(t => t.Id.Length == 0 || t.Text.Length == 0).ToList();
+        Check("every_tip_has_an_id_and_text", badId.Count == 0,
+            $"{badId.Count} empty row(s)");
+
+        var duplicated = TipDatabase.All.GroupBy(t => t.Id).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        Check("tip_ids_are_unique", duplicated.Count == 0, string.Join(", ", duplicated));
+
+        // ASCII only, like every other UI string: the pixel faces carry no
+        // punctuation past it (ART_SPEC section 5), so a curly quote pasted in
+        // from anywhere renders as a blank box.
+        var nonAscii = TipDatabase.All.Where(t => t.Text.Any(c => c > 127)).Select(t => t.Id).ToList();
+        Check("tips_are_ascii_only", nonAscii.Count == 0, string.Join(", ", nonAscii));
+
+        // Every {hd_*} token names a real action. An unresolved one renders as
+        // the literal "{hd_typo}" on the reward screen - deliberately visible
+        // rather than silently blank, but this is what should catch it first.
+        var unknown = TipDatabase.All
+            .SelectMany(t => ScreenKeyboardNav.KeyHintTokens(t.Text).Select(a => (t.Id, Action: a)))
+            .Where(x => !InputMap.HasAction(x.Action))
+            .ToList();
+        Check("tip_key_hints_name_real_actions", unknown.Count == 0,
+            string.Join(", ", unknown.Select(x => $"{x.Id}:{x.Action}")));
+
+        // A rotation, so a full lap must visit every tip exactly once and land
+        // back where it started. This is the property that makes it worth not
+        // being a roll, and it is one line to lose.
+        int n = TipDatabase.All.Count;
+        var lap = Enumerable.Range(0, n).Select(v => TipDatabase.ForVisit(1234, v)!.Id).ToList();
+        Check("a_full_lap_of_tips_repeats_nothing", lap.Distinct().Count() == n,
+            $"{lap.Distinct().Count()} distinct over {n} visits");
+        Check("tips_wrap_around", TipDatabase.ForVisit(1234, n)!.Id == lap[0],
+            $"visit {n} gave {TipDatabase.ForVisit(1234, n)!.Id}, visit 0 gave {lap[0]}");
+
+        // A negative seed must not index backwards off the front. RunSeed comes
+        // from Random.Next() so it is non-negative today, but a seed-entry
+        // screen is on the roadmap and typing one in is the obvious way this
+        // stops being true.
+        var negative = TipDatabase.ForVisit(-99, 3);
+        Check("a_negative_seed_still_picks_a_tip", negative is not null, "null for seed -99");
+    }
+
     // The potion half of TestCardPoolIsRarityWeighted. Same argument: uniform
     // sampling - which is what the shop and the event outcome both did before
     // PotionPool - would put Rares at their share of the pool, 2 of 12 or
@@ -539,17 +688,17 @@ public partial class EffectSmokeTest : Node
     }
 
     // A tiered row for the synthetic pools below. Deliberately not a card or a
-    // potion: RarityPool is generic, and pinning its behaviour against real
+    // potion: TierPool is generic, and pinning its behaviour against real
     // content would produce an assertion that goes red every time someone
     // authors a row and therefore gets deleted the second time it does.
     private sealed record Tiered(string Id, Rarity Rarity);
 
-    // RarityPool is the draw CardPool and PotionPool share. Both of them assert
+    // TierPool is the draw CardPool and PotionPool share. Both of them assert
     // their *weights* elsewhere; what is pinned here is the algorithm, because
     // that is the half an extraction can break silently and the half neither
     // caller would notice - a band on a rare share still passes if the draw
     // stopped being without-replacement or started biasing an exhausted tier.
-    private void TestRarityPoolAlgorithm()
+    private void TestTierPoolAlgorithm()
     {
         // Six rows, three tiers, uneven - the shape both real pools have.
         var pool = new List<Tiered>
@@ -564,19 +713,19 @@ public partial class EffectSmokeTest : Node
         // Asking for more than exists drains the pool exactly once each rather
         // than looping forever or repeating a row. This is the assertion that
         // covers both remove-on-pick and the tier being dropped when it empties.
-        var drained = RarityPool.Sample(pool, 20, new System.Random(5), TierOf, Weight);
-        Check("rarity_pool_drains_every_tier_exactly_once",
+        var drained = TierPool.Sample(pool, 20, new System.Random(5), TierOf, Weight);
+        Check("tier_pool_drains_every_tier_exactly_once",
             drained.Count == pool.Count && drained.Select(t => t.Id).Distinct().Count() == pool.Count,
             $"got {drained.Count} of {pool.Count}: {string.Join(",", drained.Select(t => t.Id))}");
 
-        // Same seed, same sequence. RarityPool groups into a Dictionary, whose
+        // Same seed, same sequence. TierPool groups into a Dictionary, whose
         // key order is not guaranteed - PickTier's OrderBy is what makes this
         // hold, and it is the single line an extraction is most likely to drop.
-        string first = string.Join(",", RarityPool.Sample(pool, 6, new System.Random(11), TierOf, Weight)
+        string first = string.Join(",", TierPool.Sample(pool, 6, new System.Random(11), TierOf, Weight)
             .Select(t => t.Id));
-        string second = string.Join(",", RarityPool.Sample(pool, 6, new System.Random(11), TierOf, Weight)
+        string second = string.Join(",", TierPool.Sample(pool, 6, new System.Random(11), TierOf, Weight)
             .Select(t => t.Id));
-        Check("rarity_pool_draws_in_a_fixed_order", first == second, $"{first} then {second}");
+        Check("tier_pool_draws_in_a_fixed_order", first == second, $"{first} then {second}");
 
         // An exhausted tier is *removed*, not re-rolled: with a 99:1 split, a
         // two-row pool must still hand back both rows on a two-draw. If the
@@ -587,10 +736,10 @@ public partial class EffectSmokeTest : Node
         bool bothEveryTime = true;
         for (int seed = 0; seed < 50; seed++)
         {
-            var drawn = RarityPool.Sample(lopsided, 2, new System.Random(seed), TierOf, Lopsided);
+            var drawn = TierPool.Sample(lopsided, 2, new System.Random(seed), TierOf, Lopsided);
             if (drawn.Count != 2) bothEveryTime = false;
         }
-        Check("rarity_pool_renormalises_an_exhausted_tier", bothEveryTime,
+        Check("tier_pool_renormalises_an_exhausted_tier", bothEveryTime,
             "a two-draw on a two-row pool came back short");
 
         // The weight function is honoured rather than ignored: inverting it has
@@ -601,10 +750,10 @@ public partial class EffectSmokeTest : Node
         var rng = new System.Random(77);
         for (int trial = 0; trial < 400; trial++)
         {
-            if (RarityPool.SampleOne(pool, rng, TierOf, Weight)!.Rarity == Rarity.Rare) raresNormal++;
-            if (RarityPool.SampleOne(pool, rng, TierOf, Inverted)!.Rarity == Rarity.Rare) raresInverted++;
+            if (TierPool.SampleOne(pool, rng, TierOf, Weight)!.Rarity == Rarity.Rare) raresNormal++;
+            if (TierPool.SampleOne(pool, rng, TierOf, Inverted)!.Rarity == Rarity.Rare) raresInverted++;
         }
-        Check("rarity_pool_actually_reads_the_weight_table", raresInverted > raresNormal * 3,
+        Check("tier_pool_actually_reads_the_weight_table", raresInverted > raresNormal * 3,
             $"rare draws: {raresNormal} weighted vs {raresInverted} inverted of 400 each");
     }
 

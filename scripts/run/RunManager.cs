@@ -68,6 +68,7 @@ public partial class RunManager : Node
         PotionDatabase.LoadAll();
         EventDatabase.LoadAll();
         ActDatabase.LoadAll();
+        TipDatabase.LoadAll();
     }
 
     public void ChangeScreen(ScreenState next)

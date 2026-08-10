@@ -10,7 +10,7 @@ namespace Hollowdeck.Run;
 // no curse cards, no run timer and no Heart fight, so Ascension/Curses!/
 // Speedster/Heartbreaker have nothing to read. Thresholds are scaled to
 // Hollowdeck's much smaller numbers (50 max HP, ~44g per fight, an 84-card
-// pool, 27 relics) - the StS value each was scaled from is noted per-category
+// pool, 33 relics) - the StS value each was scaled from is noted per-category
 // below.
 //
 // The threshold categories are now set against measurement rather than
@@ -65,8 +65,11 @@ public static class RunScore
         (250, 25, "Money Money"),
     };
 
-    // StS: 25 relics. Hollowdeck has 27 in total, and a best-effort path
-    // collects around 15, so 8 stays a comfortable bar.
+    // StS: 25 relics. Hollowdeck has 33 in total, and a best-effort path
+    // collects around 15, so 8 stays a comfortable bar. The pool grew 27 -> 33
+    // with relic tiers and the collected figure did not move: what a route can
+    // pick up is capped by how many Elite/Boss/Treasure/Shop nodes it can
+    // string together, not by how many relics exist.
     public const int ShinyRelics = 8;
     public const int ShinyPoints = 50;
 

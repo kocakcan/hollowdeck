@@ -72,6 +72,17 @@ public static class UiTheme
         // than the semi-transparent bloom color it used to be.
         public static readonly Color RarityRareGlow = PixelSpec.Ramp.G5;
 
+        // RelicTier's three source tiers, which sit alongside the three above
+        // rather than extending them - a Boss relic is not "rarer than Rare",
+        // it is from somewhere else. One ramp each so no two source tiers can
+        // be confused with each other or with a rarity: oxblood is danger and
+        // is where a boss lives everywhere else in the game, ember is act II's
+        // tint and the warmest thing that is not gold (which Rare has taken),
+        // and violet is the arcane ramp events already draw on.
+        public static readonly Color TierBoss = PixelSpec.Ramp.R4;
+        public static readonly Color TierShop = PixelSpec.Ramp.E3;
+        public static readonly Color TierEvent = PixelSpec.Ramp.P3;
+
         // Upgraded cards blend their (rarity) border toward this green,
         // independent of rarity - both signals read at once. Exhaust cards
         // get a small corner badge in this color (matches the existing

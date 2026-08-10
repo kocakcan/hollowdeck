@@ -5,7 +5,7 @@
 The run is complete and playable end to end: three acts of branching map, telegraphed-intent combat,
 relics, potions, events, a shop, mid-run save/resume, a score-driven unlock track, 13 screens on one
 pixel-art spec, 21 smoke suites, CI, and packaged exports for three platforms. Content stands at 101
-cards (97 offerable), 36 enemies, 27 relics, 12 potions, 15 events.
+cards (97 offerable), 36 enemies, 33 relics, 12 potions, 15 events.
 
 **The gating problem is no longer presentation, and it is no longer content volume. It is
 mechanical vocabulary.** The previous roadmap correctly identified visual coherence as the ceiling
@@ -15,8 +15,9 @@ and the content had saturated it — which is why the game read as a competent d
 than as this genre.
 
 **Phase 7 closed the card half of that, and Phase 8 has since closed both of its own — the status
-roster and the enemy behaviours.** The five struck rows below are done; the live ones are what the
-rest of Phases 9 through 10 own. Phase 9 is open and its first item, the `?` node, has landed.
+roster and the enemy behaviours.** The six struck rows below are done; the live ones are what the
+rest of Phases 9 through 10 own. Phase 9 is open, and three of its items have landed: the `?` node,
+the potion pass, and relic tiers — which closes the last row of the diagnosis table.
 
 ### The diagnosis
 
@@ -28,7 +29,7 @@ rest of Phases 9 through 10 own. Phase 9 is open and its first item, the `?` nod
 | ~~`CardType`~~ | ~~`{ Attack, Skill, Power }`~~ | **Closed in Phase 7** — `Status` and `Curse`, unplayable |
 | ~~`StatusType`~~ | ~~11~~ | **Closed in Phase 8** — `Artifact`, `Thorns`, `Intangible`, `Plating` make 15 |
 | ~~Enemy AI types~~ | ~~3, all "pick a move off a list"~~ | **Closed in Phase 8** — `summon_enemy`, `onDeath`, escape, and `wake_on_damage` make four pickers |
-| `RelicDefinition` | no tier field | A boss grants from the same pool 150 gold buys from |
+| ~~`RelicDefinition`~~ | ~~no tier field~~ | **Closed in Phase 9** — `RelicTier` at 50/33/17 plus three source tiers, one tier set per grant site |
 | ~~`PotionDefinition`~~ | ~~no rarity field, no combat drop~~ | **Closed in Phase 9** — `Rarity` at 65/25/10 across all four grant sites, and a per-act drop roll |
 
 **The load-bearing row was the third**, and it is the one Phase 7 opened first. While no effect
@@ -59,7 +60,7 @@ Compressed. The decisions worth not relitigating, and nothing else; the full nar
 - **Content is data, effects are code, joined by string keys.** New cards are new rows in `data/`,
   not new classes. This is what `IScriptedEffect` and `RelicBehavior` exist as escape hatches
   *from*; both are deliberately unpopulated. It is also why Powers are statuses rather than a
-  per-Power hook, and why all 27 relics are data rows driven by one factory.
+  per-Power hook, and why all 33 relics are data rows driven by one factory.
 - **The turn-start grant ordering trap.** Both combatants clear `Block` on their own turn, so a
   grant landing before that clear is wiped as it is given — hence `ApplyTurnStartGrants`.
   `Fervor`/`Foresight` are the same trap running the other way: energy and hand size are *assigned*
@@ -369,7 +370,7 @@ distribution held against 20k samples of the real picker).
 - ~~**Potion drops from combat.**~~ **Shipped**, and the forecast was right about the mechanism and
   wrong about where the work was. Rarity landed as forecast: `PotionDefinition.Rarity` reusing
   `CardDefinition`'s enum, weighted 65/25/10 across all four grant sites, with the tier-first draw
-  *extracted* into `RarityPool` rather than copied — the weights stay split (that is the
+  *extracted* into `RarityPool` (now `TierPool`) rather than copied — the weights stay split (that is the
   `BlockMath`/`DamageMath` argument), the algorithm does not. Drop rates are per-act data beside the
   gold dials (`ActDefinition.PotionDropPercent`/`ElitePotionDropPercent`), rolled off a fifth RNG
   stream, `RngStreams.Drops`. No save-version bump: potions save by id, and the rates live in
@@ -412,9 +413,60 @@ distribution held against 20k samples of the real picker).
   — the only lines that moved in `tools/balance-report.sh` are the two new ones. 4.5 expected drops
   a run against a three-slot belt, 8.1 on the best path, banded in `BalanceSmokeTest` at both ends
   because both ends are real failures.
-- **Relic tiers.** `RelicDefinition` has no tier field, so all four grant sites (elite/boss reward,
-  treasure, shop, event) draw one flat pool and a boss can hand over what 150 gold would have.
-  `RelicTier { Common, Uncommon, Rare, Boss, Shop, Event }`, one pool per site.
+- ~~**Relic tiers.**~~ **Shipped**, and the forecast was right about the enum and wrong about only
+  one thing — that `RelicTier` is a rarity. `RelicTier { Common, Uncommon, Rare, Boss, Shop, Event }`
+  landed verbatim, weighted 50/33/17 across the ladder, with the owned-and-unlocked filter collapsed
+  out of four byte-identical LINQ copies into `RelicPool` (the `IsPlayable` argument, one content
+  type over) and `ShopScreen`'s local uniform `Sample<T>` retired exactly as its own comment
+  predicted. Content 27 → 33: the four rows that compound *per turn* became the Boss tier, and six
+  new rows gave Boss, Shop and Event a real pool rather than a promoted leftover. No save bump —
+  relics persist as ids, so a tier is re-resolved from the definition on load.
+
+  Five things the forecast did not contain:
+  - **"One pool per site" is the wrong decomposition; "which tiers may a site see" is the right
+    one.** Written as one pool per site, Boss/Shop/Event each need their own sampler and their own
+    exhaustion story. Written as a tier filter, `TierPool` already renormalises over whatever is in
+    the pool it is handed, so "a boss draws the Boss tier alone" and "a shop draws the ladder plus
+    its own tier" are the same function with a different argument. That is `RelicPool.TiersFor`, and
+    it is the only place a site's pool is decided.
+  - **`RelicTier` is two axes wearing one enum, which is why it is not `Rarity`.** Only the first
+    three members are a power level; Boss, Shop and Event name a *source*. Reusing `Rarity` — which
+    `PotionDefinition` correctly does — would have made "how likely is a Rare" and "where did this
+    come from" the same question, and it would have silently under-covered the two hardcoded
+    three-element `Rarity` sweeps in `EffectSmokeTest`. The relic sweep drives
+    `Enum.GetValues<RelicTier>()` instead, so a seventh tier authored on nothing fails.
+  - **`BossWeight` has to be positive and means nothing.** Boss is never mixed with another tier, so
+    it is renormalised to the whole draw every time — but at `0`, `PickTier` sums a total weight of
+    0, returns null, and the boss reward vanishes with no error. A constant that is load-bearing
+    only in its sign is worth the comment it now has.
+  - **Tier-scaled pricing was blocked on rendering, and `ShopScreen` had already written the rule
+    down.** Its potion comment says a price moving with an attribute the tile does not render reads
+    as a bug rather than as a tier — so the sub-label became `Relic - Rare` first and
+    `RelicPriceFor` (110/150/210/170) followed it. The payoff is visible in one screenshot: at 129
+    gold the shop offers an affordable Common and a greyed Uncommon, which is the slot being a
+    decision for the first time.
+  - **The mirror was the thing worth fixing, not the number.** `BalanceModel` held
+    `ShopRelicPrice = 150` under a "mirrors ShopScreen" comment with *nothing asserting the mirror*
+    — the `NodePotionPercent` hazard one file over, undetected. It reads `ShopScreen.RelicPriceFor`
+    and `RelicPool.WeightOf` now and computes the expectation (146g), which cannot drift at all, and
+    is strictly better than the assertion this was going to need. Landing: the encounter-cost,
+    curve, band, boss and threshold tables byte-identical against `main` — the only lines that moved
+    are the three new ones. `I Like Shiny` did not budge, because what a route collects is capped by
+    how many Elite/Boss/Treasure/Shop nodes it can string together, not by how many relics exist.
+- ~~**Tips under the reward list.**~~ **Shipped** alongside the tiers, off a playtest note rather
+  than off this document. Fifteen rows in `data/tips/tips.json`, rendered in the band between the
+  framed list and the Skip button — empty at every row count, because the list is centred in its own
+  area. Three things worth carrying:
+  - **It is a rotation, not a roll**, and adding a sixth `RngStreams` entry would have been free.
+    Three reasons not to: a stream's position is not serialized and `Init` re-runs on load, so a
+    draw outside the deterministic run pipeline replays differently after a resume; five `ScreenShot`
+    fixtures re-render this screen; and a rotation visits every tip once before repeating, which a
+    roll does not.
+  - **A tip naming a key would have been the third place a binding could drift.** `{hd_pile_draw}`
+    resolves through `ScreenKeyboardNav.ResolveKeyHints`, which is `KeyHint` for authored prose, and
+    the suite refuses a token naming no real action.
+  - **Hidden behind the card fan, not faded with the list.** It sits directly under the fan's Back
+    button, and dimmed body text behind a modal reads as something the player failed to dismiss.
 - **The boss relic becomes a choice of three.** `CombatScreen.GrantRewardRelic` currently auto-grants
   one at random. The boss relic is where a run's identity gets decided in this genre, and being
   handed one is not the same event as choosing one. Reuses the `RewardScreen`/`CardPicker` shape.
@@ -436,7 +488,17 @@ on entry — plus every `MapNodeType` routing to a screen through the extracted 
 map nodes omit the flag loading as visible), `ScreenSmokeTest` for the boss-relic choice and
 RunSetup.
 
-For the potion pass: `EffectSmokeTest` (`RarityPool`'s algorithm against a synthetic pool rather
+For the relic pass: `EffectSmokeTest` (every relic row *authoring* a tier, read out of `relics.json`
+as text; every `RelicTier` member having stock, driven over the enum rather than a hand-written
+list; per-row monotonicity across the ladder; every site drawing only from its own tiers over 400
+samples, in both directions — no Boss relic in a chest, no Shop relic off a boss; each exclusive
+tier actually reachable from its own site; and a boss falling back to the ladder with its own tier
+owned out). For the tip line: the same suite (ASCII-only, unique ids, every `{hd_*}` token naming a
+real action, a full lap repeating nothing and wrapping, a negative seed still indexing) plus
+`ScreenSmokeTest` (a tip on screen and from the authored pool, the longest one clearing the Skip
+button and fitting its line, the tip gone behind the card fan, and the tip advancing with the run).
+
+For the potion pass: `EffectSmokeTest` (`TierPool`'s algorithm against a synthetic pool rather
 than real content — drains every tier once, fixed order, renormalises an exhausted tier, and
 actually reads the weight function; `PotionPool`'s rare share; every potion row *authoring* a
 rarity, read out of `potions.json` as text because the enum has no null; and the per-row

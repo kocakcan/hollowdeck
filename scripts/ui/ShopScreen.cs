@@ -24,8 +24,38 @@ namespace Hollowdeck.UI;
 public partial class ShopScreen : Control
 {
     private const int CardPrice = 50;
-    private const int RelicPrice = 150;
     private const int PotionPrice = 40;
+
+    // A relic was a flat 150 for eight phases, which is what ROADMAP's relic
+    // row meant by "a boss grants from the same pool 150 gold buys from": one
+    // pool, one price, so the shop's relic slot was a coin flip rather than a
+    // decision. It is priced by tier now, and the tile prints the tier - see
+    // RefreshOffers, where doing it in that order is the actual rule.
+    //
+    // Public and read by BalanceModel rather than mirrored there. The flat 150
+    // was copied into BalanceModel.ShopRelicPrice under a "mirrors ShopScreen"
+    // comment with nothing asserting the mirror held; a function the analyser
+    // calls cannot drift from the one the shop charges.
+    //
+    // The floor is 110 and has to stay clear of 60: ScreenSmokeTest pins gold
+    // at 60 to guarantee the shop shows both an affordable and an unaffordable
+    // offer, and a relic cheap enough to buy there would empty one of those
+    // two populations and pass a test that had stopped checking anything.
+    public const int CommonRelicPrice = 110;
+    public const int UncommonRelicPrice = 150;
+    public const int RareRelicPrice = 210;
+    public const int ShopRelicPrice = 170;
+
+    public static int RelicPriceFor(RelicTier tier) => tier switch
+    {
+        RelicTier.Uncommon => UncommonRelicPrice,
+        RelicTier.Rare => RareRelicPrice,
+        RelicTier.Shop => ShopRelicPrice,
+        // Boss and Event never reach a shop (RelicPool.TiersFor), so this arm
+        // is the Common price doing double duty as a floor rather than a claim
+        // that a Boss relic is worth 110.
+        _ => CommonRelicPrice,
+    };
 
     // Deck thinning, priced above a card and well below a relic: removing a
     // Strike is worth more than adding one, and a run that could buy four
@@ -121,23 +151,23 @@ public partial class ShopScreen : Control
         // conflated into a single badge. Relics/potions have no CardView
         // equivalent, so they get the tile treatment below.
         var cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
-        // Cards go through CardPool and potions through PotionPool, so the
-        // stock is rarity-weighted the same way a fight reward is. Relics keep
-        // the plain uniform Sample below, since a relic still carries no tier -
-        // that is ROADMAP Phase 9's relic-tier item, and it is the change that
-        // retires the helper.
+        // Cards go through CardPool, potions through PotionPool and relics
+        // through RelicPool, so all three are tier-weighted the same way a
+        // fight reward is. Relics were the last holdout, drawn by a local
+        // uniform Sample<T> helper that this retired.
         foreach (var card in CardPool.Sample(MetaProgressionManager.Instance.UnlockedCards(), 4, rng))
         {
             AddCardOffer(card, cardScene);
         }
 
-        var ownedRelicIds = RunState.Relics.Select(r => r.Definition.Id).ToHashSet();
-        var availableRelics = RelicDatabase.All
-            .Where(r => !ownedRelicIds.Contains(r.Id) && MetaProgressionManager.Instance.IsRelicUnlocked(r.Id))
-            .ToList();
-        foreach (var relic in Sample(availableRelics, 2, rng))
+        // The shop sees the ordinary ladder plus its own Shop tier, and unlike
+        // the potion row below it *does* print the tier and price against it.
+        // That order is the rule, not a preference: a price moving with an
+        // attribute the tile does not render reads as a bug rather than as a
+        // tier, so the sub-label came first and RelicPriceFor followed it.
+        foreach (var relic in RelicPool.Sample(RelicSite.Shop, 2, rng))
         {
-            AddOfferTile(relic.Name, "Relic", relic.Description, RelicPrice,
+            AddOfferTile(relic.Name, $"Relic - {relic.Tier}", relic.Description, RelicPriceFor(relic.Tier),
                 () => RunState.Relics.Add(new RelicInstance(relic)), ArtAssets.RelicIcon(relic.Id));
         }
 
@@ -240,20 +270,6 @@ public partial class ShopScreen : Control
         _offersRow.Visible = visible;
         _leaveButton.Visible = visible;
         _removeCardButton.Visible = visible;
-    }
-
-    // Uniform sampling, for the relic pool - the last one with no rarity to
-    // weight by. Cards have gone through CardPool since Phase 6 and potions
-    // through PotionPool since Phase 9; relic tiers are what retires this.
-    private static List<T> Sample<T>(List<T> pool, int count, System.Random rng)
-    {
-        var copy = new List<T>(pool);
-        for (int i = copy.Count - 1; i > 0; i--)
-        {
-            int j = rng.Next(i + 1);
-            (copy[i], copy[j]) = (copy[j], copy[i]);
-        }
-        return copy.Take(count).ToList();
     }
 
     private void AddCardOffer(CardDefinition card, PackedScene cardScene)

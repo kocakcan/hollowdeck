@@ -57,6 +57,7 @@ public partial class KeyboardSmokeTest : Node
         ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
+        TipDatabase.LoadAll();
 
         TestInputMapLayer();
         TestFocusModeSplit();

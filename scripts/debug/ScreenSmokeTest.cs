@@ -26,6 +26,7 @@ public partial class ScreenSmokeTest : Node
         ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
+        TipDatabase.LoadAll();
 
         // Captured before the screen tests run, and used for Quit below - the
         // same trap ActSmokeTest and KeyboardSmokeTest document. TestRestScreen
@@ -42,6 +43,7 @@ public partial class ScreenSmokeTest : Node
         TestRewardScreenActClearedBanner();
         TestRewardScreen();
         TestRewardPotionDrop();
+        await TestRewardScreenTip();
         TestTreasureScreen();
         TestShopScreen();
         await TestShopOffersClearTheRunStatusBlock();
@@ -327,6 +329,16 @@ public partial class ScreenSmokeTest : Node
             Row(screen, RewardKind.Gold)!.FindChildren("*", "Label", recursive: true, owned: false)
                 .OfType<Label>().Any(l => l.Text.Contains("25")),
             "the gold row does not name the amount");
+
+        // The tier has to be readable, the same way the potion row's rarity is
+        // and for a stronger reason: an elite and a boss pay from different
+        // pools now, and this row is the only place the player is told which.
+        // anchor_stone is Common.
+        var relicLabels = Row(screen, RewardKind.Relic)!
+            .FindChildren("*", "Label", recursive: true, owned: false).OfType<Label>().ToList();
+        Check("reward_relic_row_shows_its_name_and_tier",
+            relicLabels.Any(l => l.Text.Contains("Anchor Stone")) && relicLabels.Any(l => l.Text.Contains("Common")),
+            string.Join(" | ", relicLabels.Select(l => l.Text)));
         Check("reward_skip_button_has_a_handler", skip.GetSignalConnectionList("pressed").Count > 0,
             "no pressed connections");
 
@@ -462,6 +474,86 @@ public partial class ScreenSmokeTest : Node
         Check("reward_has_no_potion_row_when_none_dropped", Row(noDrop, RewardKind.Potion) is null,
             "a potion row survived from the previous fight");
         noDrop.QueueFree();
+    }
+
+    // The tip line under the reward list. Four separate claims, because three
+    // of them fail silently: a tip that never changes, a tip that is not one of
+    // the authored ones, and a tip overlapping the Skip button all render as a
+    // screen that looks fine in the one screenshot anyone takes.
+    private async System.Threading.Tasks.Task TestRewardScreenTip()
+    {
+        RewardContext.ActCleared = null;
+        RewardContext.GuaranteedRelic = null;
+        RewardContext.PotionDrop = null;
+        RewardContext.GoldAwarded = 25;
+        RewardContext.Claimed.Clear();
+        RewardContext.CardChoices = new List<CardDefinition>
+        {
+            CardDatabase.Get("strike"), CardDatabase.Get("defend"), CardDatabase.Get("bash"),
+        };
+        RunState.VisitedNodeIds = new HashSet<string> { "n0" };
+
+        var screen = (Control)LoadScene("res://scenes/RewardScreen.tscn");
+        var tipLine = screen.GetNode<Control>("TipLine");
+        var tipLabel = screen.GetNode<Label>($"TipLine/{RewardScreen.TipLabelName}");
+
+        screen.Size = new Vector2(1152, 648);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("reward_shows_a_tip", tipLine.Visible && tipLabel.Text.Length > 0,
+            $"visible={tipLine.Visible} text='{tipLabel.Text}'");
+
+        // From the authored pool, not from a fallback string. Compared after
+        // the same key substitution the screen applies, so a tip naming a key
+        // is not counted as "not one of ours".
+        var authored = TipDatabase.All.Select(t => ScreenKeyboardNav.ResolveKeyHints(t.Text)).ToHashSet();
+        Check("reward_tip_comes_from_the_authored_pool", authored.Contains(tipLabel.Text),
+            $"'{tipLabel.Text}' is not in tips.json");
+
+        // Captured before the overflow check below overwrites the label.
+        string firstTip = tipLabel.Text;
+
+        // The tip must not run into the Skip button below it. This is the
+        // failure mode the whole "a constant that fits the worst case is not a
+        // constant that fits the best one" list in ROADMAP is about, and the
+        // longest authored tip is the case that finds it.
+        var skipRect = screen.GetNode<Control>("SkipButton").GetGlobalRect();
+        var longest = TipDatabase.All.OrderByDescending(t => t.Text.Length).First();
+        tipLabel.Text = ScreenKeyboardNav.ResolveKeyHints(longest.Text);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        var tipRect = tipLine.GetGlobalRect();
+        Check("the_longest_tip_clears_the_skip_button", !tipRect.Intersects(skipRect),
+            $"longest tip '{longest.Id}' at {tipRect} against Skip at {skipRect}");
+        Check("the_longest_tip_fits_its_line_on_one_row",
+            tipLabel.GetGlobalRect().Size.X <= tipLine.Size.X,
+            $"'{longest.Id}' measures {tipLabel.GetGlobalRect().Size.X} in a {tipLine.Size.X} line");
+
+        // Gone, not dimmed, while the card fan is up: it sits directly under
+        // the fan's Back button, and a faded line of body text behind a modal
+        // reads as something the player failed to dismiss.
+        Row(screen, RewardKind.Card)!.EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Check("reward_tip_hides_behind_the_card_fan", !tipLine.Visible,
+            "the tip is still on screen under the modal");
+
+        screen.QueueFree();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        // It rotates. Same seed, a run one node further along, and the tip has
+        // to have moved - a tip that never changes is the whole feature not
+        // working, and nothing else here would notice.
+        RewardContext.Claimed.Clear();
+        RunState.VisitedNodeIds = new HashSet<string> { "n0", "n1" };
+        var later = LoadScene("res://scenes/RewardScreen.tscn");
+        string secondTip = later.GetNode<Label>($"TipLine/{RewardScreen.TipLabelName}").Text;
+        Check("reward_tip_advances_with_the_run", secondTip != firstTip && secondTip.Length > 0,
+            $"both visits showed '{secondTip}'");
+        later.QueueFree();
+
+        RunState.VisitedNodeIds = new HashSet<string>();
     }
 
     private void TestTreasureScreen()

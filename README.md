@@ -11,7 +11,7 @@ networking, desktop only (Windows/Mac/Linux).
 
 The core loop is playable end-to-end — new run, map, combat, events, shop, rest, treasure,
 rewards, bosses, run-end scoring, unlocks, and mid-run save/resume. Current content is three
-acts: **101 cards (97 offerable, 4 unplayable Curses and Status cards), 27 relics, 12 potions,
+acts: **101 cards (97 offerable, 4 unplayable Curses and Status cards), 33 relics, 12 potions,
 36 enemies (6 of them bosses), 15 events**. Each act has its own enemy pools and a two-boss pool
 the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
 what's still open.
@@ -213,7 +213,7 @@ then `cargo run --release --manifest-path tools/artgen/Cargo.toml -- generate`. 
 `tools/artgen/README.md`; `PixelSpecSmokeTest` fails if a definition has no icon or an icon has no
 definition.
 
-**A relic** (`data/relics/relics.json`) is a data row like everything else. All 27 declare
+**A relic** (`data/relics/relics.json`) is a data row like everything else. All 33 declare
 `"behaviorId": "simple_hook_effect"`; none is a C# class. A relic is a `hook` — any of
 `RelicBehavior`'s seven — plus the `effect` it fires, narrowed by three optional keys:
 
@@ -221,6 +221,7 @@ definition.
 {
   "id": "ledger_of_ruin",
   "behaviorId": "simple_hook_effect",
+  "tier": "Uncommon",
   "hook": "OnCardPlayed",
   "target": "Self",
   "condition": { "cardType": "Attack" },
@@ -229,6 +230,12 @@ definition.
 }
 ```
 
+- **`tier`** — `Common`, `Uncommon`, `Rare`, `Boss`, `Shop`, `Event`, and it must be authored:
+  the enum has no null, so an omitted key reads as `Common` with nothing thrown, and
+  `EffectSmokeTest` counts `"tier"` keys in the raw JSON for exactly that reason. The first three
+  are a power ladder weighted 50/33/17 and reachable everywhere; the last three name a *source* and
+  are reachable only from a boss reward, the shop and a `gain_relic` event respectively. Which site
+  sees which is `RelicPool.TiersFor`, not anything on the row.
 - **`target`** — `Self` (the default), `Attacker` (OnDamageTaken's), `FirstEnemy`, `RandomEnemy`,
   `AllEnemies`. This is the relic's own selector, *not* `EffectSpec.Scope`: a relic has no card
   targets to inherit, so `scope` is meaningless on a relic effect and is left off.

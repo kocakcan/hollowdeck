@@ -195,8 +195,14 @@ public partial class LibraryScreen : Control
                 : MetaProgressionManager.UnlockTrack
                     .First(e => e.Kind == UnlockKind.Relic && e.Id == def.Id).Threshold;
 
-            var tile = BuildInfoTile(def.Name, ArtAssets.RelicIcon(def.Id), def.Description, unlocked, threshold,
-                () => LibraryInspectPopup.OpenItem(this, def.Name, ArtAssets.RelicIcon(def.Id), def.Description));
+            // The tier is named for the same reason the potion tile below
+            // names its rarity, plus one this screen is the only answer to: a
+            // relic's tier also says *where it comes from*, and Boss, Shop and
+            // Event are pools the player would otherwise have to infer from
+            // where relics happened to turn up.
+            string description = $"{def.Tier}. " + def.Description;
+            var tile = BuildInfoTile(def.Name, ArtAssets.RelicIcon(def.Id), description, unlocked, threshold,
+                () => LibraryInspectPopup.OpenItem(this, def.Name, ArtAssets.RelicIcon(def.Id), description));
             _relicsGrid.AddChild(tile);
             _relicTiles.Add(tile);
         }

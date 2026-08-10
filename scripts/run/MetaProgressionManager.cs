@@ -29,8 +29,8 @@ public partial class MetaProgressionManager : Node
 
     // The entire balance surface of the progression system. Everything NOT
     // listed here is available from the first run - "light gating": 74 of
-    // the 84 cards (including the strike/defend/bash starters) plus 23 of
-    // the 27 relics need no unlocking at all. Cards authored after this list
+    // the 84 cards (including the strike/defend/bash starters) plus 29 of
+    // the 33 relics need no unlocking at all. Cards authored after this list
     // was written are unlocked by default, which is the intended default:
     // gating is opt-in, one line at a time, and a balance decision.
     public static readonly UnlockEntry[] UnlockTrack =

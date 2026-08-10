@@ -44,6 +44,7 @@ public partial class RewardScreen : Control
     private VBoxContainer _rowList = null!;
     private Control _cardOverlay = null!;
     private Button _skipButton = null!;
+    private Control _tipLine = null!;
     private readonly Dictionary<RewardKind, Button> _rowButtons = new();
 
     // The rules line under a row's name, alongside the text it says when the
@@ -66,6 +67,7 @@ public partial class RewardScreen : Control
         cancel.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         cancel.Pressed += CloseCardOverlay;
 
+        BuildTipLine();
         BuildRewardList();
 
         // The first unclaimed row, not Skip: taking the rewards is the point of
@@ -133,6 +135,49 @@ public partial class RewardScreen : Control
         label.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
     }
 
+    /// The node name of the tip's text label, for the same reason RowName
+    /// exists: a test should not have to know how this screen lays itself out.
+    public const string TipLabelName = "TipLabel";
+
+    // One line of advice under the reward list, which is where the genre puts
+    // it and for a reason worth stating: this is the only screen in a run where
+    // the player is stationary, has already won, and is reading anyway. A tip
+    // on the map competes with a route decision; a tip here competes with
+    // nothing.
+    //
+    // It sits in the band between the framed list and the Skip button, which
+    // was empty at every row count - the list is centred in its own area, so
+    // even a four-row fight bottoms out about 100px above the button.
+    private void BuildTipLine()
+    {
+        _tipLine = GetNode<Control>("TipLine");
+        var tag = GetNode<Label>($"TipLine/TipTag");
+        var label = GetNode<Label>($"TipLine/{TipLabelName}");
+
+        tag.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
+        // N5, the same quiet the reward rows' own detail lines and the main
+        // menu's version stamp use. A tip is not the subject of this screen and
+        // must not out-read the rewards it sits under.
+        label.AddThemeColorOverride("font_color", PixelSpec.Ramp.N5);
+
+        // Advances with the run rather than with this screen's lifetime, so
+        // re-entering a reward (or reloading a save) shows the same tip and the
+        // *next* fight shows the next one. See TipDatabase.ForVisit for why
+        // this is a rotation off the run seed rather than an RngStreams draw.
+        var tip = TipDatabase.ForVisit(RunManager.Instance?.RunSeed ?? 0, RunState.VisitedNodeIds.Count);
+        if (tip is null)
+        {
+            // No tips authored, or a suite that skipped TipDatabase.LoadAll.
+            // Hide rather than throw: an absent tip is not worth a broken
+            // screen, and the data audit in EffectSmokeTest is what fails if
+            // the file is genuinely missing.
+            _tipLine.Visible = false;
+            return;
+        }
+
+        label.Text = ScreenKeyboardNav.ResolveKeyHints(tip.Text);
+    }
+
     // One framed column of rows, in RewardKind's declaration order. A reward
     // that was not offered has no row at all; a reward already claimed keeps
     // its row, greyed, so the screen still says what the fight paid.
@@ -156,7 +201,13 @@ public partial class RewardScreen : Control
 
         if (RewardContext.GuaranteedRelic is { } relic)
         {
-            AddRow(RewardKind.Relic, ArtAssets.RelicIcon(relic.Id), relic.Name, relic.Description);
+            // Same spelled-out treatment the potion row below documents, and
+            // the tier matters more here than it does there: an elite and a
+            // boss now pay from different pools, and "(Boss)" beside the name
+            // is the only place the player is told which one this came out of.
+            AddRow(RewardKind.Relic, ArtAssets.RelicIcon(relic.Id),
+                $"{relic.Name} ({relic.Tier})", relic.Description,
+                ChromeStyles.RelicTierColor(relic.Tier));
         }
 
         if (RewardContext.PotionDrop is { } potion)
@@ -297,6 +348,17 @@ public partial class RewardScreen : Control
         GetNode<Control>("RewardListArea").Modulate = listIsBehindTheOverlay
             ? new Color(1f, 1f, 1f, 0.3f)
             : Colors.White;
+
+        // Hidden rather than faded with the list. The tip sits directly under
+        // the fan's Back button, and a dimmed line of body text behind a modal
+        // reads as something the player failed to dismiss. It has nothing to do
+        // with choosing a card, so while that is the question it is not on
+        // screen at all. Guarded on Text because a run with no tip authored
+        // already hid it in BuildTipLine and must stay hidden.
+        if (_tipLine is not null && GetNode<Label>($"TipLine/{TipLabelName}").Text.Length > 0)
+        {
+            _tipLine.Visible = !listIsBehindTheOverlay;
+        }
 
         foreach (var (kind, button) in _rowButtons)
         {

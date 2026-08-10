@@ -181,6 +181,23 @@ public static class ChromeStyles
         _ => UiTheme.Palette.RarityCommon,
     };
 
+    // The same job for RelicTier, which cannot reuse the switch above: it has
+    // six members, and three of them name a *source* rather than a power
+    // level. The first three deliberately land on the identical three ramp
+    // entries a card rarity does - a tier colour has to mean one thing across
+    // the whole game - and the other three take a ramp of their own each, so
+    // "where did this come from" is a different question from "how strong is
+    // it" and looks like one.
+    public static Color RelicTierColor(RelicTier tier) => tier switch
+    {
+        RelicTier.Uncommon => UiTheme.Palette.RarityUncommon,
+        RelicTier.Rare => UiTheme.Palette.RarityRare,
+        RelicTier.Boss => UiTheme.Palette.TierBoss,
+        RelicTier.Shop => UiTheme.Palette.TierShop,
+        RelicTier.Event => UiTheme.Palette.TierEvent,
+        _ => UiTheme.Palette.RarityCommon,
+    };
+
     // Two independent color channels rather than one fighting a second
     // painted on top of it: fill reads CardType (Attack/Skill), border reads
     // Rarity (Common/Uncommon/Rare). Hover brightens whichever border color

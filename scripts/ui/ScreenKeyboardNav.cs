@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 namespace Hollowdeck.UI;
@@ -63,6 +65,30 @@ public static class ScreenKeyboardNav
         }
         return "";
     }
+
+    // KeyHint for authored prose: replaces every {hd_some_action} in `text`
+    // with the key currently bound to it. Written for the reward screen's tip
+    // line, where the alternative is a data file carrying "Press D" that no
+    // rebinding would ever reach.
+    //
+    // An unknown action resolves to its own token rather than to an empty
+    // string, so "Press {hd_typo}" stays visibly wrong on screen instead of
+    // silently becoming "Press ". The suite is what should catch it - see the
+    // tip audit in EffectSmokeTest - and this is the fallback for when it does
+    // not.
+    public static string ResolveKeyHints(string text) =>
+        System.Text.RegularExpressions.Regex.Replace(text, @"\{(hd_[a-z0-9_]+)\}", match =>
+        {
+            string hint = KeyHint(match.Groups[1].Value);
+            return hint.Length > 0 ? hint : match.Value;
+        });
+
+    /// Every hd_* action a piece of authored text asks for. The audit half of
+    /// ResolveKeyHints above: a test can ask what a string references without
+    /// re-deriving the pattern.
+    public static IEnumerable<string> KeyHintTokens(string text) =>
+        System.Text.RegularExpressions.Regex.Matches(text, @"\{(hd_[a-z0-9_]+)\}")
+            .Select(m => m.Groups[1].Value);
 
     // True only for the duration of a GrabFocusQuietly call - i.e. while *code*
     // is placing focus rather than the player moving it. Godot emits
