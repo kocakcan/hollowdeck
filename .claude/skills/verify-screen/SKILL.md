@@ -24,9 +24,10 @@ With no screen names it shoots all of them. Unknown names exit 1 and list the va
 ## Screens
 
 `combat` `combatfull` `combatintents` `combatsummon` `combattarget` `combatvocab` `combat2`
-`combat3` `reward` `rewardactclear` `shop` `shopfull` `shopremove` `map` `map2` `map3` `mapfull`
-`rest` `restupgrade` `treasure` `event` `eventpicker` `unlocks` `runend` `mainmenu` `settings`
-`deckpopup` `fade`
+`combat3` `reward` `rewardactclear` `rewardpotion` `rewardpotionfull` `rewardcards`
+`rewardbossrelic` `shop` `shopfull` `shopremove` `map` `map2` `map3` `mapfull` `rest`
+`restupgrade` `treasure` `event` `eventpicker` `unlocks` `library` `libraryrelics`
+`libraryinspectcard` `libraryinspectrelic` `runend` `mainmenu` `settings` `deckpopup` `fade`
 
 `map2`/`map3` and `combat2`/`combat3` are the later acts — each has its own backdrop tint, title,
 boss sprites and floor count, none of which act 1's shots show. `map3` is also the longest map (10
@@ -58,6 +59,14 @@ shapes plain `combat` can't roll and target-locks the last enemy, which is how a
 raises that panel. Reach for it after any `HoverTooltip` or `EnemyView` change — the panel used to
 place itself over the hand, which no assertion about its text could see. `rewardactclear` is the
 boss-reward variant of `reward`, carrying the longest line the title block ever holds.
+
+The reward screen is a list with a modal over it, so it takes four shots rather than one.
+`rewardpotion` is the list at its fullest (all four row kinds at once); `rewardpotionfull` is the
+same list against a full belt, which is the refused-row state no assertion can look at.
+`rewardcards` and `rewardbossrelic` are the modal's two views — the card fan and the boss relic
+picker — each reachable only by pressing its row, so both use the `AfterReady` hook. Shoot
+`rewardbossrelic` for anything touching that overlay: the three tiles share an 800px band, and a
+relic name is the one thing in there that can grow.
 
 `deckpopup` opens the pile popup over the map with a 13-card deck, since the popup is spawned on
 demand by `DeckViewButtons` rather than being a screen of its own. `restupgrade` is the same idea

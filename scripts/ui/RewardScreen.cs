@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
@@ -34,6 +35,23 @@ public partial class RewardScreen : Control
     // regardless of how much text it carries.
     private const float RowHeight = 72f;
 
+    // A relic tile's *content* width, not the tile's. ScreenChrome.FocusableFrame
+    // adds Md of margin on each side, so a tile measures 224 + 2x12 = 248 and
+    // three of them plus two Md gaps come to 768 of the overlay's 800px band.
+    // The real headroom is 32px: a fourth tile does not fit, and neither does
+    // raising FocusableFrame's padding by more than 5.
+    private const float RelicTileWidth = 224f;
+
+    /// The overlay and the two views inside it, named here for the same reason
+    /// TipLabelName and RowName are: a suite or a screenshot fixture should
+    /// address this screen by what a thing *is* rather than by where it
+    /// currently sits in the tree.
+    public const string OverlayName = "ChoiceOverlay";
+    public const string CardChoicesPath = "ChoiceOverlay/CardChoicesArea";
+    public const string RelicChoicesPath = "ChoiceOverlay/RelicChoicesArea";
+    public const string OverlayCancelPath = "ChoiceOverlay/ChoiceCancelButton";
+    public const string OverlayTitlePath = "ChoiceOverlay/ChoiceTitle";
+
     // Kept rather than discarded, because claiming a row sets
     // FocusModeEnum.None on the button that was just pressed - which *releases*
     // the focus it holds (CLAUDE.md's measured note, pinned by
@@ -42,10 +60,16 @@ public partial class RewardScreen : Control
     private ScreenKeyboardNavListener? _keyboardNav;
 
     private VBoxContainer _rowList = null!;
-    private Control _cardOverlay = null!;
+    private Control _overlay = null!;
     private Button _skipButton = null!;
     private Control _tipLine = null!;
     private readonly Dictionary<RewardKind, Button> _rowButtons = new();
+
+    // The relic picker's tiles, in the order they are offered. Held rather than
+    // re-found because ActivatablePanel is a script class and FindChildren's
+    // type filter is not a reliable way to ask for one - and FirstClaimableControl
+    // needs the answer on every Regrab, not only when the picker is built.
+    private readonly List<Control> _relicTiles = new();
 
     // The rules line under a row's name, alongside the text it says when the
     // row is claimable - so a row that has to explain a refusal can put the
@@ -58,14 +82,14 @@ public partial class RewardScreen : Control
         DeckViewButtons.Attach(this);
         BuildActClearedBanner();
 
-        _cardOverlay = GetNode<Control>("CardOverlay");
+        _overlay = GetNode<Control>(OverlayName);
         _skipButton = GetNode<Button>("SkipButton");
         _skipButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         _skipButton.Pressed += OnSkipPressed;
 
-        var cancel = GetNode<Button>("CardOverlay/CardCancelButton");
+        var cancel = GetNode<Button>(OverlayCancelPath);
         cancel.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
-        cancel.Pressed += CloseCardOverlay;
+        cancel.Pressed += CloseOverlay;
 
         BuildTipLine();
         BuildRewardList();
@@ -82,22 +106,33 @@ public partial class RewardScreen : Control
     // answer to "what does this screen focus" at any moment.
     private Control? FirstClaimableControl()
     {
-        if (_cardOverlay.Visible)
-        {
-            return GetNode<Control>("CardOverlay/CardChoicesArea").GetChildren()
-                .OfType<CardView>().FirstOrDefault();
-        }
+        if (_overlay.Visible) return FirstOverlayChoice();
 
         return _rowList.GetChildren().OfType<Button>().FirstOrDefault(b => !b.Disabled)
             ?? (Control)_skipButton;
     }
 
-    // Escape backs out of the card overlay rather than leaving the screen while
-    // it is open - the overlay is a second view, and cancelling out of a view
-    // that has its own Back button should do what that button does.
+    // The overlay hosts two views - the card fan and the boss relic picker - and
+    // exactly one is visible at a time. Asking the *area* rather than tracking
+    // which view was opened is what keeps that a fact about the tree rather than
+    // a flag that can disagree with it.
+    private Control? FirstOverlayChoice()
+    {
+        if (GetNode<Control>(CardChoicesPath).Visible)
+        {
+            return GetNode<Control>(CardChoicesPath).GetChildren()
+                .OfType<CardView>().FirstOrDefault();
+        }
+
+        return _relicTiles.Count > 0 ? _relicTiles[0] : null;
+    }
+
+    // Escape backs out of the overlay rather than leaving the screen while one
+    // is open - the overlay is a second view, and cancelling out of a view that
+    // has its own Back button should do what that button does.
     private void OnCancelPressed()
     {
-        if (_cardOverlay.Visible) CloseCardOverlay();
+        if (_overlay.Visible) CloseOverlay();
         else OnSkipPressed();
     }
 
@@ -199,15 +234,31 @@ public partial class RewardScreen : Control
                 $"{RewardContext.GoldAwarded} Gold", "", UiTheme.Palette.AccentGoldBright);
         }
 
-        if (RewardContext.GuaranteedRelic is { } relic)
+        // One relic is an elite's, and the row *is* that relic - it names it and
+        // hands it over on press. Three is a boss's, and no single relic can be
+        // the row, so it asks the question and opens a picker instead. The count
+        // is the only thing that decides which, so there is no state here that
+        // can disagree with what CombatScreen offered.
+        if (RewardContext.RelicChoices.Count == 1)
         {
             // Same spelled-out treatment the potion row below documents, and
             // the tier matters more here than it does there: an elite and a
             // boss now pay from different pools, and "(Boss)" beside the name
             // is the only place the player is told which one this came out of.
+            var relic = RewardContext.RelicChoices[0];
             AddRow(RewardKind.Relic, ArtAssets.RelicIcon(relic.Id),
                 $"{relic.Name} ({relic.Tier})", relic.Description,
                 ChromeStyles.RelicTierColor(relic.Tier));
+        }
+        else if (RewardContext.RelicChoices.Count > 1)
+        {
+            // Iconless for the same reason the card row below is: any one of the
+            // three relics' own icons would say "this relic" on a row that is
+            // about choosing between them. Tinted with the tier they are all
+            // drawn from, which is the one thing true of the whole offer.
+            AddRow(RewardKind.Relic, null, "Choose a boss relic",
+                $"{RewardContext.RelicChoices.Count} offered - take one",
+                ChromeStyles.RelicTierColor(RelicTier.Boss));
         }
 
         if (RewardContext.PotionDrop is { } potion)
@@ -329,13 +380,20 @@ public partial class RewardScreen : Control
     // node the player could not walk to.
     private void RefreshRows()
     {
-        // While the card fan is open it is a modal: the dim swallows the mouse,
+        // While the overlay is open it is a modal: the dim swallows the mouse,
         // and the list has to leave the *focus* chain too or Tab walks straight
         // back out behind it onto rows the player cannot see. Not Disabled -
         // they are not illegal choices, just not this view's - so they keep
         // their colour under the dim rather than greying out for a reason that
         // will be gone in a moment.
-        bool listIsBehindTheOverlay = _cardOverlay.Visible;
+        //
+        // One overlay node hosting both views rather than two sibling overlays,
+        // which is why this is one question. The card fan and the boss relic
+        // picker have identical answers to every line below it, and a second
+        // Control would have made each of them "or the other one too" - five
+        // places to widen and five places to forget, which is exactly the shape
+        // CombatManager.DecayAtTurnEnd exists to refuse.
+        bool listIsBehindTheOverlay = _overlay.Visible;
 
         // The scrim alone is not enough to push the list back. It is the same
         // 0.75 black PileViewPopup and LibraryInspectPopup use, and it works
@@ -417,8 +475,19 @@ public partial class RewardScreen : Control
                 break;
 
             case RewardKind.Relic:
-                if (RewardContext.GuaranteedRelic is not { } relic) return;
-                RunState.Relics.Add(new RelicInstance(relic));
+                if (RewardContext.RelicChoices.Count == 0) return;
+
+                // A boss offered three, so this row asks rather than pays - the
+                // claim lands in OnRelicChosen, the way the card row's lands in
+                // OnCardChosen. An elite offered one and there is nothing to
+                // ask, so it still resolves on the spot.
+                if (RewardContext.RelicChoices.Count > 1)
+                {
+                    OpenRelicOverlay();
+                    return;
+                }
+
+                RunState.Relics.Add(new RelicInstance(RewardContext.RelicChoices[0]));
                 break;
 
             case RewardKind.Potion:
@@ -460,10 +529,37 @@ public partial class RewardScreen : Control
         _keyboardNav?.Regrab();
     }
 
-    private void OpenCardOverlay()
+    private void OpenCardOverlay() => ShowOverlay(cards: true, title: "", BuildCardChoices);
+
+    // The card fan needs no caption - three cards over a dim can only be one
+    // question. Three relic tiles are not so obvious, and the row that did ask
+    // ("Choose a boss relic") is sitting behind the scrim at 0.3 by the time
+    // they appear, which is legible as context and not as a prompt.
+    private void OpenRelicOverlay() =>
+        ShowOverlay(cards: false, title: "Choose a Boss Relic", BuildRelicChoices);
+
+    // Both views raise the same overlay, so the dim, the modal focus rules and
+    // the list fade are written once. The only per-view state is which area is
+    // visible, and that is set here rather than tracked in a field.
+    //
+    // `build` runs *after* the overlay is raised, not before, because
+    // BuildCardChoices lays the fan out against area.Size.X - it is a hand
+    // positioned Control rather than a container, so it reads a size instead of
+    // being given one. Building first happens to work today, since the area's
+    // anchors resolve whether or not its parent is drawn; it is ordered this way
+    // so that stops being something to know.
+    private void ShowOverlay(bool cards, string title, Action build)
     {
-        _cardOverlay.Visible = true;
-        BuildCardChoices();
+        GetNode<Control>(CardChoicesPath).Visible = cards;
+        GetNode<Control>(RelicChoicesPath).Visible = !cards;
+
+        var titleLabel = GetNode<Label>(OverlayTitlePath);
+        titleLabel.Text = title;
+        titleLabel.Visible = title.Length > 0;
+        titleLabel.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGoldBright);
+
+        _overlay.Visible = true;
+        build();
         RefreshRows();
 
         // Deliberately *not* Regrab: RegrabNow leaves an existing focus owner
@@ -471,33 +567,38 @@ public partial class RewardScreen : Control
         // it does nothing here - the row that was just pressed still holds
         // focus, and the ring would sit on the list behind the dim. Opening a
         // modal is the one case where focus has to be taken rather than
-        // rescued. Deferred because the fan's Controls have not been through a
+        // rescued. Deferred because the view's Controls have not been through a
         // layout pass yet on the frame they are added.
-        CallDeferred(MethodName.FocusFirstCard);
+        CallDeferred(MethodName.FocusFirstChoice);
     }
 
-    private void FocusFirstCard()
+    private void FocusFirstChoice()
     {
-        var first = GetNode<Control>("CardOverlay/CardChoicesArea").GetChildren()
-            .OfType<CardView>().FirstOrDefault();
-        if (first is not null) ScreenKeyboardNav.GrabFocusQuietly(first);
+        if (FirstOverlayChoice() is { } first) ScreenKeyboardNav.GrabFocusQuietly(first);
     }
 
-    private void CloseCardOverlay()
+    private void CloseOverlay()
     {
-        _cardOverlay.Visible = false;
-        ClearCardChoices();
+        _overlay.Visible = false;
+        ClearChoices();
         RefreshRows();
 
-        // Regrab is right on the way *out*: the CardView that held focus has
-        // just been freed, so there is no owner left for RegrabNow to defer to
-        // and it falls through to FirstClaimableControl.
+        // Regrab is right on the way *out*: the control that held focus has just
+        // been freed, so there is no owner left for RegrabNow to defer to and it
+        // falls through to FirstClaimableControl.
         _keyboardNav?.Regrab();
     }
 
-    private void ClearCardChoices()
+    // Both areas, unconditionally. Clearing only the view that happened to be
+    // open would leave the other one's Controls alive and focusable under a
+    // hidden parent, which is the kind of thing that works until the day both
+    // views get opened in one visit to this screen - which a boss reward, with
+    // a relic choice *and* a card choice, is.
+    private void ClearChoices()
     {
-        foreach (var child in GetNode<Control>("CardOverlay/CardChoicesArea").GetChildren()) child.QueueFree();
+        foreach (var child in GetNode<Control>(CardChoicesPath).GetChildren()) child.QueueFree();
+        foreach (var child in GetNode<Control>(RelicChoicesPath).GetChildren()) child.QueueFree();
+        _relicTiles.Clear();
     }
 
     // Real CardView instances (the same frame combat hands/deck-view use)
@@ -507,7 +608,7 @@ public partial class RewardScreen : Control
     // through Phase 3's real-combat verification.
     private void BuildCardChoices()
     {
-        var area = GetNode<Control>("CardOverlay/CardChoicesArea");
+        var area = GetNode<Control>(CardChoicesPath);
         foreach (var child in area.GetChildren()) child.QueueFree();
 
         var cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
@@ -563,11 +664,112 @@ public partial class RewardScreen : Control
         if (RewardContext.Claimed.Contains(RewardKind.Card)) return;
 
         RunState.Deck.Add(card.Definition);
-        _cardOverlay.Visible = false;
-        ClearCardChoices();
+        _overlay.Visible = false;
+        ClearChoices();
 
         AudioManager.Instance?.PlaySfx("reward_pickup");
         MarkClaimed(RewardKind.Card);
+    }
+
+    // Three relics side by side, each in the same focusable frame LibraryScreen
+    // renders its collection in. Tiles rather than a second list of rows: the
+    // question here is "which of these", and comparing three things is what a
+    // row of tiles is for - a list of rows inside a modal that sits over a list
+    // of rows reads as the screen having lost its place.
+    //
+    // No idle sway. The card fan's exists because a fan of cards is the screen's
+    // one flourish; a relic tile is a specification, and a drifting one is
+    // harder to read against the two beside it.
+    private void BuildRelicChoices()
+    {
+        var area = GetNode<Control>(RelicChoicesPath);
+        foreach (var child in area.GetChildren()) child.QueueFree();
+        _relicTiles.Clear();
+
+        var grid = new GridContainer { Columns = RewardContext.RelicChoices.Count };
+        grid.AddThemeConstantOverride("h_separation", (int)UiTheme.Spacing.Md);
+        grid.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+
+        // Centred in the band the way the reward list is centred in its own, so
+        // two offers and three offers sit in the same place.
+        var centre = new CenterContainer();
+        centre.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        centre.AddChild(grid);
+        area.AddChild(centre);
+
+        foreach (var relic in RewardContext.RelicChoices)
+        {
+            var chosen = relic; // Captured per iteration, not per loop.
+
+            var column = new VBoxContainer { CustomMinimumSize = new Vector2(RelicTileWidth, 0) };
+            column.AddThemeConstantOverride("separation", (int)UiTheme.Spacing.Xs);
+
+            if (ArtAssets.RelicIcon(relic.Id) is { } icon)
+            {
+                column.AddChild(ScreenChrome.ArtPlinth(icon, PixelSpec.CardArtScale));
+            }
+
+            // Autowrap is the load-bearing line here, and it is load-bearing for
+            // a reason that is not about wrapping. ScreenChrome.Heading returns
+            // an unwrapped Label, whose minimum width is its whole string - and
+            // a child wider than its VBoxContainer widens the container. So a
+            // long relic name does not overflow its tile, it *widens* that tile,
+            // and three tiles sharing an 800px band then hang off both ends for
+            // the CenterContainer to clip. A wrapping Label has a small minimum
+            // width instead, so the column keeps the 224 it was given.
+            //
+            // The longest Boss name today is 14 characters against about 17 that
+            // fit on one line, which is exactly the "constant that fits the best
+            // case" shape this project has shipped three times (ROADMAP Phase
+            // 11). Measured, with this line gone: a 38-character name lands a
+            // 269px tile beside two 248s.
+            var name = ScreenChrome.Heading(relic.Name, UiTheme.Fonts.Body);
+            name.AddThemeColorOverride("font_color", ChromeStyles.RelicTierColor(relic.Tier));
+            name.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            column.AddChild(name);
+            column.AddChild(ScreenChrome.Body(relic.Description, (int)RelicTileWidth));
+
+            var tile = ScreenChrome.FocusableFrame(column);
+            tile.Activated += () => OnRelicChosen(chosen);
+            grid.AddChild(tile);
+            _relicTiles.Add(tile);
+
+            // A rung down before wrapping, the EnemyView ladder one screen over.
+            // This buys legibility, not layout - the autowrap above already
+            // holds the band, and deleting this line breaks no assertion about
+            // width. What it changes is how many lines a long name costs: at
+            // Body the 38-character case wraps to three, and GridContainer
+            // levels every tile to the tallest, so one long name makes all three
+            // taller. Asserted through the applied size in ScreenSmokeTest,
+            // because that is the only thing about it anything can observe.
+            //
+            // Applied after the tile is in the tree, since TextFit measures
+            // through the label's own theme and a detached Label has none. Wrap
+            // is the floor rather than TrimChar: a tile has vertical room where
+            // an enemy caption in a fixed row does not.
+            TextFit.Apply(name, RelicTileWidth, UiTheme.Fonts.Body, UiTheme.Fonts.Small);
+        }
+
+        // The same index-based wiring LibraryScreen's relic grid uses, and for
+        // the same reason: Godot's directional focus search is a geometry test
+        // over everything focusable on screen, which behind a modal includes the
+        // rows underneath it.
+        CardPicker.WireGridNavigation(grid, _relicTiles, GetNode<Button>(OverlayCancelPath));
+    }
+
+    // The mirror of OnCardChosen, guarded the same way and for the same reason:
+    // the claim is a fact about the run, so a second activation - a stray Enter
+    // on a tile that has not been freed yet - cannot pay a second relic.
+    private void OnRelicChosen(RelicDefinition relic)
+    {
+        if (RewardContext.Claimed.Contains(RewardKind.Relic)) return;
+
+        RunState.Relics.Add(new RelicInstance(relic));
+        _overlay.Visible = false;
+        ClearChoices();
+
+        AudioManager.Instance?.PlaySfx("reward_pickup");
+        MarkClaimed(RewardKind.Relic);
     }
 
     private void OnSkipPressed() => Advance();

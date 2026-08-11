@@ -37,11 +37,24 @@ public partial class ScreenSmokeTest : Node
         // continuation started running after that detachment.
         var tree = GetTree();
 
+        // One guard over the whole sequence rather than one per test that
+        // happens to save. Claiming any reward row calls MarkClaimed, which
+        // re-saves to user://run_save.json by design - so three of the tests
+        // below overwrite the developer's real in-progress run and every one of
+        // them passes while doing it. TestRestScreen has carried its own guard
+        // for a while and could not fix this: it runs last, so it snapshots the
+        // already-clobbered file and faithfully restores the damage. Hoisted
+        // here so a test added later inherits the protection instead of having
+        // to remember it.
+        using var saveGuard = RunSaveGuard.Protect();
+
         await TestKeywordTooltipOnANonInteractiveCard();
         await TestKeywordTooltipFollowsHoverAndFocusIndependently();
         await TestRewardScreenOpensQuietly();
         TestRewardScreenActClearedBanner();
         TestRewardScreen();
+        TestRewardBossRelicChoice();
+        await TestRewardBossRelicTilesStayInTheirBand();
         TestRewardPotionDrop();
         await TestRewardScreenTip();
         TestTreasureScreen();
@@ -232,7 +245,7 @@ public partial class ScreenSmokeTest : Node
         await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
 
-        var cards = screen.GetNode<Control>("CardOverlay/CardChoicesArea")
+        var cards = screen.GetNode<Control>(RewardScreen.CardChoicesPath)
             .GetChildren().OfType<CardView>().ToList();
         var focused = GetViewport().GuiGetFocusOwner();
 
@@ -304,7 +317,7 @@ public partial class ScreenSmokeTest : Node
         RunState.Potions = new List<PotionInstance>();
         RewardContext.ActCleared = null;
         RewardContext.GoldAwarded = 25;
-        RewardContext.GuaranteedRelic = RelicDatabase.Get("anchor_stone");
+        RewardContext.RelicChoices = new List<RelicDefinition> { RelicDatabase.Get("anchor_stone") };
         RewardContext.PotionDrop = null;
         RewardContext.Claimed.Clear();
         RewardContext.CardChoices = new List<CardDefinition>
@@ -363,11 +376,11 @@ public partial class ScreenSmokeTest : Node
         // picking there closes it and returns to the list. A pick that left the
         // screen would forfeit every row the player had not reached yet, which
         // is the whole reason this screen is a list.
-        var overlay = screen.GetNode<Control>("CardOverlay");
+        var overlay = screen.GetNode<Control>(RewardScreen.OverlayName);
         Check("reward_card_overlay_starts_closed", !overlay.Visible, "the fan is open before the row was pressed");
 
         Row(screen, RewardKind.Card)!.EmitSignal(BaseButton.SignalName.Pressed);
-        var cardViews = screen.GetNode<Control>("CardOverlay/CardChoicesArea")
+        var cardViews = screen.GetNode<Control>(RewardScreen.CardChoicesPath)
             .GetChildren().OfType<CardView>().ToList();
         Check("reward_card_row_opens_the_fan", overlay.Visible && cardViews.Count == 3,
             $"visible={overlay.Visible} cards={cardViews.Count}");
@@ -395,6 +408,191 @@ public partial class ScreenSmokeTest : Node
         screen.QueueFree();
     }
 
+    // A boss offers three relics and the row asks rather than pays. Everything
+    // the one-relic row above proves is a different code path from here: that
+    // row grants on press, this one opens a second view and the claim lands in
+    // it, so "granted exactly once" has to be established again on this side.
+    private void TestRewardBossRelicChoice()
+    {
+        var offered = new List<RelicDefinition>
+        {
+            RelicDatabase.Get("clockwork_gear"),
+            RelicDatabase.Get("reapers_tally"),
+            RelicDatabase.Get("hollow_crown"),
+        };
+
+        RunState.Gold = 0;
+        RunState.Relics = new List<RelicInstance>();
+        RunState.Potions = new List<PotionInstance>();
+        RewardContext.ActCleared = null;
+        RewardContext.GoldAwarded = 0;
+        RewardContext.PotionDrop = null;
+        RewardContext.RelicChoices = offered;
+        RewardContext.Claimed.Clear();
+        RewardContext.CardChoices = new List<CardDefinition>();
+
+        var screen = LoadScene("res://scenes/RewardScreen.tscn");
+        var overlay = screen.GetNode<Control>(RewardScreen.OverlayName);
+        var relicArea = screen.GetNode<Control>(RewardScreen.RelicChoicesPath);
+        var tipLine = screen.GetNode<Control>("TipLine");
+
+        // The row cannot be any one of the three, so it has to say what it is.
+        // A row still naming a relic would mean the count branch did not fire
+        // and the first press would hand that relic over.
+        var rowLabels = Row(screen, RewardKind.Relic)!
+            .FindChildren("*", "Label", recursive: true, owned: false).OfType<Label>().ToList();
+        Check("reward_boss_relic_row_asks_rather_than_names_one",
+            rowLabels.Any(l => l.Text.Contains("Choose"))
+            && !rowLabels.Any(l => offered.Any(r => l.Text.Contains(r.Name))),
+            string.Join(" | ", rowLabels.Select(l => l.Text)));
+
+        Check("reward_boss_relic_overlay_starts_closed", !overlay.Visible,
+            "the picker is open before the row was pressed");
+
+        Row(screen, RewardKind.Relic)!.EmitSignal(BaseButton.SignalName.Pressed);
+
+        var tiles = relicArea.FindChildren("*", recursive: true, owned: false)
+            .OfType<ActivatablePanel>().ToList();
+        Check("reward_boss_relic_row_opens_the_picker", overlay.Visible && tiles.Count == 3,
+            $"visible={overlay.Visible} tiles={tiles.Count}");
+        Check("reward_boss_relic_row_grants_nothing_on_press", RunState.Relics.Count == 0,
+            $"relics={RunState.Relics.Count} - opening the picker paid out");
+        Check("reward_boss_relic_picker_hides_the_card_fan",
+            !screen.GetNode<Control>(RewardScreen.CardChoicesPath).Visible,
+            "both overlay views are visible at once");
+
+        // Same as the card fan: the tip sits directly under the Back button, and
+        // a dimmed line of body text behind a modal reads as something the
+        // player failed to dismiss.
+        Check("reward_boss_relic_picker_hides_the_tip", !tipLine.Visible,
+            "the tip is still on screen behind the relic picker");
+
+        var tileLabels = tiles.SelectMany(t => t.FindChildren("*", "Label", recursive: true, owned: false)
+            .OfType<Label>()).Select(l => l.Text).ToList();
+        Check("reward_boss_relic_tiles_name_every_offer",
+            offered.All(r => tileLabels.Any(t => t.Contains(r.Name))),
+            string.Join(" | ", tileLabels));
+
+        // Activating a tile is the claim. ActivatablePanel resolves a left
+        // *release*, the same synthetic event the card pick above uses.
+        tiles[1]._GuiInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+
+        Check("reward_boss_relic_pick_grants_the_one_chosen",
+            RunState.Relics.Count == 1 && RunState.Relics[0].Definition.Id == offered[1].Id,
+            $"relics=[{string.Join(",", RunState.Relics.Select(r => r.Definition.Id))}], expected {offered[1].Id}");
+        Check("reward_boss_relic_pick_closes_the_picker", !overlay.Visible,
+            "the picker stayed open after a pick");
+        // WATCHDOG NOTE: fails as a TIMEOUT rather than a FAIL, exactly like
+        // reward_card_pick_does_not_leave_the_screen above - a wrongful
+        // Advance() replaces this test's own scene.
+        Check("reward_boss_relic_pick_does_not_leave_the_screen", screen.IsInsideTree(),
+            "picking a relic advanced the screen - every unclaimed row would be forfeited");
+        Check("reward_boss_relic_row_is_claimed_after_the_pick",
+            Row(screen, RewardKind.Relic) is { Disabled: true, FocusMode: Control.FocusModeEnum.None },
+            $"disabled={Row(screen, RewardKind.Relic)?.Disabled}");
+
+        // Re-opening and picking again pays nothing. The guard is
+        // RewardContext.Claimed, not the freed tile, so this holds even though
+        // the tiles the player is clicking have been queued for deletion.
+        Row(screen, RewardKind.Relic)!.EmitSignal(BaseButton.SignalName.Pressed);
+        tiles[0]._GuiInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+        Check("reward_boss_relic_pick_is_not_repeatable", RunState.Relics.Count == 1,
+            $"relics={RunState.Relics.Count} after a second pick");
+
+        screen.QueueFree();
+    }
+
+    // Three tiles share an 800px band, and a tile is as wide as its widest
+    // child. ScreenChrome.Heading does not wrap, so a relic name wider than the
+    // tile does not overflow that tile - it widens the column, which widens the
+    // grid, which the CenterContainer then hangs off both ends of the band.
+    //
+    // Driven with a name longer than anything authored rather than with the
+    // longest Boss relic in the content, because the content one passes today
+    // with about three characters to spare and would go on passing right up
+    // until the row that broke it. This is the "CROWN REA" failure with the
+    // tiles standing in for the enemy row (ROADMAP Phase 11).
+    private async System.Threading.Tasks.Task TestRewardBossRelicTilesStayInTheirBand()
+    {
+        var stretched = new RelicDefinition
+        {
+            Id = "smoke_test_long_name",
+            Name = "The Sundered Reliquary of Endless Night",
+            Description = "Whenever a hit you deal kills an enemy, gain 1 Strength for the rest of the fight.",
+            Tier = RelicTier.Boss,
+        };
+
+        RunState.Relics = new List<RelicInstance>();
+        RewardContext.ActCleared = null;
+        RewardContext.GoldAwarded = 0;
+        RewardContext.PotionDrop = null;
+        RewardContext.CardChoices = new List<CardDefinition>();
+        RewardContext.Claimed.Clear();
+        RewardContext.RelicChoices = new List<RelicDefinition>
+        {
+            stretched, RelicDatabase.Get("clockwork_gear"), RelicDatabase.Get("hollow_crown"),
+        };
+
+        var screen = LoadScene("res://scenes/RewardScreen.tscn");
+        // The band is anchored, so the screen has to be at the design size for
+        // RelicChoicesArea to have its real width.
+        ((Control)screen).Size = new Vector2(1152, 648);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Row(screen, RewardKind.Relic)!.EmitSignal(BaseButton.SignalName.Pressed);
+
+        // Containers sort deferred, so every rect below is zero until a frame
+        // has run. Without these waits this whole test passes on tiles of width
+        // 0 - which is how the first version of it passed against the very bug
+        // it was written for.
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        var area = screen.GetNode<Control>(RewardScreen.RelicChoicesPath);
+        var tiles = area.FindChildren("*", recursive: true, owned: false)
+            .OfType<ActivatablePanel>().ToList();
+
+        float widest = tiles.Count == 0 ? 0f : tiles.Max(t => t.GetGlobalRect().Size.X);
+        float total = tiles.Sum(t => t.GetGlobalRect().Size.X);
+        // The `widest > 0` term is the guard on the guard: a layout that never
+        // ran reports every tile at zero and satisfies every inequality here.
+        Check("reward_boss_relic_tiles_fit_their_band",
+            tiles.Count == 3 && widest > 0f && total <= area.Size.X,
+            $"{tiles.Count} tiles totalling {total}px in a {area.Size.X}px band (widest {widest})");
+
+        // Equal widths, which is the half TextFit does *not* buy and the half
+        // that regresses silently. Measured: with the ladder alone the long
+        // name lands a 269px tile beside two 248s - inside the band, so nothing
+        // above this fails, and a visibly ragged row. The name label's own
+        // width bound is what makes all three the same.
+        Check("reward_boss_relic_tiles_are_the_same_width",
+            widest > 0f && tiles.All(t => Mathf.Abs(t.GetGlobalRect().Size.X - widest) < 0.5f),
+            string.Join("/", tiles.Select(t => $"{t.GetGlobalRect().Size.X:F0}")));
+
+        // TextFit's own contribution, which is invisible to every width check
+        // above it: the autowrap holds the band whatever size the name renders
+        // at, so without this the ladder could be deleted with a green sweep.
+        // The stretched name steps down a rung; the two authored ones do not.
+        var names = tiles
+            .Select(t => t.FindChildren("*", "Label", recursive: true, owned: false).OfType<Label>().First())
+            .ToList();
+        Check("reward_boss_relic_long_name_steps_down_a_font_rung",
+            names.Count == 3
+            && names[0].GetThemeFontSize("font_size") == UiTheme.Fonts.Small
+            && names.Skip(1).All(l => l.GetThemeFontSize("font_size") == UiTheme.Fonts.Body),
+            string.Join(" | ", names.Select(l => $"{l.Text.Split('\n')[0]}={l.GetThemeFontSize("font_size")}")));
+
+        // And every tile stays inside it, which the sum alone does not prove:
+        // a CenterContainer holding an oversized grid hangs off both ends.
+        var band = area.GetGlobalRect();
+        Check("reward_boss_relic_tiles_are_not_clipped_by_the_band",
+            widest > 0f && tiles.All(t => t.GetGlobalRect().Position.X >= band.Position.X - 0.5f
+                && t.GetGlobalRect().End.X <= band.End.X + 0.5f),
+            string.Join(" | ", tiles.Select(t => $"{t.GetGlobalRect().Position.X:F0}..{t.GetGlobalRect().End.X:F0}"))
+                + $" against {band.Position.X:F0}..{band.End.X:F0}");
+
+        screen.QueueFree();
+    }
+
     // The potion drop's own row, and the belt cap it has to respect.
     private void TestRewardPotionDrop()
     {
@@ -403,7 +601,7 @@ public partial class ScreenSmokeTest : Node
         RunState.Potions = new List<PotionInstance>();
         RewardContext.ActCleared = null;
         RewardContext.GoldAwarded = 0;
-        RewardContext.GuaranteedRelic = null;
+        RewardContext.RelicChoices = new List<RelicDefinition>();
         RewardContext.CardChoices = new List<CardDefinition>();
         RewardContext.PotionDrop = PotionDatabase.Get("fire_potion");
         RewardContext.Claimed.Clear();
@@ -483,7 +681,7 @@ public partial class ScreenSmokeTest : Node
     private async System.Threading.Tasks.Task TestRewardScreenTip()
     {
         RewardContext.ActCleared = null;
-        RewardContext.GuaranteedRelic = null;
+        RewardContext.RelicChoices = new List<RelicDefinition>();
         RewardContext.PotionDrop = null;
         RewardContext.GoldAwarded = 25;
         RewardContext.Claimed.Clear();

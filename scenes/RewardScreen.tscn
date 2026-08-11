@@ -91,7 +91,7 @@ offset_bottom = -24.0
 theme_override_font_sizes/font_size = 16
 text = "Skip Rewards"
 
-[node name="CardOverlay" type="Control" parent="."]
+[node name="ChoiceOverlay" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -100,7 +100,7 @@ grow_horizontal = 2
 grow_vertical = 2
 visible = false
 
-[node name="Dim" type="ColorRect" parent="CardOverlay"]
+[node name="Dim" type="ColorRect" parent="ChoiceOverlay"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -109,7 +109,24 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.75)
 
-[node name="CardChoicesArea" type="Control" parent="CardOverlay"]
+[node name="ChoiceTitle" type="Label" parent="ChoiceOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.0
+anchor_right = 0.5
+anchor_bottom = 0.0
+offset_left = -300.0
+offset_top = 96.0
+offset_right = 300.0
+offset_bottom = 128.0
+theme_type_variation = &"CombatDisplayLabel"
+theme_override_font_sizes/font_size = 24
+horizontal_alignment = 1
+visible = false
+text = ""
+
+[node name="CardChoicesArea" type="Control" parent="ChoiceOverlay"]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -122,7 +139,21 @@ offset_right = 400.0
 offset_bottom = 134.0
 mouse_filter = 2
 
-[node name="CardCancelButton" type="Button" parent="CardOverlay"]
+[node name="RelicChoicesArea" type="Control" parent="ChoiceOverlay"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -400.0
+offset_top = -174.0
+offset_right = 400.0
+offset_bottom = 134.0
+mouse_filter = 2
+visible = false
+
+[node name="ChoiceCancelButton" type="Button" parent="ChoiceOverlay"]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5

@@ -252,7 +252,7 @@ public partial class LibraryScreen : Control
         column.AddChild(ScreenChrome.Body(description, TileWidth));
         if (threshold is { } t) column.AddChild(LockCaption(t, TileWidth));
 
-        var tile = BuildFocusableFrame(column);
+        var tile = ScreenChrome.FocusableFrame(column);
         tile.Activated += onActivated;
         if (!unlocked) tile.Modulate = ChromeStyles.LockedTint;
         return tile;
@@ -263,42 +263,6 @@ public partial class LibraryScreen : Control
         var label = ScreenChrome.Body($"Locked - {threshold:N0} progress", width);
         label.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGold);
         return label;
-    }
-
-    // ActivatablePanel (a PanelContainer), not Button: a Button doesn't
-    // propagate a child's minimum size upward (it's not a Container), so
-    // arbitrary icon/heading/description content would get clipped to the
-    // button's own near-zero natural size. Focus/hover visuals are done by
-    // hand instead - the same idiom ChromeStyles.ApplyFocusableSliderStyle
-    // uses for HSlider, which has the identical problem (no built-in focus
-    // stylebox on a non-Button) - and click/ui_accept activation comes from
-    // ActivatablePanel for the same reason CardView hand-rolls its own.
-    private static ActivatablePanel BuildFocusableFrame(Control content, float padding = UiTheme.Spacing.Md)
-    {
-        StyleBoxFlat NormalStyle()
-        {
-            var style = ChromeStyles.PanelStyle();
-            style.ContentMarginLeft = padding;
-            style.ContentMarginRight = padding;
-            style.ContentMarginTop = padding;
-            style.ContentMarginBottom = padding;
-            return style;
-        }
-
-        var panel = new ActivatablePanel { FocusMode = FocusModeEnum.All };
-        panel.AddThemeStyleboxOverride("panel", NormalStyle());
-        panel.AddChild(content);
-
-        panel.FocusEntered += () =>
-        {
-            var focused = NormalStyle();
-            focused.BorderColor = UiTheme.Palette.FocusRing;
-            focused.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
-            panel.AddThemeStyleboxOverride("panel", focused);
-        };
-        panel.FocusExited += () => panel.AddThemeStyleboxOverride("panel", NormalStyle());
-
-        return panel;
     }
 
     private static void ClearGrid(GridContainer grid)

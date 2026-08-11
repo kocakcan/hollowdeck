@@ -136,6 +136,11 @@ public partial class CombatScreen : Control
     // being trimmed while 580px of the row sat empty beside it.
     private const float EnemyViewMaxWidth = 400f;
 
+    // How many relics a boss offers. Three, matching the card reward this screen
+    // already pays and RewardScreen's picker already lays out - see
+    // PickRewardRelics for why the boss is the only site that gets a choice.
+    private const int BossRelicChoices = 3;
+
     // Keyboard card-play (Left/Right/number keys to select, Space to play) -
     // a second input path feeding the exact same CombatManager.TryPlayCard
     // drag-and-drop already uses, so none of this touches CombatManager's
@@ -1438,10 +1443,7 @@ public partial class CombatScreen : Control
                 RewardContext.ActCleared = CombatContext.IsBoss ? RunState.AdvanceAct() : null;
                 RewardContext.CardChoices = SampleCardChoices(3);
                 RewardContext.GoldAwarded = CombatContext.GoldReward;
-                // A boss is worth a guaranteed relic too, not just elites.
-                RewardContext.GuaranteedRelic = CombatContext.IsElite || CombatContext.IsBoss
-                    ? PickRewardRelic()
-                    : null;
+                RewardContext.RelicChoices = PickRewardRelics();
                 RewardContext.Claimed.Clear();
                 RunManager.Instance.ChangeScreen(RunManager.ScreenState.Reward);
             }
@@ -1468,8 +1470,23 @@ public partial class CombatScreen : Control
     // used to hand over two (see _continueResolved) - and why the reward screen
     // was announcing a relic the player already had. Claiming the row is what
     // grants it now.
-    private static RelicDefinition? PickRewardRelic() =>
-        RelicPool.SampleOne(CombatContext.IsBoss ? RelicSite.Boss : RelicSite.Reward, RngStreams.Shop);
+    //
+    // A boss offers three and the player takes one. Being handed the relic that
+    // decides a run's identity is not the same event as choosing it, and a boss
+    // is the one site with room for the question: it never rolls a potion, so
+    // the reward list has a free slot either way. An elite still offers exactly
+    // one - three ladder relics twice an act would let a deck steer itself into
+    // its own build, which is a different feature with a different curve.
+    private static List<RelicDefinition> PickRewardRelics()
+    {
+        if (CombatContext.IsBoss)
+            return RelicPool.Sample(RelicSite.Boss, BossRelicChoices, RngStreams.Shop);
+
+        if (CombatContext.IsElite)
+            return RelicPool.Sample(RelicSite.Reward, 1, RngStreams.Shop);
+
+        return new List<RelicDefinition>();
+    }
 
     // Whether this fight offers a potion, and which one. Returns the offer;
     // RewardScreen's tile is what actually grants it, so nothing here touches
