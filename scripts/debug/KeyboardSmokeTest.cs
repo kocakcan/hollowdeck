@@ -58,6 +58,7 @@ public partial class KeyboardSmokeTest : Node
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         TipDatabase.LoadAll();
+        BlessingDatabase.LoadAll();
 
         TestInputMapLayer();
         TestFocusModeSplit();
@@ -65,6 +66,8 @@ public partial class KeyboardSmokeTest : Node
         await TestEveryNonCombatScreenTakesFocus(tree);
         await TestRewardListFocus(tree);
         await TestEventPickerTakesFocus(tree);
+        await TestRunSetupFocus(tree);
+        TestPileKeysCannotReachAFocusedTextField();
         await TestRestPickerGridNavigation(tree);
         await TestCombatKeyboard(tree);
 
@@ -294,6 +297,11 @@ public partial class KeyboardSmokeTest : Node
             ("res://scenes/RunEndScreen.tscn", "RestartButton", (f, _) => f.Name.ToString() == "RestartButton"),
             ("res://scenes/MetaProgressionScreen.tscn", "BackButton", (f, _) => f.Name.ToString() == "BackButton"),
             ("res://scenes/SettingsScreen.tscn", "VolumeSlider", (f, _) => f.Name.ToString() == "VolumeSlider"),
+            // The offer, not the seed field above it. The seed is a tool; the
+            // blessing is the decision the screen exists for, and a keyboard
+            // player landing in a text box would have to know to leave it.
+            ("res://scenes/RunSetupScreen.tscn", "a blessing tile",
+                (f, screen) => f.GetParent() == screen.GetNode("CenterContainer/VBoxContainer/OfferGrid")),
         };
 
         foreach (var (path, expect, predicate) in screens)
@@ -442,6 +450,151 @@ public partial class KeyboardSmokeTest : Node
     // is freed, and the grid that replaces it is built in code. That is
     // exactly the moment a screen is left with no focus owner, so it gets its
     // own check rather than riding on the on-load sweep above.
+    // RunSetup is the third screen that swaps views mid-visit, and the only one
+    // carrying a text field - which makes it the only place two separate
+    // keyboard rules can collide.
+    //
+    //  - Claiming a blessing has to take the seed controls out of the focus
+    //    chain, not merely disable them: re-seeding after a claim calls
+    //    InitNewRun and silently erases the blessing, and Disabled excludes a
+    //    control from neither Tab nor arrow navigation (TestOnlyFocusMode...
+    //    above pins that engine behaviour).
+    //  - The seed field has to swallow its own keystrokes. D/Q/W/E are bound to
+    //    the four pile views and DeckViewButtons is attached to this screen, so
+    //    a LineEdit that let those through would open a deck overlay while the
+    //    player was typing. That one is pinned structurally in
+    //    TestPileKeysCannotReachAFocusedTextField below rather than by driving a
+    //    keystroke, because what makes it true is which handler the listener
+    //    overrides.
+    private async Task TestRunSetupFocus(SceneTree tree)
+    {
+        using var saveGuard = RunSaveGuard.Protect();
+        using var cutGuard = HardCutGuard.Protect();
+
+        var packed = GD.Load<PackedScene>("res://scenes/RunSetupScreen.tscn");
+
+        // The screen draws its three offers off RngStreams.Shop in _Ready, so
+        // the seed decides which are on it. Walk seeds until one offers a
+        // picker blessing - the case worth driving, since it is the one that
+        // opens a second view.
+        for (int seed = 1; seed <= 60; seed++)
+        {
+            RunManager.Instance.BeginRun(seed);
+
+            var instance = packed.Instantiate();
+            AddChild(instance);
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+            var grid = instance.GetNode<GridContainer>("CenterContainer/VBoxContainer/OfferGrid");
+            var seedField = instance.GetNode<LineEdit>("CenterContainer/VBoxContainer/SeedRow/SeedField");
+            var reroll = instance.GetNode<Button>("CenterContainer/VBoxContainer/SeedRow/RerollButton");
+
+            Check($"runsetup_seed_field_shows_the_run_seed_{seed}",
+                seedField.Text == seed.ToString(), $"field='{seedField.Text}', seed={seed}");
+
+            int pickerTile = OfferedTileIndex(grid,
+                b => b.Outcomes.Any(s => EventOutcomeRegistry.PickerFor(s) is not null));
+            if (pickerTile < 0)
+            {
+                instance.QueueFree();
+                await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+                continue;
+            }
+
+            grid.GetChild<Control>(pickerTile).GrabFocus();
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            grid.GetChild<ActivatablePanel>(pickerTile)._GuiInput(
+                new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+            var focused = GetViewport().GuiGetFocusOwner();
+            var pickerList = instance.GetNode<GridContainer>(
+                "PickerCenterContainer/PickerVBox/ScrollContainer/PickerList");
+            var pickerCards = pickerList.GetChildren().SelectMany(c => c.GetChildren())
+                .OfType<CardView>().ToList();
+
+            Check("runsetup_picker_focuses_one_of_its_cards",
+                focused is CardView card && pickerCards.Contains(card),
+                $"focus landed on '{focused?.Name}' ({focused?.GetType().Name})");
+
+            // The claim has already happened by the time the grid is open, so
+            // the seed controls are out of play behind it.
+            Check("runsetup_claiming_takes_the_seed_field_out_of_the_focus_chain",
+                seedField.FocusMode == Control.FocusModeEnum.None && !seedField.Editable,
+                $"focusMode={seedField.FocusMode}, editable={seedField.Editable}");
+            Check("runsetup_claiming_takes_reroll_out_of_the_focus_chain",
+                reroll.FocusMode == Control.FocusModeEnum.None && reroll.Disabled,
+                $"focusMode={reroll.FocusMode}, disabled={reroll.Disabled}");
+
+            // Pick a card and come back: the result view has to end up with a
+            // focus owner, and it has to be the Begin button rather than a
+            // freed CardView or the seed row behind it.
+            pickerCards[0]._GuiInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+            var after = GetViewport().GuiGetFocusOwner();
+            Check("runsetup_returning_from_the_picker_focuses_begin",
+                after is not null && after.Name.ToString() == "BeginButton",
+                $"focus landed on '{after?.Name}' ({after?.GetType().Name})");
+
+            instance.QueueFree();
+            await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            return;
+        }
+
+        Check("runsetup_picker_focuses_one_of_its_cards", false,
+            "no seed in 1..60 offered a picker blessing - the pool may have lost them");
+    }
+
+    // D, Q, W and E open the four pile views, and RunSetupScreen puts a text
+    // field on the same screen as the listener that owns them. What keeps a
+    // typed "d" out of the deck overlay is Godot's input order: a focused
+    // Control consumes the event in _GuiInput, and _UnhandledKeyInput only ever
+    // sees what nothing consumed.
+    //
+    // So the property is "which handler the listener overrides", and that is
+    // what this asserts. Overriding _Input instead - the obvious edit, since it
+    // reads as "handle input" - would fire *before* the field ever sees the
+    // key, and would do it silently: every existing screen would still work,
+    // because none of them has a text field.
+    private void TestPileKeysCannotReachAFocusedTextField()
+    {
+        var listener = typeof(DeckViewButtons).Assembly.GetTypes()
+            .FirstOrDefault(t => t.Name == "DeckViewKeybindListener");
+        Check("deck_view_keybind_listener_exists", listener is not null,
+            "renamed or removed - this assertion is now looking at nothing");
+        if (listener is null) return;
+
+        const System.Reflection.BindingFlags Declared =
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public
+            | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+
+        Check("pile_keys_are_read_from_unhandled_input",
+            listener.GetMethod("_UnhandledKeyInput", Declared) is not null,
+            "the listener no longer overrides _UnhandledKeyInput");
+        Check("pile_keys_do_not_pre_empt_a_focused_control",
+            listener.GetMethod("_Input", Declared) is null
+            && listener.GetMethod("_GuiInput", Declared) is null,
+            "the listener overrides _Input or _GuiInput, which run before a focused LineEdit");
+    }
+
+    // Which of the three tiles on screen is a blessing matching `predicate`.
+    // Matched by the tile's own heading text rather than by re-running the
+    // draw, so this reads what the player is actually looking at.
+    private static int OfferedTileIndex(GridContainer grid, System.Func<BlessingDefinition, bool> predicate)
+    {
+        for (int i = 0; i < grid.GetChildCount(); i++)
+        {
+            var heading = grid.GetChild(i).GetChild(0).GetChild<Label>(0).Text;
+            var blessing = BlessingDatabase.All.FirstOrDefault(b => b.Label == heading);
+            if (blessing is not null && predicate(blessing)) return i;
+        }
+        return -1;
+    }
+
     private async Task TestEventPickerTakesFocus(SceneTree tree)
     {
         using var saveGuard = RunSaveGuard.Protect();

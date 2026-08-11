@@ -47,24 +47,36 @@ public static class EventOutcomeRegistry
     /// the picker back as Pending for EventScreen to open. A picker with
     /// nothing selectable is *not* pending: it resolves through Execute to
     /// its empty-deck message like any other outcome.
-    public static EventResolution Begin(EventChoice choice)
+    public static EventResolution Begin(EventChoice choice) => Begin(choice.Specs, choice.ResultText);
+
+    /// The same resolution, for a caller that has specs and prose but is not an
+    /// EventChoice - today the start-of-run blessing (BlessingDefinition).
+    ///
+    /// An overload rather than a BlessingDefinition.AsChoice() adapter, so one
+    /// content type never has to impersonate another to be resolved. What
+    /// matters is that there is exactly one implementation: the picker-is-
+    /// pending contract, the override-joining below and the "a picker must be
+    /// the last spec" rule are properties of this function, and a second copy
+    /// of it is a second place for them to stop being true.
+    public static EventResolution Begin(IReadOnlyList<EventOutcomeSpec> specs, string resultText)
     {
         var overrides = new List<string>();
 
-        foreach (var spec in choice.Specs)
+        foreach (var spec in specs)
         {
             if (PickerFor(spec) is { } picker && picker.Selectable().Any())
             {
                 // A picker must be the *last* spec, so nothing is left
-                // unresolved behind the grid it opens. EventSmokeTest asserts
-                // that against the authored data rather than trusting it.
-                return new EventResolution(Join(overrides, choice), picker);
+                // unresolved behind the grid it opens. EventSmokeTest and
+                // BlessingSmokeTest assert that against the authored data
+                // rather than trusting it.
+                return new EventResolution(Join(overrides, resultText), picker);
             }
 
             if (Resolve(spec) is { } message) overrides.Add(message);
         }
 
-        return new EventResolution(Join(overrides, choice), null);
+        return new EventResolution(Join(overrides, resultText), null);
     }
 
     /// One spec, with no picker handling. Public because GambleOutcome
@@ -88,6 +100,6 @@ public static class EventOutcomeRegistry
     // what its label promised replaces it. Several overrides join rather than
     // the last one winning - on a compound choice they are different failures
     // and the player should see both.
-    private static string Join(List<string> overrides, EventChoice choice) =>
-        overrides.Count == 0 ? choice.ResultText : string.Join(" ", overrides);
+    private static string Join(List<string> overrides, string resultText) =>
+        overrides.Count == 0 ? resultText : string.Join(" ", overrides);
 }

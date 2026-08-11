@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Godot;
 using Hollowdeck.Data;
 using Hollowdeck.Effects;
+using Hollowdeck.Events;
 using Hollowdeck.Run;
 
 namespace Hollowdeck.UI;
@@ -40,6 +41,37 @@ public static class CardPicker
     /// Returns the first card, so the caller can hand it to ScreenKeyboardNav
     /// as the focus owner - a grid nobody can tab into is the failure mode this
     /// screen family has hit before.
+    /// The same grid, filled for an ICardPickerOutcome rather than from six
+    /// hand-passed callbacks.
+    ///
+    /// This overload exists because *how a picker outcome renders* is a
+    /// contract, not a screen's business: an upgrade picker shows the card as
+    /// it will be with a "was" line under it, a remove picker shows the card as
+    /// it is because what is being chosen is which one to lose. EventScreen and
+    /// RunSetupScreen both open pickers and both had a byte-identical copy of
+    /// that branch, which is one interface implementation away from the two
+    /// disagreeing about what a third outcome looks like.
+    ///
+    /// `onResolved` receives the outcome's own message, which is what the
+    /// caller shows; the view swap and focus regrab stay with the caller,
+    /// because those genuinely differ between the two screens.
+    public static CardView? PopulateFor(
+        GridContainer grid,
+        ICardPickerOutcome picker,
+        Action<string> onResolved,
+        Control? exit = null)
+    {
+        bool upgrading = picker is UpgradeChosenCardOutcome;
+        return Populate(
+            grid,
+            picker.Selectable(),
+            "Choose",
+            index => upgrading ? CardUpgrade.Apply(RunState.Deck[index]) : RunState.Deck[index],
+            index => upgrading ? WasLine(RunState.Deck[index]) : null,
+            index => onResolved(picker.Apply(index)),
+            exit);
+    }
+
     public static CardView? Populate(
         GridContainer grid,
         IEnumerable<int> indices,

@@ -4,8 +4,8 @@
 
 The run is complete and playable end to end: three acts of branching map, telegraphed-intent combat,
 relics, potions, events, a shop, mid-run save/resume, a score-driven unlock track, 13 screens on one
-pixel-art spec, 21 smoke suites, CI, and packaged exports for three platforms. Content stands at 101
-cards (97 offerable), 36 enemies, 33 relics, 12 potions, 15 events.
+pixel-art spec, 22 smoke suites, CI, and packaged exports for three platforms. Content stands at 101
+cards (97 offerable), 36 enemies, 33 relics, 12 potions, 15 events, 10 blessings.
 
 **The gating problem is no longer presentation, and it is no longer content volume. It is
 mechanical vocabulary.** The previous roadmap correctly identified visual coherence as the ceiling
@@ -16,9 +16,9 @@ than as this genre.
 
 **Phase 7 closed the card half of that, and Phase 8 has since closed both of its own — the status
 roster and the enemy behaviours.** The six struck rows below are done; the live ones are what the
-rest of Phases 9 through 10 own. Phase 9 is open, and four of its items have landed: the `?` node,
-the potion pass, relic tiers — which closes the last row of the diagnosis table — and the boss-relic
-choice those tiers made worth having.
+rest of Phases 9 through 10 own. Phase 9 is open, and five of its items have landed: the `?` node,
+the potion pass, relic tiers — which closes the last row of the diagnosis table — the boss-relic
+choice those tiers made worth having, and the start-of-run screen.
 
 ### The diagnosis
 
@@ -515,10 +515,87 @@ distribution held against 20k samples of the real picker).
     help, because it runs last and so snapshots the already-clobbered file and faithfully restores
     the damage — which is why an in-progress run being eaten by a test run never looked like a test
     problem. One guard now wraps the whole `_Ready` sequence, so a test added later inherits it.
-- **A start-of-run choice.** The seam is already cut — `ScreenState.RunSetup` is declared in the enum
-  and left unregistered on purpose, with `RunManager.cs:35` saying why. This is where it gets wired,
-  and it is also where **seed entry** goes: the same screen, and the thing that makes Phase 10
-  debuggable.
+- ~~**A start-of-run choice.**~~ **Shipped**, and the forecast was right about both halves being one
+  screen — three blessings and a typed seed field — and silent about what the choice would actually
+  *offer*, which turned out to be the only question worth answering. The answer is that it needed no
+  new mechanical vocabulary at all: `EventOutcomeRegistry` is already the non-combat registry (its
+  own header says why — `EffectContext` requires a live `CombatManager`/`Combatant`), and its
+  sixteen keys already spell every boon this genre offers. A `BlessingDefinition` is a label, a
+  description and a list of the same `EventOutcomeSpec`s an event choice carries; `Begin(EventChoice)`
+  widened to `Begin(IReadOnlyList<EventOutcomeSpec>, string)` and the choice overload delegates to
+  it. Content 10 blessings, no save bump, no new RNG stream, no new `hd_*` action, no new icon.
+
+  Seven things the forecast did not contain:
+  - **The seed does not label the run, it *is* the run — so committing one rebuilds everything.**
+    `StartNewRun` split into `BeginRun(int seed)` (seed, `RngStreams.Init`, `InitNewRun`, no screen
+    change) and a `StartNewRun` that mints one and routes to RunSetup. Typing a seed re-runs
+    `BeginRun`, so the map, the enemies and the three offers move together. A field that only
+    relabelled the run would make every "reproduced" seed a different run, which is the one thing
+    this item exists to prevent.
+  - **Which makes claiming a blessing an ordering trap, and it is the same one Phase 8 kept
+    finding.** `InitNewRun` resets `Deck`/`Relics`/HP, so a re-seed *after* a blessing resolves
+    erases it silently. The seed controls leave play on the claim — read-only **and**
+    `FocusModeEnum.None`, because Disabled is neither — and the real guard is a `_claimed` flag the
+    commit path checks, since the lock is UI and the guard is a fact about the run.
+  - **A screen that ignores `EventResolution.Pending` resolves the blessing to nothing.** Two of the
+    sixteen keys come back pending, and "forbid pickers in blessings" was the cheaper option and the
+    wrong one: it makes the registry's own contract conditional on the caller. `EventScreen`'s
+    picker half transplanted verbatim, and `Unburdened` — remove one of the ten cards you start with
+    — is the strongest row in the pool.
+  - **It is the first `LineEdit` in the project, and `hollowdeck_theme.tres` has no entry for one.**
+    An unstyled `LineEdit` inherits the default font and nothing else: stock Godot blue-grey box,
+    blue caret, blue selection, which is the mixed-media seam the pixel-art commitment exists to
+    close, arriving through the one control type nobody had used. `ChromeStyles.ApplyLineEditStyle`
+    is the `ApplyFocusableSliderStyle` argument one control over.
+  - **The starting position was written down in three places and asserted in none.**
+    `BalanceModel.PlayerMaxHpByAct` defaulted to 50 and `Reachable` to 99, both copies of literals
+    in `InitNewRun` — the `ShopRelicPrice = 150` hazard, undetected, two files over from where that
+    one was found. Pricing the blessings needed the numbers, so they are `RunState.StartingMaxHp`
+    and `StartingGold` now and the model reads them.
+  - **Deck size is two axes wearing one column.** `BalanceModel` priced `Cards` as a signed count
+    until the "every blessing offers something" assertion failed on `Unburdened` and then on
+    `Borrowed Steel`, from opposite directions: a *smaller* deck is the gain in this genre, and a
+    card named by the author is how a Curse is authored. Split into `Cards` (offered) and `Imposed`,
+    so a Pain and two real cards stop printing as the same `+1`/`+2`. The `RelicTier`-is-not-`Rarity`
+    lesson, in a report column.
+  - **`ScreenSmokeTest`'s ordering is load-bearing and nothing said so.** `TestRestScreen` presses
+    Leave, which puts the tree's current scene through `ChangeSceneToFile` and detaches the suite
+    node — so a test added after it silently runs *outside* the tree: `AddChild` still succeeds,
+    `_Ready` never fires, every assertion reads a screen that never built itself, and the first
+    `await` on `GetTree()` hangs until the watchdog kills the suite. Cost one run to diagnose; the
+    file says it now.
+
+  One thing that only became *writable* here: `ScenePaths` covers every `ScreenState` for the first
+  time, since RunSetup was the last unbuilt member. `RunSaveSmokeTest` asserts it, because
+  `ChangeScreen` to an unregistered state pushes an error and returns — no crash, no screen change,
+  and a fully built run left standing on the menu, which is exactly what the old `RunSetup` arm did.
+
+  The review pass then found two things, and the first is the most useful entry here:
+
+  - **Godot moves focus on mouse-*down*, which makes blur-to-commit unimplementable on this screen.**
+    The seed field committed on `FocusExited` — the obvious reading of "the player is done typing" —
+    so typing a seed and then *clicking a blessing* fired the commit between the press and the
+    release. Committing rebuilds the offers, rebuilding frees the tiles, and the tile under the
+    cursor was gone before the click resolved: nothing happened, and a different blessing had slid
+    into its place for the second click. There is no ordering of "rebuild the run" and "claim from
+    the run" that survives being interleaved with one click, so an uncommitted edit is now
+    *discarded* on the way out and only Enter and Reroll commit — with the rule stated on screen,
+    since a field that silently ignores what was typed into it is worse than one that asks for a
+    keypress. Every suite was green throughout; only a synthetic press/release pair shows it.
+  - **A hand-written set of a switch's case labels is a second copy, not a guard.**
+    `BalanceModel.Price` has to end in a `default` arm, and an arm returning zero prices an unknown
+    outcome as "changes nothing" — so the branch shipped a `PricedOutcomes` set beside it for the
+    suite to check against. Measured: deleting the `add_card` arm while leaving its key in the set
+    left all 22 suites green and Cursed Fortune's Pain priced at nothing. `Price` returns null for a
+    key it does not handle now and `PricesOutcome` asks *it*, so there is one place that decides.
+    The same shape as `BalanceModel` reading `ShopScreen.RelicPriceFor` rather than mirroring it, one
+    phase on and one file over.
+
+  Landing: the encounter-cost, curve, band, boss, threshold and upgrade tables byte-identical
+  against `main` — the only lines that moved are the new blessing section. Max HP spans 44 to 70 and
+  gold 0 to 279 across the pool, banded at both ends in `BalanceSmokeTest` against `RunState`'s own
+  constants rather than against 50 and 99, which is the "no rung may make act I unwinnable"
+  assertion Phase 10 was going to need arriving one phase early.
 - **Map width is a judgment call, not an obvious fix.** The map is 3–4 nodes wide against the genre's
   seven, and non-scrolling because Phase 4 deliberately made it *fill* one canvas. Widening it buys
   real route planning and costs that layout. Decide it explicitly; do not drift into either.
@@ -530,7 +607,29 @@ land on a forced floor, still carry enemies when they are a Combat, roll more th
 their type in the tooltip as well as the icon while their neighbours still show theirs, and reveal
 on entry — plus every `MapNodeType` routing to a screen through the extracted `EnterNode`),
 `RunSaveSmokeTest` (a concealed node surviving a round trip in both directions, and a v3 save whose
-map nodes omit the flag loading as visible), `ScreenSmokeTest` for RunSetup.
+map nodes omit the flag loading as visible).
+
+For the start-of-run screen: a new `BlessingSmokeTest` (21 → 22 suites) — the database loading an
+exact count, ids unique and ASCII, every outcome key registered *and* priced by `BalanceModel`
+(the second half being the one nothing else covers, since the model's `default` arm prices an
+unknown key as zero), a picker always the last spec and never inside a gamble, every `add_card`
+naming a real card with a count, the offer coming back three distinct rows on 200 seeds and short
+rather than looping when asked for more than the pool holds, the offer repeating for a seed and
+differing across seeds, both picker blessings actually coming back pending against the *starting*
+deck, and — the highest-value one — every row measurably changing `RunState` when it resolves, which
+is the check a pool of prose-plus-string-keys most needs. Plus `ScreenSmokeTest` (three tiles from
+the authored pool, the seed field showing the run seed, claiming granting exactly the chosen row and
+nothing else, the claimed tile leaving the tree, a locked field refusing to rebuild the run, typing
+a seed producing *that seed's own draw* rather than merely a different one and regenerating the map
+with it, junk reverting, and the layout half driven with a label longer than anything authored —
+three tiles inside their band, the same width, unclipped, stepping down a font rung, and clear of
+the run-status block), `KeyboardSmokeTest` (the offer taking focus rather than the text field, focus
+taken into the picker and returned to Begin, the seed controls leaving the focus chain behind the
+claim, and — structurally, since what makes it true is which handler is overridden — the pile-view
+keys being read from `_UnhandledKeyInput` so a focused text field consumes them first),
+`RunSaveSmokeTest` (RunSetup excluded from `AutoSaveScreens`, and every `ScreenState` having a
+scene) and `BalanceSmokeTest` (the pool able to fill an offer, and no row moving starting max HP or
+gold out of band).
 
 For the boss-relic choice: `ScreenSmokeTest` (the row asking rather than naming one of the three,
 opening the picker granting nothing, every offer on a tile, a pick granting exactly the one chosen

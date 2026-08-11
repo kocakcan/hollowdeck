@@ -28,6 +28,16 @@ public static class RunState
 {
     public const int MaxPotionSlots = 3;
 
+    // Where every run starts, before a blessing moves it. Named rather than
+    // written into InitNewRun as literals because BalanceModel needs the same
+    // two numbers and had its own copies of both - PlayerMaxHpByAct defaulted
+    // to 50 and Reachable to 99, with nothing asserting either mirror. That is
+    // the hazard BalanceModel's own comment names one file over, where a flat
+    // ShopRelicPrice = 150 sat under a "mirrors ShopScreen" note until the
+    // shop's prices moved and it did not.
+    public const int StartingMaxHp = 50;
+    public const int StartingGold = 99;
+
     public static int Gold;
     public static int PlayerMaxHp;
     public static int PlayerCurrentHp;
@@ -59,9 +69,9 @@ public static class RunState
 
     public static void InitNewRun()
     {
-        Gold = 99;
-        PlayerMaxHp = 50;
-        PlayerCurrentHp = 50;
+        Gold = StartingGold;
+        PlayerMaxHp = StartingMaxHp;
+        PlayerCurrentHp = StartingMaxHp;
         Deck = StartingDeck();
         // Every run starts with one guaranteed relic (Second Wind: heal 6 HP
         // on winning a fight) rather than an empty relic bar - Shop/

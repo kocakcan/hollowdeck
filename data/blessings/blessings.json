@@ -1,0 +1,97 @@
+[
+  {
+    "id": "hollow_vigor",
+    "label": "Hollow Vigor",
+    "description": "Gain 8 max HP.",
+    "outcomes": [ { "outcome": "gain_max_hp", "amount": 8 } ],
+    "resultText": "You come away larger than you went in."
+  },
+  {
+    "id": "a_full_purse",
+    "label": "A Full Purse",
+    "description": "Gain 100 gold.",
+    "outcomes": [ { "outcome": "gain_gold", "amount": 100 } ],
+    "resultText": "The weight of it is a comfort."
+  },
+  {
+    "id": "a_bargain_struck",
+    "label": "A Bargain Struck",
+    "description": "Gain a relic. Lose 6 max HP.",
+    "outcomes": [
+      { "outcome": "gain_relic" },
+      { "outcome": "lose_max_hp", "amount": 6 }
+    ],
+    "resultText": "It settles into your pack, and something of you goes with it."
+  },
+  {
+    "id": "travellers_stock",
+    "label": "Traveller's Stock",
+    "description": "Gain 2 potions.",
+    "outcomes": [
+      { "outcome": "gain_potion" },
+      { "outcome": "gain_potion" }
+    ],
+    "resultText": "Two flasks, stoppered with wax."
+  },
+  {
+    "id": "the_whetstone",
+    "label": "The Whetstone",
+    "description": "Upgrade a card of your choice.",
+    "outcomes": [ { "outcome": "upgrade_chosen_card" } ],
+    "resultText": ""
+  },
+  {
+    "id": "unburdened",
+    "label": "Unburdened",
+    "description": "Remove a card of your choice.",
+    "outcomes": [ { "outcome": "remove_chosen_card" } ],
+    "resultText": ""
+  },
+  {
+    "id": "borrowed_steel",
+    "label": "Borrowed Steel",
+    "description": "Add 2 random cards to your deck.",
+    "outcomes": [
+      { "outcome": "gain_random_card" },
+      { "outcome": "gain_random_card" }
+    ],
+    "resultText": "Two hands' worth, from someone who no longer needs them."
+  },
+  {
+    "id": "iron_constitution",
+    "label": "Iron Constitution",
+    "description": "Gain 20 max HP. Lose 99 gold.",
+    "outcomes": [
+      { "outcome": "gain_max_hp", "amount": 20 },
+      { "outcome": "lose_gold", "amount": 99 }
+    ],
+    "resultText": "You begin harder, and poorer."
+  },
+  {
+    "id": "cursed_fortune",
+    "label": "Cursed Fortune",
+    "description": "Gain 180 gold. Add a Pain to your deck.",
+    "outcomes": [
+      { "outcome": "gain_gold", "amount": 180 },
+      { "outcome": "add_card", "cardId": "pain", "amount": 1 }
+    ],
+    "resultText": "The coin is real. So is what came with it."
+  },
+  {
+    "id": "the_wager",
+    "label": "The Wager",
+    "description": "Roll for it: gold, hardiness, a relic, or a wound that does not close.",
+    "outcomes": [
+      {
+        "outcome": "gamble",
+        "alternatives": [
+          { "outcome": "gain_gold", "amount": 200 },
+          { "outcome": "gain_max_hp", "amount": 14 },
+          { "outcome": "gain_relic" },
+          { "outcome": "lose_max_hp", "amount": 10 }
+        ]
+      }
+    ],
+    "resultText": ""
+  }
+]

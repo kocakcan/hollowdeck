@@ -32,6 +32,7 @@ public partial class BalanceReport : Node
         ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
+        BlessingDatabase.LoadAll();
 
         var acts = BalanceModel.AllActs();
         var playerHp = BalanceModel.PlayerMaxHpByAct();
@@ -58,6 +59,7 @@ public partial class BalanceReport : Node
         PrintPlayerCurve(acts, playerHp, throughput);
         PrintPaths(paths);
         PrintScoreReachability(reach);
+        PrintBlessings();
         PrintUpgradeDeltas();
 
         GD.Print("");
@@ -419,6 +421,43 @@ public partial class BalanceReport : Node
 
     private static string Ratio(int i, List<BalanceModel.ActProfile> acts, Func<BalanceModel.ActProfile, double> f) =>
         i == 0 ? "-" : $"{f(acts[i]) / Math.Max(f(acts[i - 1]), 0.01):F2}x";
+
+    // Every run now takes exactly one of these before the first map, so this is
+    // where the position every table above is measured from actually starts.
+    // Printed rather than left as a consequence: both Phase 8 balance incidents
+    // and the Phase 9 node-weight one hid the same way - a data number moved and
+    // only its effect was visible.
+    private void PrintBlessings()
+    {
+        var deltas = BalanceModel.BlessingDeltas();
+
+        Header("START-OF-RUN BLESSINGS - what the curve's origin can be moved to");
+        GD.Print($"  the run opens at {RunState.StartingMaxHp} max HP, {RunState.StartingGold} gold, "
+                 + "10 cards, 1 relic. One blessing of three offered.");
+        GD.Print("");
+        GD.Print("  blessing              max HP    gold   cards  forced  relics potions   upg");
+
+        foreach (var d in deltas.OrderByDescending(d => d.MaxHp).ThenByDescending(d => d.Gold))
+        {
+            GD.Print($"  {d.Label,-20}{Signed(d.MaxHp),8}{Signed(d.Gold),8}{Signed(d.Cards),8}"
+                     + $"{Signed(d.Imposed),8}{Signed(d.Relics),8}{Signed(d.Potions),8}{Signed(d.Upgrades),6}");
+        }
+
+        GD.Print("");
+        GD.Print($"  max HP spans {RunState.StartingMaxHp + deltas.Min(d => d.MaxHp):F0} to "
+                 + $"{RunState.StartingMaxHp + deltas.Max(d => d.MaxHp):F0}; "
+                 + $"gold {RunState.StartingGold + deltas.Min(d => d.Gold):F0} to "
+                 + $"{RunState.StartingGold + deltas.Max(d => d.Gold):F0}.");
+        GD.Print("  A gamble is priced as the mean over its alternatives, which is what it rolls.");
+        GD.Print("  'cards' is what the player is offered (a draw up, a removal down); 'forced' is a");
+        GD.Print("  card named by the author and put in the deck, which is how a Curse is authored.");
+    }
+
+    // Blank rather than "0" for an axis a blessing does not touch: at seven
+    // columns and ten rows, a grid of zeroes hides the two or three numbers per
+    // line that are the whole content of the table.
+    private static string Signed(double v) =>
+        Math.Abs(v) < 0.005 ? "-" : (v > 0 ? $"+{v:0.##}" : $"{v:0.##}");
 
     private static void Header(string title)
     {

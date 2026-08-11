@@ -266,6 +266,13 @@ public partial class RunSaveSmokeTest : Node
         {
             RunManager.ScreenState.Combat, RunManager.ScreenState.MainMenu, RunManager.ScreenState.Settings,
             RunManager.ScreenState.MetaProgression, RunManager.ScreenState.Victory, RunManager.ScreenState.Defeat,
+            // RunSetup is the one exclusion that is not obvious from the name,
+            // because BeginRun has already built a complete RunState by the
+            // time that screen opens - a save taken here would be perfectly
+            // valid. It is excluded because Continue jumps straight to Map: a
+            // player who opened the setup screen and quit would come back to a
+            // run whose blessing was never offered, with nothing to say so.
+            RunManager.ScreenState.RunSetup,
         };
 
         var field = typeof(RunManager).GetField("AutoSaveScreens",
@@ -276,5 +283,21 @@ public partial class RunSaveSmokeTest : Node
             $"missing: {string.Join(",", expectedIncluded.Where(s => !autoSaveScreens.Contains(s)))}");
         Check("autosave_excludes_combat_and_terminal_screens", expectedExcluded.All(s => !autoSaveScreens.Contains(s)),
             $"unexpectedly included: {string.Join(",", expectedExcluded.Where(autoSaveScreens.Contains))}");
+
+        // Every member of the enum now has a scene behind it, which was not
+        // true until RunSetup was wired - the enum used to document the
+        // *intended* flow and ScenePaths only the built part of it. Now that
+        // they agree, keeping them agreeing is worth an assertion: ChangeScreen
+        // to an unregistered state pushes an error and returns, which changes
+        // no screen and leaves the run wherever it was. That is a soft-lock
+        // rather than a crash, the same shape MapScreen.EnterNode's missing
+        // default arm had.
+        var pathField = typeof(RunManager).GetField("ScenePaths",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        var scenePaths = (Dictionary<RunManager.ScreenState, string>)pathField!.GetValue(null)!;
+        var unregistered = System.Enum.GetValues<RunManager.ScreenState>()
+            .Where(s => !scenePaths.ContainsKey(s)).ToList();
+        Check("every_screen_state_has_a_scene", unregistered.Count == 0,
+            $"unregistered: {string.Join(",", unregistered)}");
     }
 }

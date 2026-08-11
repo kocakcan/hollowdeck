@@ -33,9 +33,7 @@ public partial class RunManager : Node
         { ScreenState.Library, "res://scenes/LibraryScreen.tscn" },
         { ScreenState.Settings, "res://scenes/SettingsScreen.tscn" },
         { ScreenState.Event, "res://scenes/EventScreen.tscn" },
-        // RunSetup deliberately stays unregistered - no pre-run choices
-        // exist yet (all content unlocked, no character/class selection) to
-        // justify a pause screen between MainMenu and Map.
+        { ScreenState.RunSetup, "res://scenes/RunSetupScreen.tscn" },
     };
 
     // Screens whose arrival marks a safe checkpoint to persist RunState -
@@ -43,6 +41,12 @@ public partial class RunManager : Node
     // exhaust piles are rebuilt fresh from RunState.Deck at the start of
     // every fight and have no serializable shape today. Quitting mid-fight
     // resumes at the pre-fight map state (that node offered again).
+    //
+    // RunSetup is excluded for a different reason, and it is the load-bearing
+    // one: BeginRun has already built a full RunState by the time that screen
+    // opens, so a save here would be perfectly valid - and Continue jumps
+    // straight to Map. A player who opened the setup screen and quit would come
+    // back to a run whose blessing was never offered, with nothing to say so.
     private static readonly HashSet<ScreenState> AutoSaveScreens = new()
     {
         ScreenState.Map, ScreenState.Rest, ScreenState.Shop,
@@ -69,6 +73,7 @@ public partial class RunManager : Node
         EventDatabase.LoadAll();
         ActDatabase.LoadAll();
         TipDatabase.LoadAll();
+        BlessingDatabase.LoadAll();
     }
 
     public void ChangeScreen(ScreenState next)
@@ -92,13 +97,31 @@ public partial class RunManager : Node
         if (!Fade.Play(() => GetTree().ChangeSceneToFile(path))) GetTree().ChangeSceneToFile(path);
     }
 
-    public void StartNewRun()
+    // Applies a seed and builds a fresh RunState from it. Deliberately does
+    // *not* change screen: RunSetup calls this again on every reroll and on
+    // every seed the player types, because the three blessings it offers are
+    // drawn from RngStreams.Shop and the map from RngStreams.Map - so a run is
+    // a pure function of its seed only if re-seeding rebuilds both.
+    //
+    // The corollary is the ordering trap on that screen: InitNewRun resets
+    // Deck/Relics/HP, so re-seeding *after* a blessing has resolved silently
+    // erases it. RunSetupScreen closes that by taking the seed controls out of
+    // play the moment a blessing is claimed.
+    public void BeginRun(int seed)
     {
-        RunSeed = new Random().Next();
+        RunSeed = seed;
         RngStreams.Init(RunSeed);
         RunState.InitNewRun();
         GD.Print($"Run seed: {RunSeed}");
-        ChangeScreen(ScreenState.Map);
+    }
+
+    // The single entry point into a run. Goes to RunSetup rather than Map -
+    // one path in, so a blessing cannot be skipped by a caller that forgot the
+    // screen exists.
+    public void StartNewRun()
+    {
+        BeginRun(new Random().Next());
+        ChangeScreen(ScreenState.RunSetup);
     }
 
     // Loads a persisted run (if any) and jumps straight to Map, skipping

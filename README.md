@@ -9,11 +9,11 @@ networking, desktop only (Windows/Mac/Linux).
 
 ## Status
 
-The core loop is playable end-to-end — new run, map, combat, events, shop, rest, treasure,
-rewards, bosses, run-end scoring, unlocks, and mid-run save/resume. Current content is three
-acts: **101 cards (97 offerable, 4 unplayable Curses and Status cards), 33 relics, 12 potions,
-36 enemies (6 of them bosses), 15 events**. Each act has its own enemy pools and a two-boss pool
-the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
+The core loop is playable end-to-end — new run, a start-of-run blessing and seed, map, combat,
+events, shop, rest, treasure, rewards, bosses, run-end scoring, unlocks, and mid-run save/resume.
+Current content is three acts: **101 cards (97 offerable, 4 unplayable Curses and Status cards),
+33 relics, 12 potions, 36 enemies (6 of them bosses), 15 events, 10 blessings**. Each act has its
+own enemy pools and a two-boss pool the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
 what's still open.
 
 ## Stack
@@ -74,10 +74,11 @@ scripts/
   data/       Definition classes and the JSON databases that load them, EffectSpec
   ui/         Screen controllers, CardView, EnemyView, theming, layout helpers
   audio/      AudioSynth / AudioCues / AudioMusic — everything is synthesized at runtime
-  debug/      17 smoke-test scenes + the screenshot harness
-scenes/       11 screens + reusable CardView/EnemyView/PotionView/FloatingText
+  debug/      22 smoke-test scenes + the screenshot harness
+scenes/       13 screens + reusable CardView/EnemyView/PotionView/FloatingText
   debug/      smoke-test and screenshot scenes
-data/         acts / cards / relics / potions / enemies / events — all JSON, the content layer
+data/         acts / cards / relics / potions / enemies / events / blessings / tips — all JSON,
+              the content layer
 assets/       sprites, icons, fonts, backgrounds, themes (see CREDITS.md for licensing)
 tools/        run-smoke-tests.sh
   artgen/     Rust asset tool — generates the 186 icons, palette-clamps art, validates ART_SPEC
@@ -199,6 +200,30 @@ each naming one of `EventOutcomeRegistry`'s sixteen outcomes (`gain_gold`, `lose
 `gain_potion`, `upgrade_random_card`, `gamble`, `remove_chosen_card`, `upgrade_chosen_card`,
 `none`). `add_card` takes a `cardId` and is how an event costs something other than HP or gold.
 
+**A blessing** (`data/blessings/blessings.json`) is one of the three offers on the start-of-run
+screen, and it reuses the event vocabulary wholesale — a `label`, a `description` (the only place
+its effect is stated, so it has to be accurate), a list of the same `outcomes` an event choice
+carries, and a `resultText`. Nothing new to register: `EventOutcomeRegistry` is the non-combat
+registry, which is exactly what a screen before the first map needs.
+
+```json
+{
+  "id": "a_bargain_struck",
+  "label": "A Bargain Struck",
+  "description": "Gain a relic. Lose 6 max HP.",
+  "outcomes": [
+    { "outcome": "gain_relic" },
+    { "outcome": "lose_max_hp", "amount": 6 }
+  ],
+  "resultText": "It settles into your pack, and something of you goes with it."
+}
+```
+
+The two rules a compound choice obeys apply here too and are asserted: a card-picker outcome must be
+the last spec, and a `gamble` may not contain one. `BlessingSmokeTest` also refuses a row that
+resolves without changing `RunState`, and `BalanceSmokeTest` bands what a row may do to the starting
+50 HP / 99 gold.
+
 **An act** (`data/acts/acts.json`) is a chapter of a run, in play order: `floorCount`, the
 `normalEncounters` / `eliteEncounters` pools (each entry is one group, so `["slime","slime"]` is a
 single two-slime fight), a `bossIds` pool the run seed picks one from, `mapBackground` /
@@ -252,7 +277,7 @@ that reaches, but nothing in the game currently needs one — same standing as `
 
 There's no test framework. Each `scenes/debug/*SmokeTest.tscn` runs assertions in `_Ready`,
 prints `PASS`/`FAIL` per check and a `<Name>: N passed, M failed` summary, then exits nonzero if
-anything failed. 20 suites, 1072 checks:
+anything failed. 22 suites, 1410 checks:
 
 ```bash
 tools/run-smoke-tests.sh                 # all of them; builds first, nonzero exit on any failure
@@ -289,8 +314,9 @@ dotnet build
     scenes/debug/ScreenShot.tscn -- shop reward unlocks
 ```
 
-Screens: `combat` `reward` `shop` `map` `rest` `treasure` `event` `unlocks` `runend` `mainmenu`
-`settings`. With no names it shoots all of them. PNGs land at
+Screens: `combat` `reward` `shop` `map` `rest` `treasure` `event` `runsetup` `unlocks` `runend`
+`mainmenu` `settings` — plus a second fixture for most screens' click-gated views; the authoritative
+list is the `Fixtures` dictionary in `scripts/debug/ScreenShot.cs`. With no names it shoots all of them. PNGs land at
 `~/Library/Application Support/Godot/app_userdata/Hollowdeck/shot_<name>.png`. **Never
 `--headless` for screenshots** — the dummy renderer returns an empty viewport texture. (Headless
 is correct for the smoke tests, which render nothing.)
