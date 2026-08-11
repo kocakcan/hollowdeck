@@ -791,7 +791,7 @@ public static class BalanceModel
     // The player's side of the same curve, so the two can be read against each
     // other: max HP at the start of each act, from acts.json's clear bonuses
     // and heal rather than from a number typed here.
-    public static List<int> PlayerMaxHpByAct(int startingMaxHp = 50)
+    public static List<int> PlayerMaxHpByAct(int startingMaxHp = RunState.StartingMaxHp)
     {
         var result = new List<int> { startingMaxHp };
         int hp = startingMaxHp;
@@ -1116,7 +1116,7 @@ public static class BalanceModel
         return tiers.Sum(t => RelicPool.WeightOf(t) * (double)ShopScreen.RelicPriceFor(t)) / weight;
     }
 
-    public static Reachability Reachable(int seeds = 500, int startingGold = 99,
+    public static Reachability Reachable(int seeds = 500, int startingGold = RunState.StartingGold,
         int startingRelics = 1, int startingDeckSize = 10)
     {
         var gold = new List<int>();
@@ -1257,6 +1257,109 @@ public static class BalanceModel
         return field?.GetValue(null) is not ValueTuple<int, int, string>[] tiers
             ? Array.Empty<int>()
             : tiers.Select(t => t.Item1).ToList();
+    }
+
+    // -------------------------------------------------------------- blessings
+
+    /// What one start-of-run blessing does to the position every curve above is
+    /// measured from. Fractional because a `gamble` is priced as the mean over
+    /// its alternatives, which is exactly what GambleOutcome rolls.
+    ///
+    /// `Cards` and `Imposed` are two axes rather than one signed deck-size
+    /// number, and the split is the interesting part. Deck size alone carries
+    /// no value judgment in this genre: `remove_chosen_card` *shrinks* the deck
+    /// and is the strongest row in the pool, while `add_card` *grows* it and is
+    /// how a Curse is authored. One column would print a Pain and two real
+    /// cards as the same +1/+2, which is exactly the "only the effect was
+    /// visible" failure this report exists to end. So Cards is what the player
+    /// is offered (a random card up, a removal down) and Imposed is what is put
+    /// on them by name.
+    public readonly record struct BlessingDelta(
+        string Id, string Label,
+        double MaxHp, double Hp, double Gold, double Cards, double Imposed,
+        double Relics, double Potions, double Upgrades);
+
+    /// Whether this model knows how to price an outcome key.
+    ///
+    /// Asked *of the switch itself* rather than answered from a list beside it.
+    /// Price has to end in a default arm, and a default arm that returns zero is
+    /// the silent no-op this whole file exists to catch: a blessing authored
+    /// against a seventeenth outcome would print as changing nothing, with every
+    /// table green. A hand-written set of the case labels does not close that -
+    /// it is a second copy, and deleting an arm while leaving its key in the set
+    /// leaves the suite green and the outcome free (measured: removing the
+    /// add_card arm priced Cursed Fortune's Pain at nothing and nothing failed).
+    /// So Price returns null for a key it does not handle, and this is the only
+    /// thing that decides.
+    public static bool PricesOutcome(string outcome) =>
+        Price(new EventOutcomeSpec { Outcome = outcome }) is not null;
+
+    public static List<BlessingDelta> BlessingDeltas() =>
+        BlessingDatabase.All.Select(b =>
+        {
+            var d = Sum(b.Outcomes);
+            return d with { Id = b.Id, Label = b.Label };
+        }).ToList();
+
+    private static BlessingDelta Sum(IEnumerable<EventOutcomeSpec> specs)
+    {
+        var total = new BlessingDelta();
+        // An unpriced key contributes nothing, which is the whole hazard - but
+        // it can only get here past BlessingSmokeTest, which drives every
+        // authored key through PricesOutcome above.
+        foreach (var spec in specs) total = Add(total, Price(spec) ?? new BlessingDelta());
+        return total;
+    }
+
+    private static BlessingDelta Add(BlessingDelta a, BlessingDelta b) => new(
+        "", "",
+        a.MaxHp + b.MaxHp, a.Hp + b.Hp, a.Gold + b.Gold, a.Cards + b.Cards,
+        a.Imposed + b.Imposed, a.Relics + b.Relics, a.Potions + b.Potions, a.Upgrades + b.Upgrades);
+
+    private static BlessingDelta Scale(BlessingDelta d, double f) => new(
+        "", "", d.MaxHp * f, d.Hp * f, d.Gold * f, d.Cards * f, d.Imposed * f,
+        d.Relics * f, d.Potions * f, d.Upgrades * f);
+
+    // Null means "this model does not know this key" - see PricesOutcome. Every
+    // arm below must return a value, including the ones that legitimately price
+    // as zero, or the distinction collapses back into the bug it exists to stop.
+    private static BlessingDelta? Price(EventOutcomeSpec spec)
+    {
+        var zero = new BlessingDelta();
+        switch (spec.Outcome)
+        {
+            // gain_max_hp heals for the same amount, so both move together -
+            // GainMaxHpOutcome's own rule, not an approximation of it.
+            case "gain_max_hp": return zero with { MaxHp = spec.Amount, Hp = spec.Amount };
+            case "lose_max_hp": return zero with { MaxHp = -spec.Amount };
+            // A run opens at full HP, so a heal at this one site is worth
+            // nothing however much it is authored for. Priced as 0 deliberately
+            // rather than skipped, so the arm exists and says why.
+            case "heal":
+            case "none": return zero;
+            case "lose_hp": return zero with { Hp = -spec.Amount };
+            case "gain_gold": return zero with { Gold = spec.Amount };
+            // Floors at 0 (LoseGoldOutcome), and the floor binds here: the only
+            // authored row takes the whole starting purse.
+            case "lose_gold": return zero with { Gold = -Math.Min(spec.Amount, RunState.StartingGold) };
+            case "gain_random_card": return zero with { Cards = 1 };
+            case "remove_chosen_card": return zero with { Cards = -1 };
+            // Named by the author, which in practice means a Curse - a cost,
+            // however it moves deck size. See BlessingDelta on why this is not
+            // the same column as the two above.
+            case "add_card": return zero with { Imposed = spec.Amount };
+            case "upgrade_random_card":
+            case "upgrade_chosen_card": return zero with { Upgrades = 1 };
+            case "gain_relic": return zero with { Relics = 1 };
+            case "lose_relic": return zero with { Relics = -1 };
+            case "gain_potion": return zero with { Potions = 1 };
+            // Uniform over the alternatives, which is how GambleOutcome rolls.
+            case "gamble":
+                return spec.Alternatives.Count == 0
+                    ? zero
+                    : Scale(Sum(spec.Alternatives), 1.0 / spec.Alternatives.Count);
+            default: return null;
+        }
     }
 
     // -------------------------------------------------------------- utilities

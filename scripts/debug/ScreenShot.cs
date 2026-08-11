@@ -188,6 +188,22 @@ public partial class ScreenShot : Node
         ["runend"] = new("res://scenes/RunEndScreen.tscn", SeedRunEnd),
         ["mainmenu"] = new("res://scenes/MainMenu.tscn", SeedNothing),
         ["settings"] = new("res://scenes/SettingsScreen.tscn", SeedNothing),
+        // The start-of-run screen, in all three of its states. Unlike every
+        // other fixture these seed themselves by *searching* for a seed that
+        // offers the shape each shot is about, rather than pinning one: the
+        // three tiles are a draw off the seed, so a pinned seed would quietly
+        // start shooting the wrong view the first time the pool is re-authored.
+        ["runsetup"] = new("res://scenes/RunSetupScreen.tscn", SeedRunSetup),
+        // The claimed state: the offers gone, the result line and Begin up, and
+        // the seed row locked behind it - which is the thing worth looking at,
+        // since "locked" here is a read-only LineEdit and nothing else on this
+        // screen has ever been greyed.
+        ["runsetupresult"] = new("res://scenes/RunSetupScreen.tscn",
+            SeedRunSetupPlain, OpenRunSetupResult),
+        // The card grid a remove/upgrade blessing opens, unreachable without
+        // the click - same shape as restupgrade and eventpicker above.
+        ["runsetuppicker"] = new("res://scenes/RunSetupScreen.tscn",
+            SeedRunSetupPicker, OpenRunSetupPicker),
     };
 
     public override async void _Ready()
@@ -199,6 +215,7 @@ public partial class ScreenShot : Node
         PotionDatabase.LoadAll();
         EventDatabase.LoadAll();
         TipDatabase.LoadAll();
+        BlessingDatabase.LoadAll();
 
         var requested = OS.GetCmdlineUserArgs().Where(a => !string.IsNullOrWhiteSpace(a)).ToList();
         var unknown = requested.Where(name => !Fixtures.ContainsKey(name)).ToList();
@@ -304,6 +321,51 @@ public partial class ScreenShot : Node
     }
 
     private static void SeedNothing() { }
+
+    // ------------------------------------------------------------ run setup
+
+    // The screen reads RunManager.RunSeed and draws its offers off
+    // RngStreams.Shop, so BeginRun is how a fixture puts it in a known state -
+    // and it is the same call the real MainMenu makes, so nothing here is a
+    // test-only path.
+    private static void SeedRunSetup() => RunManager.Instance.BeginRun(FixtureSeed);
+
+    private static void SeedRunSetupPicker() => BeginFirstSeedOffering(HasPicker: true);
+
+    private static void SeedRunSetupPlain() => BeginFirstSeedOffering(HasPicker: false);
+
+    private static void BeginFirstSeedOffering(bool HasPicker)
+    {
+        for (int seed = 1; seed < 200; seed++)
+        {
+            RngStreams.Init(seed);
+            if (BlessingDatabase.Offer(3, RngStreams.Shop).Any(IsPicker) != HasPicker) continue;
+            RunManager.Instance.BeginRun(seed);
+            return;
+        }
+        RunManager.Instance.BeginRun(FixtureSeed);
+    }
+
+    private static bool IsPicker(BlessingDefinition b) =>
+        b.Outcomes.Any(s => EventOutcomeRegistry.PickerFor(s) is not null);
+
+    private static void OpenRunSetupPicker(Node screen) => ActivateBlessingTile(screen, wantPicker: true);
+
+    private static void OpenRunSetupResult(Node screen) => ActivateBlessingTile(screen, wantPicker: false);
+
+    private static void ActivateBlessingTile(Node screen, bool wantPicker)
+    {
+        var grid = screen.GetNode<GridContainer>("CenterContainer/VBoxContainer/OfferGrid");
+        foreach (var tile in grid.GetChildren().OfType<ActivatablePanel>())
+        {
+            var heading = tile.GetChild(0).GetChild<Label>(0).Text;
+            var blessing = BlessingDatabase.All.FirstOrDefault(b => b.Label == heading);
+            if (blessing is null || IsPicker(blessing) != wantPicker) continue;
+
+            tile._GuiInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+            return;
+        }
+    }
 
     // Exactly five cards, so DrawHand(5) draws the whole deck and the opening
     // hand is guaranteed rather than a lucky roll: Flex and Bash for

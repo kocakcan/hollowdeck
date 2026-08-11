@@ -27,6 +27,7 @@ public partial class ScreenSmokeTest : Node
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         TipDatabase.LoadAll();
+        BlessingDatabase.LoadAll();
 
         // Captured before the screen tests run, and used for Quit below - the
         // same trap ActSmokeTest and KeyboardSmokeTest document. TestRestScreen
@@ -61,7 +62,20 @@ public partial class ScreenSmokeTest : Node
         TestShopScreen();
         await TestShopOffersClearTheRunStatusBlock();
         TestShopUnaffordableOffersAreUnfocusable();
+        TestRunSetupOffersThreeBlessings();
+        TestRunSetupClaimsExactlyOneBlessing();
+        TestRunSetupSeedEntryRebuildsTheRun();
+        await TestRunSetupTilesStayInTheirBand();
+        // These two last, and they have to stay last. Both end in
+        // RunManager.ChangeScreen, which puts the tree's current scene through
+        // ChangeSceneToFile and detaches this node - so a test added *after*
+        // them silently runs outside the tree: AddChild still succeeds, _Ready
+        // never fires, every assertion reads a screen that never built itself,
+        // and the first await on GetTree() hangs until the watchdog kills the
+        // suite with no summary. Neither awaits anything after its own
+        // navigation, which is what makes two of them in a row safe.
         TestRestScreen();
+        TestStartingARunGoesToRunSetup();
 
         GD.Print($"ScreenSmokeTest: {_pass} passed, {_fail} failed");
         tree.Quit(_fail == 0 ? 0 : 1);
@@ -1033,5 +1047,328 @@ public partial class ScreenSmokeTest : Node
             $"un-upgraded count={RunState.Deck.Count(c => !CardUpgrade.IsUpgraded(c))}");
 
         screen.QueueFree();
+    }
+
+    // ------------------------------------------------------------ run setup
+
+    private const string SeedFieldPath = "CenterContainer/VBoxContainer/SeedRow/SeedField";
+    private const string RerollPath = "CenterContainer/VBoxContainer/SeedRow/RerollButton";
+    private const string OfferGridPath = "CenterContainer/VBoxContainer/OfferGrid";
+
+    private void TestRunSetupOffersThreeBlessings()
+    {
+        RunManager.Instance.BeginRun(4242);
+        var screen = LoadScene("res://scenes/RunSetupScreen.tscn");
+
+        var grid = screen.GetNode<GridContainer>(OfferGridPath);
+        var offered = TileHeadings(grid);
+
+        Check("runsetup_offers_three_blessings", offered.Count == 3,
+            $"{offered.Count} tiles: {string.Join(", ", offered)}");
+        Check("runsetup_offers_are_distinct", offered.Distinct().Count() == offered.Count,
+            string.Join(", ", offered));
+        // Against the authored pool rather than against itself: a tile showing
+        // placeholder text, or a label the data does not contain, is the shape
+        // a broken GetNode path leaves behind.
+        Check("runsetup_offers_come_from_the_authored_pool",
+            offered.All(label => BlessingDatabase.All.Any(b => b.Label == label)),
+            string.Join(", ", offered.Where(l => BlessingDatabase.All.All(b => b.Label != l))));
+
+        Check("runsetup_seed_field_shows_the_run_seed",
+            screen.GetNode<LineEdit>(SeedFieldPath).Text == "4242",
+            $"field='{screen.GetNode<LineEdit>(SeedFieldPath).Text}'");
+
+        // Nothing has been claimed, so the result half is still down.
+        Check("runsetup_hides_the_result_until_a_blessing_is_taken",
+            !screen.GetNode<Label>("CenterContainer/VBoxContainer/ResultLabel").Visible
+            && !screen.GetNode<Button>("CenterContainer/VBoxContainer/BeginButton").Visible,
+            "the result line or Begin button is showing before any choice");
+
+        screen.QueueFree();
+    }
+
+    // The claim itself, and the two things around it that are not obvious: it
+    // must be idempotent, and it must take the seed controls out of play -
+    // re-seeding calls InitNewRun, which would throw the blessing away.
+    private void TestRunSetupClaimsExactlyOneBlessing()
+    {
+        var pool = BlessingPool();
+        var saved = new List<BlessingDefinition>(pool);
+        // A fixed three so the assertion below can name an exact gold figure
+        // rather than "something changed". All three are authored rows.
+        pool.Clear();
+        pool.AddRange(new[] { "hollow_vigor", "a_full_purse", "iron_constitution" }
+            .Select(id => saved.First(b => b.Id == id)));
+
+        try
+        {
+            RunManager.Instance.BeginRun(4242);
+            var screen = LoadScene("res://scenes/RunSetupScreen.tscn");
+            var grid = screen.GetNode<GridContainer>(OfferGridPath);
+
+            int index = TileHeadings(grid).IndexOf("A Full Purse");
+            Check("runsetup_the_fixed_pool_is_all_offered", index >= 0,
+                $"offered: {string.Join(", ", TileHeadings(grid))}");
+            if (index < 0) { screen.QueueFree(); return; }
+
+            var tile = grid.GetChild<ActivatablePanel>(index);
+            int maxHpBefore = RunState.PlayerMaxHp;
+            // Read off the row rather than written here: this test is about the
+            // claim reaching the right blessing, and pinning the literal 100
+            // would fail the suite for a balance tweak that changed nothing
+            // about what is being tested.
+            int purse = BlessingDatabase.All.First(b => b.Id == "a_full_purse").Outcomes[0].Amount;
+            Activate(tile);
+
+            Check("runsetup_claiming_grants_the_chosen_blessing",
+                RunState.Gold == RunState.StartingGold + purse,
+                $"gold={RunState.Gold}, expected {RunState.StartingGold + purse}");
+            // And only that one: the other two on screen move max HP, so an
+            // implementation resolving the whole offer would show up here.
+            Check("runsetup_claiming_grants_only_the_chosen_blessing",
+                RunState.PlayerMaxHp == maxHpBefore, $"maxHp={RunState.PlayerMaxHp} was {maxHpBefore}");
+
+            Check("runsetup_claiming_shows_the_result_and_begin",
+                screen.GetNode<Label>("CenterContainer/VBoxContainer/ResultLabel").Visible
+                && screen.GetNode<Button>("CenterContainer/VBoxContainer/BeginButton").Visible,
+                "the result line or Begin button did not appear");
+            Check("runsetup_claiming_clears_the_other_offers",
+                grid.GetChildCount() == 0, $"{grid.GetChildCount()} tiles left on screen");
+
+            var seedField = screen.GetNode<LineEdit>(SeedFieldPath);
+            var reroll = screen.GetNode<Button>(RerollPath);
+            Check("runsetup_claiming_locks_the_seed_controls",
+                !seedField.Editable && seedField.FocusMode == Control.FocusModeEnum.None
+                && reroll.Disabled && reroll.FocusMode == Control.FocusModeEnum.None,
+                $"editable={seedField.Editable}/{seedField.FocusMode}, "
+                + $"reroll disabled={reroll.Disabled}/{reroll.FocusMode}");
+
+            // A second claim has to be unreachable, and the tile leaving the
+            // tree is what makes it so: ActivatablePanel only fires from
+            // _GuiInput, which a detached Control never receives. Asserted
+            // rather than driven, because driving it is the one thing that
+            // cannot happen - a detached panel has no viewport and calling its
+            // handler by hand throws inside the engine rather than testing
+            // anything about this screen.
+            Check("runsetup_the_claimed_tile_leaves_the_tree",
+                !tile.IsInsideTree(), "the tile is still attached and can still be activated");
+
+            // The reachable half of the same guard, and the one that matters:
+            // the field is locked, but _claimed is what actually refuses, so a
+            // driven commit must still pay nothing.
+            RunSetupCommitSeed(seedField, "777");
+            Check("runsetup_a_locked_seed_field_cannot_rebuild_the_run",
+                RunManager.Instance.RunSeed == 4242 && RunState.Gold == RunState.StartingGold + purse,
+                $"seed={RunManager.Instance.RunSeed}, gold={RunState.Gold}");
+
+            screen.QueueFree();
+        }
+        finally
+        {
+            pool.Clear();
+            pool.AddRange(saved);
+        }
+    }
+
+    // Typing a seed has to rebuild the whole run, not just relabel it. This is
+    // the entire point of the field: a seed that changed the number on screen
+    // and nothing else would make every reproduced run a different run.
+    private void TestRunSetupSeedEntryRebuildsTheRun()
+    {
+        RunManager.Instance.BeginRun(4242);
+        var screen = LoadScene("res://scenes/RunSetupScreen.tscn");
+        var grid = screen.GetNode<GridContainer>(OfferGridPath);
+        var seedField = screen.GetNode<LineEdit>(SeedFieldPath);
+
+        var before = TileHeadings(grid);
+        var mapBefore = RunState.MapNodes.Select(n => n.Id + n.Type).ToList();
+
+        RunSetupCommitSeed(seedField, "777");
+
+        Check("runsetup_typing_a_seed_applies_it", RunManager.Instance.RunSeed == 777,
+            $"seed={RunManager.Instance.RunSeed}");
+
+        var after = TileHeadings(grid);
+        // Against the draw the seed itself produces, not merely "it changed":
+        // an implementation that re-rolled off wherever the stream had got to
+        // would also change the tiles, and would not reproduce.
+        RngStreams.Init(777);
+        var expected = BlessingDatabase.Offer(3, RngStreams.Shop).Select(b => b.Label).ToList();
+        Check("runsetup_the_offers_are_the_seed's_own_draw", after.SequenceEqual(expected),
+            $"on screen [{string.Join(", ", after)}] vs seed 777 [{string.Join(", ", expected)}]");
+        Check("runsetup_the_offers_actually_moved", !after.SequenceEqual(before),
+            $"seed 4242 and seed 777 both gave [{string.Join(", ", after)}]");
+
+        // The map is regenerated too, which is what makes a shared seed a
+        // shared *run* rather than a shared menu.
+        var mapAfter = RunState.MapNodes.Select(n => n.Id + n.Type).ToList();
+        Check("runsetup_typing_a_seed_regenerates_the_map", !mapAfter.SequenceEqual(mapBefore),
+            "the map is identical across two different seeds");
+
+        // Junk reverts to the live seed rather than throwing or zeroing it.
+        RunSetupCommitSeed(seedField, "");
+        Check("runsetup_an_unparseable_seed_reverts",
+            RunManager.Instance.RunSeed == 777 && seedField.Text == "777",
+            $"seed={RunManager.Instance.RunSeed}, field='{seedField.Text}'");
+
+        // Leaving the field without pressing Enter *discards* the edit, and
+        // that is a bug fix rather than a preference. Godot moves focus on
+        // mouse-down, so a field that committed here would rebuild the offers
+        // between the press and the release of a click on a blessing tile - and
+        // rebuilding frees the tile, so that click resolves nothing and a
+        // different blessing slides under the cursor for the next one.
+        var offersBeforeBlur = TileHeadings(grid);
+        seedField.Text = "31337";
+        seedField.EmitSignal(Control.SignalName.FocusExited);
+        Check("runsetup_leaving_the_seed_field_discards_the_edit",
+            RunManager.Instance.RunSeed == 777 && seedField.Text == "777"
+            && TileHeadings(grid).SequenceEqual(offersBeforeBlur),
+            $"seed={RunManager.Instance.RunSeed}, field='{seedField.Text}', "
+            + $"offers [{string.Join(", ", TileHeadings(grid))}]");
+
+        screen.QueueFree();
+    }
+
+    // The layout half, driven with a label longer than anything authored. Same
+    // failure the boss-relic tiles have: ScreenChrome.Heading is unwrapped, so
+    // a long name widens its tile instead of overflowing it, and the row hangs
+    // off both ends of the row it shares.
+    private async System.Threading.Tasks.Task TestRunSetupTilesStayInTheirBand()
+    {
+        var pool = BlessingPool();
+        var saved = new List<BlessingDefinition>(pool);
+        var stretched = new BlessingDefinition
+        {
+            Id = "smoke_test_long_label",
+            Label = "The Sundered Covenant of Endless Night",
+            Description = "Gain a relic, gain 100 gold, and lose 6 max HP for the rest of the run.",
+            Outcomes = new List<EventOutcomeSpec> { new() { Outcome = "gain_gold", Amount = 1 } },
+            ResultText = "It is done.",
+        };
+
+        pool.Clear();
+        pool.Add(stretched);
+        pool.AddRange(saved.Where(b => b.Id is "hollow_vigor" or "a_full_purse"));
+
+        try
+        {
+            RunManager.Instance.BeginRun(4242);
+            var screen = LoadScene("res://scenes/RunSetupScreen.tscn");
+            ((Control)screen).Size = new Vector2(1152, 648);
+
+            // Containers sort deferred, so every rect below is zero until a
+            // frame has run - without these the whole test passes on tiles of
+            // width 0, which is how the reward version of it first "passed".
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+            var grid = screen.GetNode<GridContainer>(OfferGridPath);
+            var tiles = grid.GetChildren().OfType<ActivatablePanel>().ToList();
+
+            float widest = tiles.Count == 0 ? 0f : tiles.Max(t => t.GetGlobalRect().Size.X);
+            float total = tiles.Sum(t => t.GetGlobalRect().Size.X);
+
+            // 800 is the same band budget the boss-relic row is designed to,
+            // and the `widest > 0` term is the guard on the guard: a layout that
+            // never ran reports zero and satisfies every inequality here.
+            Check("runsetup_tiles_fit_their_band",
+                tiles.Count == 3 && widest > 0f && total <= 800f,
+                $"{tiles.Count} tiles totalling {total}px (widest {widest})");
+            Check("runsetup_tiles_are_the_same_width",
+                widest > 0f && tiles.All(t => Mathf.Abs(t.GetGlobalRect().Size.X - widest) < 0.5f),
+                string.Join("/", tiles.Select(t => $"{t.GetGlobalRect().Size.X:F0}")));
+
+            var screenRect = ((Control)screen).GetGlobalRect();
+            Check("runsetup_tiles_are_not_clipped_by_the_screen",
+                widest > 0f && tiles.All(t => t.GetGlobalRect().Position.X >= screenRect.Position.X - 0.5f
+                    && t.GetGlobalRect().End.X <= screenRect.End.X + 0.5f),
+                string.Join(" | ", tiles.Select(t => $"{t.GetGlobalRect().Position.X:F0}..{t.GetGlobalRect().End.X:F0}")));
+
+            // TextFit's own contribution, invisible to every width check above
+            // it: the autowrap holds the band whatever size the label renders
+            // at, so without this the ladder could be deleted with a green
+            // sweep. The stretched label steps down a rung; the two real ones
+            // do not.
+            var names = tiles.Select(t => t.GetChild(0).GetChild<Label>(0)).ToList();
+            var stretchedLabel = names.First(l => l.Text.StartsWith("The Sundered"));
+            Check("runsetup_a_long_label_steps_down_a_font_rung",
+                stretchedLabel.GetThemeFontSize("font_size") == UiTheme.Fonts.Small
+                && names.Where(l => l != stretchedLabel)
+                    .All(l => l.GetThemeFontSize("font_size") == UiTheme.Fonts.Body),
+                string.Join(" | ", names.Select(l => $"{l.Text.Split('\n')[0]}={l.GetThemeFontSize("font_size")}")));
+
+            // And the row must clear the run-status block, which is anchored
+            // top-left over the same canvas - the map/relic-grid collision one
+            // screen over, arriving on a screen whose content is centred.
+            var blockRows = screen.GetNode<Control>("RunStatusBar").GetChildren()
+                .OfType<Control>().Select(c => c.GetGlobalRect()).ToList();
+            var covered = tiles.Where(t => blockRows.Any(r => r.Intersects(t.GetGlobalRect())))
+                .Select(t => $"{t.GetGlobalRect()}").ToList();
+            Check("runsetup_tiles_clear_the_run_status_block", covered.Count == 0,
+                string.Join(", ", covered));
+
+            screen.QueueFree();
+        }
+        finally
+        {
+            pool.Clear();
+            pool.AddRange(saved);
+        }
+    }
+
+    // The screen's tiles, read back the way a player sees them: the heading
+    // label of each, in row order.
+    private static List<string> TileHeadings(GridContainer grid) =>
+        grid.GetChildren().OfType<ActivatablePanel>()
+            .Select(t => t.GetChild(0).GetChild<Label>(0).Text)
+            .ToList();
+
+    private static void Activate(ActivatablePanel tile) =>
+        tile._GuiInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+
+    // Typing and pressing Enter. TextChanged is not emitted by assigning Text
+    // from code, which is exactly what the screen's own filter relies on, so
+    // the field is set and then submitted the way the player leaves it.
+    private static void RunSetupCommitSeed(LineEdit field, string text)
+    {
+        field.Text = text;
+        field.EmitSignal(LineEdit.SignalName.TextSubmitted, text);
+    }
+
+    // The one path into a run, driven end to end: MainMenu's Start button calls
+    // this and nothing else does. Worth its own check because the failure is
+    // silent - before RunSetup was registered, ChangeScreen to it pushed an
+    // error and *returned*, leaving the player on the menu with a fully built
+    // RunState behind it.
+    //
+    // Last in the file, and it has to stay there: ChangeScreen puts a real
+    // scene through ChangeSceneToFile.
+    private void TestStartingARunGoesToRunSetup()
+    {
+        using var cutGuard = HardCutGuard.Protect();
+
+        RunManager.Instance.StartNewRun();
+
+        Check("starting_a_run_goes_to_run_setup",
+            RunManager.Instance.CurrentScreen == RunManager.ScreenState.RunSetup,
+            $"landed on {RunManager.Instance.CurrentScreen}");
+        // And it built a run to go with it, rather than routing to a screen
+        // that would read an empty RunState.
+        Check("starting_a_run_builds_the_run_first",
+            RunState.Deck.Count == 10 && RunState.PlayerMaxHp == RunState.StartingMaxHp
+            && RunState.Relics.Count == 1 && RunState.MapNodes.Count > 0,
+            $"deck={RunState.Deck.Count}, maxHp={RunState.PlayerMaxHp}, "
+            + $"relics={RunState.Relics.Count}, map={RunState.MapNodes.Count}");
+    }
+
+    // The authored pool, reachable for the two tests that need a fixed offer.
+    // Reflection rather than a test hook on BlessingDatabase: the production
+    // type should not grow a setter that exists only for this file, and this is
+    // the same approach RunSaveSmokeTest takes to AutoSaveScreens.
+    private static List<BlessingDefinition> BlessingPool()
+    {
+        var field = typeof(BlessingDatabase).GetField("Blessings",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        return (List<BlessingDefinition>)field!.GetValue(null)!;
     }
 }

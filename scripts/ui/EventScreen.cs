@@ -136,26 +136,15 @@ public partial class EventScreen : Control
     private void ShowPicker(ICardPickerOutcome picker, string textSoFar)
     {
         _pickerTitle.Text = picker.Prompt;
-        CardPicker.Populate(
-            _pickerList,
-            picker.Selectable(),
-            "Choose",
-            // Only the upgrade picker changes the card; the remove picker
-            // shows the card as it is, because what is being chosen is which
-            // one to lose.
-            index => picker is UpgradeChosenCardOutcome
-                ? CardUpgrade.Apply(RunState.Deck[index])
-                : RunState.Deck[index],
-            index => picker is UpgradeChosenCardOutcome
-                ? CardPicker.WasLine(RunState.Deck[index])
-                : null,
-            index =>
-            {
-                string message = picker.Apply(index);
-                _pickerView.Visible = false;
-                _mainView.Visible = true;
-                ShowResult(Combine(textSoFar, message));
-            });
+        // How the outcome renders - the card as it will be, or as it is - lives
+        // in CardPicker, so this screen and RunSetupScreen cannot disagree
+        // about what a third picker outcome would look like.
+        CardPicker.PopulateFor(_pickerList, picker, message =>
+        {
+            _pickerView.Visible = false;
+            _mainView.Visible = true;
+            ShowResult(Combine(textSoFar, message));
+        });
 
         _mainView.Visible = false;
         _pickerView.Visible = true;

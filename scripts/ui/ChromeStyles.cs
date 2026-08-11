@@ -158,6 +158,54 @@ public static class ChromeStyles
     private static StyleBoxFlat SliderFillStyle(bool focused) =>
         new() { BgColor = focused ? UiTheme.Palette.FocusRing : PixelSpec.Ramp.G3 };
 
+    // The seed field on RunSetupScreen is the first and only LineEdit in the
+    // project, and hollowdeck_theme.tres has no LineEdit entry at all - so an
+    // unstyled one inherits the default font and *nothing else*, rendering with
+    // Godot's stock blue-grey box, blue caret and blue selection. That is the
+    // mixed-media seam the pixel-art commitment exists to close, arriving
+    // through the one control type nobody had used yet.
+    //
+    // Written here rather than in the theme resource for the same reason
+    // ApplyFocusableSliderStyle is: it is one control on one screen, and the
+    // ramp colours are already tokens here. If a second LineEdit ever lands,
+    // move it into the .tres - a control styled two ways is the seam this file
+    // header is about.
+    //
+    // No font size is set: the theme default (Tiny5-Regular at 16) is already
+    // on the 8px design em, and an override here would be a literal
+    // PixelSpecSmokeTest has to keep agreeing with.
+    public static void ApplyLineEditStyle(LineEdit field)
+    {
+        field.AddThemeStyleboxOverride("normal", LineEditStyle(PixelSpec.Ramp.G1, UiTheme.BorderWidth.Normal));
+        field.AddThemeStyleboxOverride("focus", LineEditStyle(UiTheme.Palette.FocusRing, UiTheme.BorderWidth.Thick));
+        // G0 over the deep face, the same "this slot is not in play" treatment
+        // SlotStyle uses for an empty potion slot - the field goes read-only
+        // once a blessing is claimed and re-seeding would erase it.
+        field.AddThemeStyleboxOverride("read_only", LineEditStyle(PixelSpec.Ramp.G0, UiTheme.BorderWidth.Normal));
+
+        field.AddThemeColorOverride("font_color", PixelSpec.Ramp.N7);
+        field.AddThemeColorOverride("font_uneditable_color", LockedTint);
+        field.AddThemeColorOverride("font_selected_color", UiTheme.Palette.BgDeep);
+        field.AddThemeColorOverride("font_placeholder_color", PixelSpec.Ramp.N4);
+        field.AddThemeColorOverride("caret_color", UiTheme.Palette.AccentGoldBright);
+        field.AddThemeColorOverride("selection_color", UiTheme.Palette.AccentGold);
+    }
+
+    private static StyleBoxFlat LineEditStyle(Color border, int borderWidth)
+    {
+        var style = new StyleBoxFlat
+        {
+            BgColor = UiTheme.Palette.BgDeep,
+            BorderColor = border,
+        };
+        style.SetBorderWidthAll(borderWidth);
+        style.ContentMarginLeft = UiTheme.Spacing.Sm;
+        style.ContentMarginRight = UiTheme.Spacing.Sm;
+        style.ContentMarginTop = UiTheme.Spacing.Xs;
+        style.ContentMarginBottom = UiTheme.Spacing.Xs;
+        return style;
+    }
+
     private static StyleBoxFlat EmphasisState(Color fill, Color border)
     {
         var style = new StyleBoxFlat { BgColor = fill, BorderColor = border };

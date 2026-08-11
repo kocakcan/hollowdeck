@@ -39,6 +39,7 @@ public partial class BalanceSmokeTest : Node
         ActDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
+        BlessingDatabase.LoadAll();
 
         TestTheModelAgreesWithThePicker();
         TestEveryEnemyCanFight();
@@ -50,6 +51,7 @@ public partial class BalanceSmokeTest : Node
         TestAnEscapeCostsMoreThanTheNodeItLeaves();
         TestScoreThresholdsAreReachable();
         TestPotionDropYield();
+        TestBlessingsStayInTheirBand();
         TestUpgradeGrantsAreWhatTheDocsClaim();
 
         GD.Print($"BalanceSmokeTest: {_pass} passed, {_fail} failed");
@@ -430,6 +432,61 @@ public partial class BalanceSmokeTest : Node
         Check("expected_potion_drops_per_run_is_worth_the_belt",
             drops is >= 1.0 && drops <= RunState.MaxPotionSlots * 2,
             $"{drops:F1} drops per run against a {RunState.MaxPotionSlots}-slot belt");
+    }
+
+    // Every run takes exactly one blessing before the first map, so the pool
+    // decides where the curve's origin can be - which is the position every
+    // other table in this suite is measured against. Bands rather than exact
+    // figures, because the numbers are content and are meant to move; what may
+    // not move is the *range*.
+    //
+    // The floors are the load-bearing half. A run opening at 30 max HP is one
+    // act-1 elite from over at starter throughput, and a run opening with no
+    // gold cannot use the first shop it walks into - both are the "no rung may
+    // make act I unwinnable" assertion Phase 10 will need, arriving early.
+    private void TestBlessingsStayInTheirBand()
+    {
+        var deltas = BalanceModel.BlessingDeltas();
+
+        Check("the_blessing_pool_can_fill_an_offer", deltas.Count >= 3,
+            $"{deltas.Count} rows against an offer of 3");
+
+        // Nothing may cost more than a third of the opening HP, and nothing may
+        // grant more than half of it. Stated against RunState's own constants
+        // rather than 50, so moving the starting position moves the band with
+        // it instead of quietly invalidating it.
+        var hpOffenders = deltas
+            .Where(d => d.MaxHp < -RunState.StartingMaxHp / 3.0 || d.MaxHp > RunState.StartingMaxHp / 2.0)
+            .Select(d => $"{d.Id} {d.MaxHp:+0.#;-0.#}")
+            .ToList();
+        Check("no_blessing_moves_starting_max_hp_out_of_band", hpOffenders.Count == 0, Join(hpOffenders));
+
+        // Gold floors at 0 (LoseGoldOutcome), so the real question at the low
+        // end is whether a row can empty the purse *and* nothing else - a
+        // blessing that is purely a cost is not an offer.
+        var goldOffenders = deltas
+            .Where(d => RunState.StartingGold + d.Gold < 0
+                        || d.Gold > BalanceModel.ShopCardPrice * 5)
+            .Select(d => $"{d.Id} {d.Gold:+0.#;-0.#}")
+            .ToList();
+        Check("no_blessing_moves_starting_gold_out_of_band", goldOffenders.Count == 0, Join(goldOffenders));
+
+        // The one that is not about magnitude: a row offering nothing on any
+        // axis is a punishment wearing a reward's tile. Priced rather than
+        // resolved, so a cost paired with a *random* grant (a relic, a potion)
+        // still counts as an offer.
+        //
+        // A whitelist of gains rather than the obvious "every axis <= 0" test,
+        // because deck size is not signed the way the others are: Cards moves
+        // *either* way as a reward (a card offered, or a card removed - the
+        // latter being the strongest row in the pool), which is why the model
+        // keeps authored cards on Imposed instead and Imposed is absent here.
+        var allCost = deltas
+            .Where(d => !(d.MaxHp > 0 || d.Gold > 0 || d.Relics > 0 || d.Potions > 0
+                          || d.Upgrades > 0 || d.Hp > 0 || d.Cards != 0))
+            .Select(d => d.Id)
+            .ToList();
+        Check("every_blessing_offers_something", allCost.Count == 0, Join(allCost));
     }
 
     // Pins the two upgrade deltas CardUpgrade's comment describes, by id and

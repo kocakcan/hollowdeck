@@ -323,12 +323,67 @@ pays a choice of three relics and an act clear. Three things:
 | `MetaProgressionManager` | cross-run unlocks, persisted separately from run state |
 | `SettingsManager` | volumes, fullscreen, reduce-motion |
 
-**Screen flow:** `RunManager` drives MainMenu → MapScreen → {Combat, Elite, Event, Rest, Shop,
-Treasure} → RewardScreen → back to MapScreen → RunEnd → MetaProgressionScreen. Meta-progression
+**Screen flow:** `RunManager` drives MainMenu → RunSetupScreen → MapScreen → {Combat, Elite, Event,
+Rest, Shop, Treasure} → RewardScreen → back to MapScreen → RunEnd → MetaProgressionScreen.
+`ScenePaths` now covers every `ScreenState` — it used to document the *intended* flow with RunSetup
+deliberately unbuilt, and `RunSaveSmokeTest.TestAutoSaveScreensSetIsCorrect` asserts the two stay in
+agreement, because `ChangeScreen` to an unregistered state pushes an error and *returns*: no crash,
+no screen change, and a run left standing wherever it was. Meta-progression
 lives in its own save file (`user://meta_progression.json`) separate from in-run save state
 (`user://run_save.json`) — different lifetimes and versioning needs, don't merge them. The meta
 save carries a schema version and a v1→v2 migration; keep deserialization tolerant of unknown
 fields.
+
+**A run opens on a decision and a seed, and the two are the same fact.** `RunSetupScreen` sits
+between MainMenu and the first map: three **blessings** drawn from `data/blessings/blessings.json`,
+one taken, plus a typed seed field. A `BlessingDefinition` is a label, a description and a list of
+`EventOutcomeSpec`s — the *same* spec an event choice carries, resolved through the *same*
+`EventOutcomeRegistry.Begin`, which was widened from `Begin(EventChoice)` to
+`Begin(IReadOnlyList<EventOutcomeSpec>, string)` with the choice overload delegating to it. So a
+blessing needed **no new mechanical vocabulary at all**: that registry exists precisely because it
+is the non-combat one (`EffectContext` requires a live `CombatManager`/`Combatant`, which no menu
+screen has), and "an event choice offered before the map" is exactly what a blessing is. A
+`BlessingDefinition.AsChoice()` adapter would also have worked and is worse — it makes one content
+type impersonate another, where the overload leaves one implementation of the picker-is-pending
+contract, the override-joining and the "a picker must be the last spec" rule.
+
+Four things about it are load-bearing:
+
+- **Re-seeding rebuilds the whole run, and that is the feature.** `RunManager.StartNewRun` split
+  into `BeginRun(int seed)` — seed, `RngStreams.Init`, `RunState.InitNewRun`, *no screen change* —
+  and a `StartNewRun` that mints a seed and routes to RunSetup. Typing a seed or pressing Reroll
+  calls `BeginRun` again, so the map, the enemies and the three offers all move together. Anything
+  less makes a reproduced seed not reproduce.
+- **Which is why claiming a blessing takes the seed controls out of play.** `InitNewRun` resets
+  `Deck`/`Relics`/HP, so a re-seed after a blessing resolves would silently erase it. The field goes
+  read-only *and* `FocusModeEnum.None`, together, per the Disabled-is-not-enough rule below — and
+  the real guard is `_claimed`, which `CommitSeed`/`ApplySeed` check, because the lock is UI and the
+  guard is a fact about the run.
+- **The seed field commits on Enter and *discards* on the way out, and blur-to-commit is not
+  available here.** Godot moves focus on mouse-**down**, so committing on `FocusExited` fires
+  between the press and the release of a click on a blessing tile — and committing rebuilds the
+  offers, which frees the tile mid-click. Don't "fix" the field by making it commit on blur; the
+  rule is stated on screen (`SeedHintLabel`) instead, and `ScreenSmokeTest` pins it.
+- **The screen has to handle a pending card picker rather than forbid one.** `Begin` returns one for
+  `remove_chosen_card`/`upgrade_chosen_card`, and a screen dropping a non-null `Pending` would
+  resolve the blessing to *nothing* with no error. It is `EventScreen.ShowPicker` verbatim, down to
+  the `Regrab` on both swaps. `Unburdened` (remove a card from the ten you start with) is the
+  strongest row in the pool and the reason it was worth doing.
+- **No new RNG stream and no save bump.** Offers draw from `RngStreams.Shop`, where every non-combat
+  grant already draws; `RunSetup` is deliberately *not* in `AutoSaveScreens`, because `BeginRun` has
+  already built a valid `RunState` by then and `TryContinueRun` jumps to Map — so a save here would
+  let a player quit the setup screen and come back to a run whose blessing was never offered.
+
+`BalanceModel.BlessingDeltas` prices the pool and `BalanceReport` prints it, per the rule the potion
+pass wrote down: a data number that moves must be visible, not only its effect. Two traps in that
+pricing. `BalanceModel.Price` returns **null** for an outcome key it does not handle, and
+`PricesOutcome` asks that function rather than a list of case labels beside it — a `default` arm
+returning zero prices an unknown key as "changes nothing" with every table green, and a hand-written
+set does not close that (measured: deleting the `add_card` arm while leaving its key in the set left
+all 22 suites green and a Curse priced free). And **deck size is two axes, not one**: `Cards` is what
+the player is offered (a draw up, a *removal* down — a smaller deck is the gain in this genre) and
+`Imposed` is a card named by the author, which is how a Curse is authored. One signed column would
+print a Pain and two real cards as the same thing.
 
 **Acts:** a run is three acts, authored in `data/acts/acts.json` (`ActDefinition`/`ActDatabase`).
 `RunState.ActIndex` says which one is in play; `RunState.MapNodes` only ever holds the *current*
@@ -571,8 +626,8 @@ every non-combat grant already draws from.
 An earlier shard *shop* was removed — don't reintroduce shard-purchase language.
 
 There are **36 enemies** (7 normals + 3 elites per act, plus 6 bosses) across 3 acts. Card, relic,
-event, potion, status and effect counts all live in `data/*/*.json` and the relevant enums —
-read those rather than trusting a number here to stay current.
+event, potion, blessing, status and effect counts all live in `data/*/*.json` and the relevant
+enums — read those rather than trusting a number here to stay current.
 
 Those per-act counts are *enemy ids*, not encounter slots: each act's `eliteEncounters` also fields
 one of its own **normals** as an escort — `rot_hound` (act 1), `ember_wisp` (act 2), `hollow_shade`
@@ -620,9 +675,9 @@ primitive, unplayable card types, X-cost — and now the *status* half — `Arti
 `wake_on_damage` picker, and the `WeightedRandomIntentPicker` run cap that closed it — have all
 shipped, as has the `?` node that opened Phase 9 and the potion pass that followed it — rarity,
 per-act combat drops, and the reward screen those drops forced — plus relic tiers and the
-boss-relic choice those tiers made worth having. What's open is a start-of-run screen, the map's
-width, a skip streak on card rewards, and an ascension ladder. Don't treat this section as a to-do
-list.
+boss-relic choice those tiers made worth having, and the start-of-run screen: blessings and typed
+seed entry. What's open is the map's width, a skip streak on card rewards, and an ascension ladder.
+Don't treat this section as a to-do list.
 
 One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap
 is next read:
@@ -673,6 +728,13 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   owned-and-unlocked filter that four grant sites each carried a copy of, which is the `IsPlayable`
   argument one content type over — and the ladder **top-up**, which is `pool.Count < count` rather
   than `== 0` so a boss offering three cannot quietly offer two
+- `scripts/data/BlessingDatabase.cs` + `BlessingDefinition.cs` — the start-of-run pool and its
+  `Offer(count, rng)` draw: distinct, uniform, and with no `Rarity` on the row, because the pool is
+  small enough that every row is meant to be seen (`TierPool` is for the pools where that is false).
+  There is no exhaustion story either — nothing is owned yet, so the pool is whole on every draw
+- `scripts/ui/RunSetupScreen.cs` + `scenes/RunSetupScreen.tscn` — the screen between MainMenu and
+  the map. Holds the ordering trap the whole feature turns on (a re-seed after a claim would erase
+  the blessing) and the project's only `LineEdit`
 - `scripts/data/TipDatabase.cs` — the reward screen's tip line. `ForVisit` is a *rotation* off the
   run seed rather than an `RngStreams` draw, and the comment there says why: a stream's position is
   not serialized, and six `ScreenShot` fixtures re-render that screen
@@ -683,7 +745,8 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   relics off all 7, using the `target`/`condition`/`limit` vocabulary in
   `scripts/data/RelicTrigger.cs`. Subclassing `RelicBehavior` is the escape hatch and nothing
   currently uses it — `RelicRegistry` has one factory
-- `scripts/events/EventOutcomeRegistry.cs` — the 16 event outcome keys. Fourteen resolve
+- `scripts/events/EventOutcomeRegistry.cs` — the 16 non-combat outcome keys, shared by event choices
+  and start-of-run blessings through one `Begin(IReadOnlyList<EventOutcomeSpec>, string)`. Fourteen resolve
   instantly; two (`remove_chosen_card`, `upgrade_chosen_card`) implement `ICardPickerOutcome` and
   come back from `Begin()` as *pending*, for `EventScreen` to open a card grid against. A picker
   must be the last spec in a choice and may not appear inside a `gamble` — both enforced by
@@ -771,7 +834,7 @@ There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Rea
 failure.
 
 ```bash
-tools/run-smoke-tests.sh                 # all 21; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh                 # all 22; builds first, nonzero exit on any failure
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 
