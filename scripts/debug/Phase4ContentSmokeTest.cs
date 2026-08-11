@@ -1066,8 +1066,12 @@ public partial class Phase4ContentSmokeTest : Node
         var continueButton = instance.GetNode<Button>("CombatEndPanel/ContinueButton");
         continueButton.EmitSignal(Button.SignalName.Pressed);
 
-        Check("elite_reward_offers_a_guaranteed_relic", RewardContext.GuaranteedRelic is not null,
-            "RewardContext.GuaranteedRelic was null");
+        // Exactly one, which is the elite half of the count that decides how the
+        // reward row behaves. A boss offers three and the row opens a picker; an
+        // elite offers one and the row hands it over. An elite drifting to three
+        // would be silent here without the ==, since it is still "not null".
+        Check("elite_reward_offers_a_guaranteed_relic", RewardContext.RelicChoices.Count == 1,
+            $"RewardContext.RelicChoices had {RewardContext.RelicChoices.Count} entries, expected 1");
 
         // Offered, not granted - and that is the assertion now, not an
         // accident of where the test stops. Every reward on that screen is a

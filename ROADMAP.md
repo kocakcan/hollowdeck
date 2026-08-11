@@ -16,8 +16,9 @@ than as this genre.
 
 **Phase 7 closed the card half of that, and Phase 8 has since closed both of its own — the status
 roster and the enemy behaviours.** The six struck rows below are done; the live ones are what the
-rest of Phases 9 through 10 own. Phase 9 is open, and three of its items have landed: the `?` node,
-the potion pass, and relic tiers — which closes the last row of the diagnosis table.
+rest of Phases 9 through 10 own. Phase 9 is open, and four of its items have landed: the `?` node,
+the potion pass, relic tiers — which closes the last row of the diagnosis table — and the boss-relic
+choice those tiers made worth having.
 
 ### The diagnosis
 
@@ -459,7 +460,7 @@ distribution held against 20k samples of the real picker).
   area. Three things worth carrying:
   - **It is a rotation, not a roll**, and adding a sixth `RngStreams` entry would have been free.
     Three reasons not to: a stream's position is not serialized and `Init` re-runs on load, so a
-    draw outside the deterministic run pipeline replays differently after a resume; five `ScreenShot`
+    draw outside the deterministic run pipeline replays differently after a resume; six `ScreenShot`
     fixtures re-render this screen; and a rotation visits every tip once before repeating, which a
     roll does not.
   - **A tip naming a key would have been the third place a binding could drift.** `{hd_pile_draw}`
@@ -467,9 +468,53 @@ distribution held against 20k samples of the real picker).
     the suite refuses a token naming no real action.
   - **Hidden behind the card fan, not faded with the list.** It sits directly under the fan's Back
     button, and dimmed body text behind a modal reads as something the player failed to dismiss.
-- **The boss relic becomes a choice of three.** `CombatScreen.GrantRewardRelic` currently auto-grants
-  one at random. The boss relic is where a run's identity gets decided in this genre, and being
-  handed one is not the same event as choosing one. Reuses the `RewardScreen`/`CardPicker` shape.
+- ~~**The boss relic becomes a choice of three.**~~ **Shipped**, and the forecast was right that the
+  reward screen had already been built for it — `RewardContext`'s own comment predicted "adds rows
+  rather than fields", and it cost that type nothing. `RelicPool.Sample` already took a count, so the
+  draw was a one-line change. Content unchanged, no save bump, and the encounter-cost, curve, band,
+  boss and threshold tables byte-identical against `main`: three offers taken one at a time is still
+  one relic per boss, so nothing in `BalanceModel` could move.
+
+  The forecast was wrong about the shape in one place and silent about three others:
+  - **"Reuses the `CardPicker` shape" was half right, and the wrong half is the reusable one.**
+    `CardPicker.Populate` is card-typed and could not render a relic. What *is* reusable is
+    `WireGridNavigation`, which already takes `IReadOnlyList<Control>` because `LibraryScreen` reuses
+    it for relic tiles — so the picker is that call plus `LibraryScreen`'s tile, promoted to
+    `ScreenChrome.FocusableFrame` on its second caller. The extraction is pixel-identical on
+    `libraryrelics` and `libraryinspectrelic`, checked by shooting both branches.
+  - **The offer had to stop being a nullable single, and the count is now the whole decision.**
+    `GuaranteedRelic` → `RelicChoices`: one entry is an elite's and the row hands it over, more than
+    one is a boss's and the row opens the picker. Keeping both fields would have made "an elite with
+    three offers" representable, and nothing would have answered it.
+  - **The exhaustion fallback was honest at one draw and silently wrong at three — and the first fix
+    for it was wrong in a more interesting way than the bug.** `pool.Count == 0` became
+    `pool.Count < count`, identical at count 1 so no existing site moved, and a Boss tier down to two
+    rows can no longer offer two tiles with nothing thrown. But *topping up by concatenating the
+    ladder into the pool* puts the ladder in the same tier roulette as Boss, where `BossWeight` is
+    about half the total: measured, a boss with two of its own relics left came back with three
+    Rares and Commons while both Boss relics sat unoffered. It also quietly promoted `BossWeight`
+    from a number that only has to be positive into a live mixing ratio, contradicting the comment
+    directly above it. Drawing the site's own tiers to exhaustion *first* and then filling only the
+    shortfall keeps "Boss is never mixed with another tier" true. Caught in review, and the
+    assertion this branch had explicitly declined to write ("a mixed draw can legitimately come back
+    all-ladder") turned out to be exactly the one that pins it.
+  - **Two overlays would have been five predicates.** The picker shares the card fan's overlay node
+    rather than sitting beside it, because `RefreshRows` asks "is a modal open?" in five places.
+  - **The relic name is the thing that grows, and the guard is not the one that looks like it.**
+    Three tiles share an 800px band and `ScreenChrome.Heading` returns an unwrapped `Label` — whose
+    minimum width is its whole string, so a long name widens its *tile* rather than overflowing it.
+    Setting `AutowrapMode` is the whole fix; `TextFit` sits above it and buys legibility only
+    (fewer wrapped lines), which one-line-at-a-time mutation established and a three-line mutation
+    had obscured. Both are asserted, the second through the applied font size because that is the
+    only thing about it anything can see. Third instance of Phase 11's "a constant that fits the
+    worst case is not a constant that fits the best one", caught before a playtest this time — the
+    longest Boss name today clears by three characters.
+  - **A green suite was overwriting the developer's real `run_save.json`, and had been for two
+    phases.** Claiming a reward row calls `MarkClaimed`, which re-saves by design; three
+    `ScreenSmokeTest` tests do that outside a `RunSaveGuard`. `TestRestScreen`'s own guard could not
+    help, because it runs last and so snapshots the already-clobbered file and faithfully restores
+    the damage — which is why an in-progress run being eaten by a test run never looked like a test
+    problem. One guard now wraps the whole `_Ready` sequence, so a test added later inherits it.
 - **A start-of-run choice.** The seam is already cut — `ScreenState.RunSetup` is declared in the enum
   and left unregistered on purpose, with `RunManager.cs:35` saying why. This is where it gets wired,
   and it is also where **seed entry** goes: the same screen, and the thing that makes Phase 10
@@ -485,8 +530,21 @@ land on a forced floor, still carry enemies when they are a Combat, roll more th
 their type in the tooltip as well as the icon while their neighbours still show theirs, and reveal
 on entry — plus every `MapNodeType` routing to a screen through the extracted `EnterNode`),
 `RunSaveSmokeTest` (a concealed node surviving a round trip in both directions, and a v3 save whose
-map nodes omit the flag loading as visible), `ScreenSmokeTest` for the boss-relic choice and
-RunSetup.
+map nodes omit the flag loading as visible), `ScreenSmokeTest` for RunSetup.
+
+For the boss-relic choice: `ScreenSmokeTest` (the row asking rather than naming one of the three,
+opening the picker granting nothing, every offer on a tile, a pick granting exactly the one chosen
+and returning to the list rather than leaving the screen, the claimed row refusing further focus, a
+re-opened picker paying nothing twice, the tip hidden behind this view as well as the fan, and — the
+layout half, driven with a name longer than anything authored — three tiles inside their band, all
+the same width, and none clipped by it), `KeyboardSmokeTest` (focus taken into the picker, the list
+and Skip leaving the focus chain behind it, and both restored on Back, driven *after* the card fan in
+the same visit so a stale focus owner from the freed CardViews would show), `EffectSmokeTest` (three
+distinct Boss-tier offers, the tier carrying enough stock for every boss in a run, and the ladder
+top-up at four of five Boss relics owned — the arm the old `== 0` fallback could not reach),
+`ActSmokeTest` (a real boss win offering three, all Boss tier, none granted before the screen) and
+`Phase4ContentSmokeTest` (an elite offering exactly one, so an elite drifting to three is not merely
+"not null").
 
 For the relic pass: `EffectSmokeTest` (every relic row *authoring* a tier, read out of `relics.json`
 as text; every `RelicTier` member having stock, driven over the enum rather than a hand-written

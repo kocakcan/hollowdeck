@@ -93,7 +93,8 @@ public static class RelicPool
     };
 
     /// `count` distinct relics for a site, drawn without replacement and
-    /// weighted by tier. Returns fewer only if the site's pool is smaller.
+    /// weighted by tier. Returns fewer only if the site's pool is smaller even
+    /// after the ladder top-up below.
     ///
     /// The owned-and-unlocked filter lives here rather than at the five call
     /// sites that used to each carry a copy, for exactly the reason CardPool
@@ -102,22 +103,44 @@ public static class RelicPool
     /// look for it. It stays out of TierPool for the same reason.
     public static List<RelicDefinition> Sample(RelicSite site, int count, Random rng)
     {
-        var pool = Available(TiersFor(site));
+        var picked = TierPool.Sample(Available(TiersFor(site)), count, rng, r => r.Tier, WeightOf);
 
-        // A site whose own tiers are exhausted falls back to the ladder before
-        // giving up. Only Boss can actually reach this - the ladder is 22 rows
-        // against about six relics a run - and it is the one where returning
-        // nothing is worst: a player doing well enough to own every Boss relic
-        // would be paid nothing for killing a boss. A Rare instead is a worse
-        // reward, which is the correct shape for a pool running dry; silence is
-        // not.
-        if (pool.Count == 0 && site != RelicSite.Reward) pool = Available(Ladder);
+        // A site whose own tiers cannot fill the draw tops up from the ladder
+        // before giving up. Only Boss can actually reach this - the ladder is 22
+        // rows against about six relics a run - and it is the one where
+        // returning nothing is worst: a player doing well enough to own every
+        // Boss relic would be paid nothing for killing a boss. A Rare instead is
+        // a worse reward, which is the correct shape for a pool running dry;
+        // silence is not.
+        //
+        // The shortfall is filled by a *second* draw rather than by widening the
+        // first one's pool, and that is the whole subtlety. Concatenating the
+        // ladder into the pool up front would put it in the same tier roulette
+        // as Boss, where BossWeight is only half the total - so a boss with two
+        // of its own relics left would hand back Commons about one tile in two
+        // while both Boss relics sat unoffered. That also turns BossWeight into
+        // a live mixing ratio, which the comment above it says it is not. Drawn
+        // this way "Boss is never mixed with another tier" stays true: its own
+        // tier is exhausted before the ladder is asked for anything.
+        //
+        // Measured against `count` rather than zero, which at count 1 is the
+        // same condition - so every single-draw site behaves exactly as it did.
+        // A boss offering a choice of three has to actually offer three, and a
+        // Boss tier with two rows left would otherwise hand over two tiles with
+        // nothing thrown anywhere.
+        if (picked.Count < count && site != RelicSite.Reward)
+        {
+            var already = picked.Select(r => r.Id).ToHashSet();
+            picked.AddRange(TierPool.Sample(
+                Available(Ladder).Where(r => !already.Contains(r.Id)),
+                count - picked.Count, rng, r => r.Tier, WeightOf));
+        }
 
-        return TierPool.Sample(pool, count, rng, r => r.Tier, WeightOf);
+        return picked;
     }
 
-    /// One relic, weighted the same way - every site except the shop, which
-    /// stocks two.
+    /// One relic, weighted the same way - the treasure room, the elite reward
+    /// and the gain_relic event. The shop stocks two and a boss offers three.
     public static RelicDefinition? SampleOne(RelicSite site, Random rng) =>
         Sample(site, 1, rng).FirstOrDefault();
 

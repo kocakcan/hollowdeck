@@ -89,6 +89,14 @@ public partial class ScreenShot : Node
         // thing to look at is whether the list reads correctly *through* the
         // dim behind it.
         ["rewardcards"] = new("res://scenes/RewardScreen.tscn", SeedPotionReward, OpenRewardCards),
+        // The boss relic picker, the overlay's second view - three tiles where
+        // the card fan puts three cards. Seeded with the longest Boss-tier
+        // description in the content (Reaper's Tally, 82 characters against the
+        // next longest 58), because a tile is 224px wide and its rules text is
+        // the only thing in the picker that can outgrow it. The fan's own worst
+        // case is a card's fixed frame; a tile grows downward instead, and three
+        // tiles of different heights is what a screenshot has to rule out.
+        ["rewardbossrelic"] = new("res://scenes/RewardScreen.tscn", SeedActClearedReward, OpenRewardRelics),
         ["shop"] = new("res://scenes/ShopScreen.tscn", SeedShop),
         // The shop's card-removal picker, which like the rest site's Smith and
         // the event grid is unreachable without the click. Seeded with a
@@ -271,6 +279,11 @@ public partial class ScreenShot : Node
         RewardContext.ActCleared = null;
         RewardContext.PotionDrop = null;
         RewardContext.Claimed.Clear();
+        // The relic offer was the one field this block never cleared, which was
+        // harmless only because every reward fixture happened to overwrite it.
+        // A boss's three offers would otherwise leak into the next reward shot
+        // and turn its one-relic row into a picker.
+        RewardContext.RelicChoices = new List<RelicDefinition>();
 
         RunState.Gold = 129;
         RunState.PlayerMaxHp = 50;
@@ -531,7 +544,7 @@ public partial class ScreenShot : Node
     private static void SeedReward()
     {
         RewardContext.GoldAwarded = 45;
-        RewardContext.GuaranteedRelic = RelicDatabase.Get("anchor_stone");
+        RewardContext.RelicChoices = new List<RelicDefinition> { RelicDatabase.Get("anchor_stone") };
         // One card of each type and each rarity, on purpose: the card frame
         // carries two independent channels (fill = CardType, border = Rarity)
         // and this is the only shot where all three fills and all three border
@@ -578,6 +591,25 @@ public partial class ScreenShot : Node
         (row as Button)?.EmitSignal(BaseButton.SignalName.Pressed);
     }
 
+    // The same, for the relic picker. Pressing the row is the only way in for a
+    // three-offer reward, exactly as it is for the fan.
+    private static void OpenRewardRelics(Node screen)
+    {
+        var row = screen.FindChild(RewardScreen.RowName(RewardKind.Relic), recursive: true, owned: false);
+        (row as Button)?.EmitSignal(BaseButton.SignalName.Pressed);
+    }
+
+    // The three a boss offers, authored rather than sampled: RngStreams is
+    // seeded to FixtureSeed so a draw would be reproducible, but it would also
+    // change the day a Boss relic is added, and the point of the shot is the
+    // longest rules text in the tier rather than whichever three came up.
+    private static List<RelicDefinition> BossRelicChoices() => new()
+    {
+        RelicDatabase.Get("clockwork_gear"),
+        RelicDatabase.Get("reapers_tally"),
+        RelicDatabase.Get("hollow_crown"),
+    };
+
     // Act 2 cleared, i.e. the widest case: the longest act name of the three
     // acts that can precede one, and both bonus terms present. Act 3 grants
     // neither and its boss never reaches this screen at all.
@@ -585,11 +617,13 @@ public partial class ScreenShot : Node
     {
         SeedReward();
         RewardContext.GoldAwarded = 60;
-        // A boss reward, so a Boss-tier relic - which is also the only shot
-        // that shows that tier's colour on a row. SeedReward's anchor_stone is
-        // Common, and leaving it here would make the one screenshot of a boss
-        // payout a picture of the thing relic tiers exist to stop.
-        RewardContext.GuaranteedRelic = RelicDatabase.Get("clockwork_gear");
+        // A boss reward, so a Boss-tier relic - and a boss offers three of them
+        // now, which makes this the shot of the "Choose a boss relic" row. The
+        // picker itself is rewardbossrelic; this one is the list behind it.
+        // SeedReward's anchor_stone is Common, and leaving it here would make
+        // the one screenshot of a boss payout a picture of the thing relic
+        // tiers exist to stop.
+        RewardContext.RelicChoices = BossRelicChoices();
         var cleared = ActDatabase.At(1);
         var next = ActDatabase.At(2);
         RewardContext.ActCleared = new ActClear(

@@ -98,12 +98,12 @@ plus `TipDatabase.ForVisit(runSeed, RunState.VisitedNodeIds.Count)`, rendered in
 row count because the list is centred in its own area. Three reasons it does not draw from
 `RngStreams`, and appending a sixth stream would have been free: a stream's position is not
 serialized and `Init` re-runs on load, so a draw outside the deterministic run pipeline replays
-differently after a resume; five `ScreenShot` fixtures re-render this screen; and a rotation visits
+differently after a resume; six `ScreenShot` fixtures re-render this screen; and a rotation visits
 every tip once before repeating, which a roll does not. Tip text may carry one substitution —
 `{hd_some_action}` resolved through `ScreenKeyboardNav.ResolveKeyHints`, so a tip naming a key
-cannot drift from `project.godot`'s `[input]`. The line is **hidden**, not faded, while the card fan
-is open: it sits directly under the fan's Back button, and dimmed body text behind a modal reads as
-something the player failed to dismiss.
+cannot drift from `project.godot`'s `[input]`. The line is **hidden**, not faded, while the overlay
+is open — either view of it: it sits directly under that overlay's Back button, and dimmed body text
+behind a modal reads as something the player failed to dismiss.
 
 **What a Power buys is a status that pays out every turn.** `Metallicize` (Block), `Ritual`
 (Strength) and `Regen` (HP) are granted in `CombatManager.ApplyTurnStartGrants` and never decay,
@@ -223,7 +223,7 @@ carries what a fight is offering — gold, a relic, a potion drop, three card ch
 `HashSet<RewardKind> Claimed`; `RewardScreen` renders one row per offer and grants on the click.
 Nothing in `CombatScreen.OnContinuePressed` touches `RunState` any more, which is a change from how
 this worked for eight phases: gold was banked before the screen loaded and the relic was granted
-inside the same call that picked it (`GrantRewardRelic` → `PickRewardRelic`), so two of the four
+inside the same call that picked it (`GrantRewardRelic` → `PickRewardRelics`), so two of the four
 rows were things the player already had.
 
 That was invisible while a card was the only thing being offered, and stopped being invisible the
@@ -237,11 +237,11 @@ replaced it:
   the save taken when Reward opened has none of the claims in it — without the re-save, claiming
   gold and then quitting would return to a run that had never been paid. What is still *unclaimed*
   is still forfeited by quitting, which is the deal the card pick has always offered.
-- **The card fan is a modal over the list, and opening it is the one case `Regrab` cannot handle.**
+- **The overlay is a modal over the list, and opening it is the one case `Regrab` cannot handle.**
   `ScreenKeyboardNavListener.RegrabNow` deliberately leaves an existing focus owner alone, so the
-  row that was just pressed keeps the ring and it sits on the list *behind* the dim. `OpenCardOverlay`
-  grabs into the fan explicitly; `CloseCardOverlay` uses `Regrab`, which is correct there because the
-  focused `CardView` has just been freed. The list also leaves the focus chain
+  row that was just pressed keeps the ring and it sits on the list *behind* the dim. `ShowOverlay`
+  grabs into the open view explicitly; `CloseOverlay` uses `Regrab`, which is correct there because
+  the focused control has just been freed. The list also leaves the focus chain
   (`FocusModeEnum.None`, not `Disabled` — they are not illegal choices) and is faded to 0.3, because
   a 0.75 scrim alone left a column of gold headings perfectly legible behind the cards.
 - **`CombatScreen._continueResolved` guards the whole Continue handler**, not just the stats fold it
@@ -250,10 +250,54 @@ replaced it:
   `ChangeScreen` is not instant because `ScreenFade` holds the scene up. A click plus an Enter inside
   that window used to award the gold twice and grant *two* relics.
 
+**A boss offers three relics and the player takes one; an elite still offers one.** The offer is
+`RewardContext.RelicChoices`, a list rather than the nullable single it replaced, and **the count is
+what decides the interaction**: one entry and the Relic row *is* that relic (name, tier, rules text)
+and hands it over on press; more than one and no single relic can be the row, so it reads
+`Choose a boss relic` and opens a picker where the claim lands. Two fields — a guaranteed relic
+*and* a choice list — would make "an elite with three offers" and "a boss with neither" both
+representable, and neither has an answer. `CombatScreen.PickRewardRelics` is where the branch is,
+and the boss is the only site that gets one because it is the only site with room: a boss never
+rolls a potion, so the list has a free slot either way.
+
+Four things around it:
+
+- **The relic picker and the card fan share one overlay node, and that is the whole reason the modal
+  rules are still written once.** `RefreshRows` asks `_overlay.Visible` in five places (the list
+  fade, the tip hide, every row's `FocusMode`, Skip's, and `FirstClaimableControl`). Two sibling
+  overlays would have made each of those "or the other one too" — five places to widen and five to
+  forget, which is the shape `CombatManager.DecayAtTurnEnd` exists to refuse. Which *view* is open is
+  read off the areas' own `Visible` rather than tracked in a field, so it cannot disagree with the
+  tree. `ClearChoices` empties both areas unconditionally: a boss reward is the first fight that
+  opens both views in one visit to the screen.
+- **`RelicPool`'s exhaustion fallback is a top-up, and the shortfall is a *second draw*.** The
+  comparison moved from `pool.Count == 0` to `pool.Count < count`, which at count 1 is the same
+  condition — so every single-draw site is unchanged, while a Boss tier down to two rows can no
+  longer hand over two tiles with nothing thrown. What is easy to get wrong is *how*: widening the
+  first draw's pool with the ladder puts the ladder in the same tier roulette as Boss, where
+  `BossWeight` is about half the total, so a boss with two of its own relics left offers Commons
+  instead about one tile in two while both Boss relics sit unoffered — measured, that form returned
+  three Rares/Commons. Drawing the site's own tiers to exhaustion first and then filling the
+  remainder keeps **"Boss is never mixed with another tier"** true, which is what `BossWeight`'s own
+  comment depends on.
+- **A relic name is the one thing in a tile that can grow, and `AutowrapMode` is what holds it.**
+  Three tiles share an 800px band, and `ScreenChrome.Heading` returns an *unwrapped* `Label` whose
+  minimum width is its whole string — so a long name does not overflow its tile, it widens that tile
+  and the row hangs off both ends of the band. A wrapping Label has a small minimum width instead,
+  so the column keeps the 224 it was given. `TextFit` (Body→Small, the `EnemyView` ladder) sits above
+  it and buys **legibility, not layout**: deleting it breaks no width assertion, it only decides how
+  many lines a long name costs, and `GridContainer` levels every tile to the tallest. Both are
+  asserted in `ScreenSmokeTest` against a name longer than anything authored — the width checks catch
+  the autowrap, and a separate check on the applied font size is the only thing that can observe
+  `TextFit` at all. The longest Boss name today clears by about three characters, which is the
+  "constant that fits the best case" trap this project has shipped three times.
+- **`ScreenChrome.FocusableFrame` is the tile**, moved out of `LibraryScreen` when this became its
+  second caller. A focus ring drawn two ways is a seam the player sees and no suite can assert about.
+
 **A won fight rolls for a potion, at a rate authored per act.** `ActDefinition.PotionDropPercent` /
 `ElitePotionDropPercent` sit beside the gold dials in `data/acts/acts.json`, and
 `CombatScreen.RollPotionDrop` reads them off `RngStreams.Drops`. **A boss never rolls** — it already
-guarantees a relic and an act clear. Three things:
+pays a choice of three relics and an act clear. Three things:
 
 - **Both fields default to 0, and that is the wrong reading of an act that forgot the key.** Unlike
   every other absent-is-zero field in the data layer, a silent 0 disables the feature for that act
@@ -575,8 +619,9 @@ primitive, unplayable card types, X-cost — and now the *status* half — `Arti
 `Intangible`, `Plating` — and the *behaviour* half — `summon_enemy`, `onDeath`, escape, and now the
 `wake_on_damage` picker, and the `WeightedRandomIntentPicker` run cap that closed it — have all
 shipped, as has the `?` node that opened Phase 9 and the potion pass that followed it — rarity,
-per-act combat drops, and the reward screen those drops forced. What's open is relic tiers, the
-boss-relic choice, a start-of-run screen, an ascension ladder. Don't treat this section as a to-do
+per-act combat drops, and the reward screen those drops forced — plus relic tiers and the
+boss-relic choice those tiers made worth having. What's open is a start-of-run screen, the map's
+width, a skip streak on card rewards, and an ascension ladder. Don't treat this section as a to-do
 list.
 
 One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap
@@ -626,10 +671,11 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
 - `scripts/run/RelicPool.cs` — the same for relics, at 50/33/17 across the ladder, plus the
   per-site tier filter that is the actual feature (`RelicSite` → `TiersFor`). Holds the
   owned-and-unlocked filter that four grant sites each carried a copy of, which is the `IsPlayable`
-  argument one content type over
+  argument one content type over — and the ladder **top-up**, which is `pool.Count < count` rather
+  than `== 0` so a boss offering three cannot quietly offer two
 - `scripts/data/TipDatabase.cs` — the reward screen's tip line. `ForVisit` is a *rotation* off the
   run seed rather than an `RngStreams` draw, and the comment there says why: a stream's position is
-  not serialized, and five `ScreenShot` fixtures re-render that screen
+  not serialized, and six `ScreenShot` fixtures re-render that screen
 - `scripts/combat/CombatManager.cs` — turn loop, intent telegraphing, targeting sub-state
 - `scripts/effects/EffectRegistry.cs` + `IEffect.cs` — the composable effect system every
   card/relic/potion/enemy-move definition keys into

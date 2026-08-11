@@ -69,7 +69,7 @@ public partial class ArtScreenshot : Node
         map.QueueFree();
 
         RewardContext.GoldAwarded = 35;
-        RewardContext.GuaranteedRelic = null;
+        RewardContext.RelicChoices = new List<RelicDefinition>();
         RewardContext.PotionDrop = null;
         RewardContext.CardChoices = new List<CardDefinition>
         {

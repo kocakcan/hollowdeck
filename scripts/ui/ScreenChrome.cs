@@ -287,6 +287,50 @@ public static class ScreenChrome
         return panel;
     }
 
+    /// Frame, but focusable and clickable - a tile the player picks rather than
+    /// a panel they read. LibraryScreen's collection grids and the reward
+    /// screen's boss relic picker are both grids of these.
+    ///
+    /// ActivatablePanel (a PanelContainer), not Button: a Button doesn't
+    /// propagate a child's minimum size upward (it's not a Container), so
+    /// arbitrary icon/heading/description content would get clipped to the
+    /// button's own near-zero natural size. Focus/hover visuals are done by
+    /// hand instead - the same idiom ChromeStyles.ApplyFocusableSliderStyle
+    /// uses for HSlider, which has the identical problem (no built-in focus
+    /// stylebox on a non-Button) - and click/ui_accept activation comes from
+    /// ActivatablePanel for the same reason CardView hand-rolls its own.
+    ///
+    /// Lived in LibraryScreen until the reward screen needed the second copy.
+    /// It is here rather than there because a focus ring drawn two ways is a
+    /// seam the player sees and no suite can assert about.
+    public static ActivatablePanel FocusableFrame(Control content, float padding = UiTheme.Spacing.Md)
+    {
+        StyleBoxFlat NormalStyle()
+        {
+            var style = ChromeStyles.PanelStyle();
+            style.ContentMarginLeft = padding;
+            style.ContentMarginRight = padding;
+            style.ContentMarginTop = padding;
+            style.ContentMarginBottom = padding;
+            return style;
+        }
+
+        var panel = new ActivatablePanel { FocusMode = Control.FocusModeEnum.All };
+        panel.AddThemeStyleboxOverride("panel", NormalStyle());
+        panel.AddChild(content);
+
+        panel.FocusEntered += () =>
+        {
+            var focused = NormalStyle();
+            focused.BorderColor = UiTheme.Palette.FocusRing;
+            focused.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
+            panel.AddThemeStyleboxOverride("panel", focused);
+        };
+        panel.FocusExited += () => panel.AddThemeStyleboxOverride("panel", NormalStyle());
+
+        return panel;
+    }
+
     /// A framed art plinth: one pixel icon at `SpriteScale`, centred, on the
     /// darker BgDeep face so the art separates from the panel around it. The
     /// scale is the same 5x an enemy sprite renders at, which is what makes a

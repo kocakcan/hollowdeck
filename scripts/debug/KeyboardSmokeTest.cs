@@ -263,7 +263,7 @@ public partial class KeyboardSmokeTest : Node
         RunState.Relics = new List<RelicInstance>();
         RunState.Potions = new List<PotionInstance>();
         RewardContext.GoldAwarded = 25;
-        RewardContext.GuaranteedRelic = null;
+        RewardContext.RelicChoices = new List<RelicDefinition>();
         RewardContext.PotionDrop = null;
         RewardContext.CardChoices = new List<CardDefinition>
         {
@@ -334,7 +334,17 @@ public partial class KeyboardSmokeTest : Node
         RunState.Relics = new List<RelicInstance>();
         RewardContext.ActCleared = null;
         RewardContext.GoldAwarded = 25;
-        RewardContext.GuaranteedRelic = null;
+        // A boss's payout, so both of the overlay's views are reachable in one
+        // visit to the screen. That is the case worth driving here rather than
+        // in two fixtures: the fan and the relic picker share a Control, a dim
+        // and a Back button, so a bug in one view's teardown only shows up once
+        // the other has been opened after it.
+        RewardContext.RelicChoices = new List<RelicDefinition>
+        {
+            RelicDatabase.Get("clockwork_gear"),
+            RelicDatabase.Get("reapers_tally"),
+            RelicDatabase.Get("hollow_crown"),
+        };
         RewardContext.PotionDrop = PotionDatabase.Get("fire_potion");
         RewardContext.Claimed.Clear();
         RewardContext.CardChoices = new List<CardDefinition>
@@ -380,7 +390,7 @@ public partial class KeyboardSmokeTest : Node
             "a row behind the dim can still be tabbed to");
 
         // Backing out restores it, in both directions.
-        screen.GetNode<Button>("CardOverlay/CardCancelButton").EmitSignal(BaseButton.SignalName.Pressed);
+        screen.GetNode<Button>(RewardScreen.OverlayCancelPath).EmitSignal(BaseButton.SignalName.Pressed);
         await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
 
@@ -392,6 +402,36 @@ public partial class KeyboardSmokeTest : Node
             Row(RewardKind.Potion)!.FocusMode == Control.FocusModeEnum.All
             && screen.GetNode<Button>("SkipButton").FocusMode == Control.FocusModeEnum.All,
             "the list stayed out of the focus chain after the fan closed");
+
+        // The boss relic picker is the overlay's other view and has to satisfy
+        // the same contract. It is opened *after* the fan on purpose: the fan's
+        // CardViews were freed on the way out, and a picker that inherited a
+        // stale focus owner from them would look correct in a fixture that only
+        // ever opened one view.
+        Row(RewardKind.Relic)!.EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        Check("reward_relic_picker_takes_the_focus",
+            GetViewport().GuiGetFocusOwner() is ActivatablePanel,
+            $"focus is on '{GetViewport().GuiGetFocusOwner()?.Name}', not a tile in the picker");
+        Check("reward_list_leaves_the_focus_chain_behind_the_relic_picker",
+            Row(RewardKind.Potion)!.FocusMode == Control.FocusModeEnum.None
+            && screen.GetNode<Button>("SkipButton").FocusMode == Control.FocusModeEnum.None,
+            "a row behind the relic picker can still be tabbed to");
+
+        screen.GetNode<Button>(RewardScreen.OverlayCancelPath).EmitSignal(BaseButton.SignalName.Pressed);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        Check("reward_closing_the_relic_picker_returns_focus_to_the_list",
+            GetViewport().GuiGetFocusOwner() is Button { Disabled: false } back
+            && back.Name.ToString().EndsWith("Row"),
+            $"focus is on '{GetViewport().GuiGetFocusOwner()?.Name}' after backing out of the picker");
+        Check("reward_closing_the_relic_picker_restores_the_list_to_the_focus_chain",
+            Row(RewardKind.Potion)!.FocusMode == Control.FocusModeEnum.All
+            && screen.GetNode<Button>("SkipButton").FocusMode == Control.FocusModeEnum.All,
+            "the list stayed out of the focus chain after the picker closed");
 
         screen.QueueFree();
         await ToSignal(tree, SceneTree.SignalName.ProcessFrame);

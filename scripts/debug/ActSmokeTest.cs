@@ -319,6 +319,7 @@ public partial class ActSmokeTest : Node
             Check("boss_fight_reaches_combat_end", combat.State == CombatState.CombatEnd, $"state={combat.State}");
 
             int floorsBefore = RunState.Stats.FloorsInPreviousActs;
+            int relicsBefore = RunState.Relics.Count;
             instance.GetNode<Button>("CombatEndPanel/ContinueButton").EmitSignal(Button.SignalName.Pressed);
 
             Check("act_one_boss_win_advances_to_act_two", RunState.ActIndex == 1, $"actIndex={RunState.ActIndex}");
@@ -327,8 +328,18 @@ public partial class ActSmokeTest : Node
                 $"screen={RunManager.Instance.CurrentScreen}");
             Check("act_one_boss_win_banks_its_floors", RunState.Stats.FloorsInPreviousActs > floorsBefore,
                 $"floorsInPreviousActs={RunState.Stats.FloorsInPreviousActs}");
-            Check("boss_win_grants_a_relic", RewardContext.GuaranteedRelic is not null,
-                "bosses should guarantee a relic like elites do");
+            // A choice of three, not one relic. Both halves matter: the count,
+            // because a boss that offered one would render as an elite's row and
+            // hand its relic over on a single press; and the tier, because
+            // TiersFor(Boss) is the whole reason a boss reward is not a chest.
+            // Nothing is granted here either - the row is what grants.
+            Check("boss_win_offers_a_choice_of_relics", RewardContext.RelicChoices.Count == 3,
+                $"bosses should offer three relics to pick from, got {RewardContext.RelicChoices.Count}");
+            Check("boss_win_offers_only_boss_relics",
+                RewardContext.RelicChoices.All(r => r.Tier == RelicTier.Boss),
+                string.Join(", ", RewardContext.RelicChoices.Select(r => $"{r.Id}:{r.Tier}")));
+            Check("boss_win_grants_no_relic_before_the_screen", RunState.Relics.Count == relicsBefore,
+                $"relics={RunState.Relics.Count}, was {relicsBefore}");
             Check("boss_win_counted_in_stats", RunState.Stats.BossesSlain == 1,
                 $"bossesSlain={RunState.Stats.BossesSlain}");
 

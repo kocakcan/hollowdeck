@@ -610,6 +610,66 @@ public partial class EffectSmokeTest : Node
             fallback is not null && fallback.Tier != RelicTier.Boss,
             $"got {fallback?.Id ?? "null"} with every Boss relic already owned");
         RunState.Relics = new List<RelicInstance>();
+
+        TestBossOffersAChoiceOfThree();
+    }
+
+    // A boss offers three relics rather than granting one, so "the pool can pay"
+    // is now a question about a *count*. Every assertion above it draws one at a
+    // time and would pass against a tier with a single row left.
+    private void TestBossOffersAChoiceOfThree()
+    {
+        const int choices = 3;
+        RunState.Relics = new List<RelicInstance>();
+
+        var offered = RelicPool.Sample(RelicSite.Boss, choices, new System.Random(31));
+        Check("boss_offers_three_distinct_relics",
+            offered.Count == choices && offered.Select(r => r.Id).Distinct().Count() == choices,
+            $"got {offered.Count}: {string.Join(",", offered.Select(r => r.Id))}");
+        Check("boss_offers_three_boss_relics", offered.All(r => r.Tier == RelicTier.Boss),
+            string.Join(",", offered.Select(r => $"{r.Id}:{r.Tier}")));
+
+        // The content half, and the one that goes stale rather than breaking: a
+        // run reaches two non-final bosses, so the tier has to carry a choice
+        // plus what the first boss took. relic_pool_has_boss_relics above only
+        // proves there is one. The top-up below would cover a shortfall, but
+        // covering it with Rares is a fallback, not the design.
+        int bossStock = RelicDatabase.All.Count(r => r.Tier == RelicTier.Boss);
+        int rewardBosses = ActDatabase.Count - 1; // The final act's boss routes to Victory instead.
+        Check("boss_tier_can_pay_every_boss_in_a_run", bossStock >= choices + rewardBosses - 1,
+            $"{bossStock} Boss relics for {rewardBosses} boss rewards offering {choices} each");
+
+        // Own all but two, and the draw still has to come back with three. This
+        // is the arm the == 0 fallback could not reach: at two rows left the
+        // pool was non-empty, so nothing topped it up and a boss silently
+        // offered two tiles. Sampling one at a time - which is all any
+        // assertion above does - never sees it.
+        RunState.Relics = RelicDatabase.All
+            .Where(r => r.Tier == RelicTier.Boss)
+            .Skip(2)
+            .Select(r => new RelicInstance(r))
+            .ToList();
+
+        var topped = RelicPool.Sample(RelicSite.Boss, choices, new System.Random(11));
+        Check("boss_tops_up_from_the_ladder_when_its_tier_runs_short",
+            topped.Count == choices && topped.Select(r => r.Id).Distinct().Count() == choices,
+            $"got {topped.Count} with only 2 Boss relics left: {string.Join(",", topped.Select(r => r.Id))}");
+        // Both remaining Boss relics are in the offer, and this is the assertion
+        // that pins *how* the top-up works rather than merely that it happens.
+        // Filling the shortfall by widening the first draw's pool would put the
+        // ladder in the same tier roulette as Boss, where BossWeight is about
+        // half the total - so a boss with two of its own left would offer
+        // Commons instead about one tile in two while both Boss relics sat
+        // unoffered, and every other check here would still pass. The ladder is
+        // only asked for what the site's own tiers could not supply.
+        Check("boss_top_up_exhausts_its_own_tier_before_the_ladder",
+            topped.Count(r => r.Tier == RelicTier.Boss) == 2,
+            $"expected both remaining Boss relics, got {string.Join(",", topped.Select(r => $"{r.Id}:{r.Tier}"))}");
+        Check("boss_top_up_never_offers_one_already_owned",
+            !topped.Any(t => RunState.Relics.Any(owned => owned.Definition.Id == t.Id)),
+            string.Join(",", topped.Select(r => r.Id)));
+
+        RunState.Relics = new List<RelicInstance>();
     }
 
     // The tip line's data, which has no other guard: RewardScreen hides the row
