@@ -28,6 +28,7 @@ public partial class MapSmokeTest : Node
         ActDatabase.LoadAll();
 
         TestSingleSeedShape();
+        TestFloorWidthsAreInBand();
         TestManySeedsStayConnected();
         TestBossPickIsSeedDeterministic();
         TestConcealedNodesAreLegal();
@@ -37,6 +38,7 @@ public partial class MapSmokeTest : Node
         TestConcealedNodesHideTheirTypeUntilEntered();
         TestLongestActFitsOnScreen();
         TestNodesClearTheRunStatusBlock();
+        TestNodesStayApartAtEveryRelicCount();
 
         GD.Print($"MapSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -508,6 +510,14 @@ public partial class MapSmokeTest : Node
         RunState.CurrentNodeId = "";
         RunState.VisitedNodeIds = new HashSet<string>();
 
+        // Explicit rather than inherited. RunState.Relics is process-global and
+        // this test only ever passed its band check because whichever test ran
+        // before it happened to leave the list empty - carrying relics shrinks
+        // the band, and at four rows the span check below would read 51% and
+        // go red for a reason that has nothing to do with what it measures.
+        var relicsBefore = RunState.Relics;
+        RunState.Relics = new List<RelicInstance>();
+
         var instance = GD.Load<PackedScene>("res://scenes/MapScreen.tscn").Instantiate();
         AddChild(instance);
 
@@ -542,6 +552,7 @@ public partial class MapSmokeTest : Node
         Check($"{longest.Id}_graph_fills_the_vertical_band", bottom - top > designHeight * 0.6f,
             $"spans {bottom - top:F0}px of {designHeight:F0}");
 
+        RunState.Relics = relicsBefore;
         RunState.ActIndex = 0;
         instance.QueueFree();
     }
@@ -586,5 +597,199 @@ public partial class MapSmokeTest : Node
         RunState.Relics = relicsBefore;
         RunState.ActIndex = 0;
         instance.QueueFree();
+    }
+
+    // How wide a branching floor is allowed to be. Restated here rather than
+    // read off MapGenerator, for the same reason LegalConcealedTypes is: the
+    // band is a design decision paid for out of MapScreen's vertical pitch,
+    // so widening the generator has to fail here and be argued for rather than
+    // inherited. Floor 0 is pinned to the minimum separately - it is all
+    // Combat, so a wider one is a wider choice between identical rooms.
+    private const int MinFloorWidth = 3;
+    private const int MaxFloorWidth = 5;
+
+    private void TestFloorWidthsAreInBand()
+    {
+        var widths = new List<int>();
+        var illegal = new List<string>();
+        bool openingAlwaysMinimal = true;
+
+        foreach (var act in ActDatabase.All)
+        {
+            for (int seed = 0; seed < 40; seed++)
+            {
+                var nodes = MapGenerator.Generate(new Random(seed), act);
+                int lastFloor = nodes.Max(n => n.Floor);
+                if (nodes.Count(n => n.Floor == 0) != MinFloorWidth) openingAlwaysMinimal = false;
+
+                // The two forced floors at the end are single nodes by
+                // construction and are covered by AssertShape, not here.
+                foreach (var floor in nodes.Where(n => n.Floor > 0 && n.Floor < lastFloor - 1)
+                             .GroupBy(n => n.Floor))
+                {
+                    int width = floor.Count();
+                    widths.Add(width);
+                    if (width < MinFloorWidth || width > MaxFloorWidth)
+                    {
+                        illegal.Add($"{act.Id} seed {seed} floor {floor.Key}: {width}");
+                    }
+                }
+            }
+        }
+
+        Check("branching_floors_stay_in_the_width_band", illegal.Count == 0,
+            $"{widths.Count} floors sampled, {illegal.Count} illegal: {string.Join(", ", illegal.Take(5))}");
+        Check("floor_0_is_pinned_to_the_minimum_width", openingAlwaysMinimal,
+            $"expected every opening floor to be {MinFloorWidth} nodes");
+
+        // A band whose ends never occur is a band in name only - this is what
+        // would catch MaxNodesPerFloor being raised and MinNodesPerFloor being
+        // dragged up with it, which reads as "still 3-5" in the diff.
+        Check("both_ends_of_the_width_band_actually_occur",
+            widths.Contains(MinFloorWidth) && widths.Contains(MaxFloorWidth),
+            $"widths seen: [{string.Join(",", widths.Distinct().OrderBy(w => w))}]");
+    }
+
+    // The clear air two node buttons must keep, and the relic rows the map is
+    // willing to give the status block. MapScreen.MinNodeGap and
+    // MapScreen.MaxRelicRows, restated for the reason above.
+    private const float MinNodeGap = 4f;
+    private const int MaxRelicRowsOnTheMap = 3;
+
+    // Nothing in this repo has ever asserted that two map nodes do not overlap
+    // each other, and at 3-4 wide nothing needed to: the pitch was 97px under
+    // 64px nodes even at three rows of relics. Five wide spends that margin,
+    // and the failure is silent in a specific way - TestLongestActFitsOnScreen
+    // keeps passing through it, because nodes drawn on top of one another are
+    // still inside the design rect and still span 60% of the band.
+    //
+    // Two things this drives that no other layout test here does. It sweeps
+    // *relic counts*, because the band top is a function of them and the
+    // crowded end is the one that breaks (20 is BalanceModel.Reachable's best
+    // routed relic count, i.e. the most the game can actually hand out). And
+    // it sets CurrentNodeId, because BuildCurrentNodeRing returns immediately
+    // without one - so the ring, which is wider than the node and was a flat
+    // constant until this change, has been invisible to every test in the file.
+    private void TestNodesStayApartAtEveryRelicCount()
+    {
+        var longest = ActDatabase.All.OrderByDescending(a => a.FloorCount).First();
+        var relicsBefore = RunState.Relics;
+        RunState.ActIndex = ActDatabase.All.ToList().IndexOf(longest);
+
+        // The seed is *searched for*, not written down. Floor width is rolled
+        // per floor, so a hardcoded seed tests whatever width it happens to
+        // produce - and a fixture that quietly stopped containing a widest
+        // floor would leave every assertion below green while measuring a
+        // narrower map than the one that can actually be generated. Seed 11 is
+        // where the other two layout tests start, so this is also the diff
+        // that shows if it stops being the crowded case.
+        int seed = Enumerable.Range(0, 200).First(s =>
+            MapGenerator.Generate(new Random(s), longest)
+                .GroupBy(n => n.Floor).Max(g => g.Count()) == MaxFloorWidth);
+        Check("layout_is_driven_at_the_widest_floor_the_generator_makes",
+            MapGenerator.Generate(new Random(seed), longest).GroupBy(n => n.Floor).Max(g => g.Count())
+                == MaxFloorWidth,
+            $"{longest.Id} seed {seed} is {MaxFloorWidth} wide");
+
+        // 21 is BalanceModel.Reachable's best routed relic count *after* the
+        // widening (it was 20 before - more map to route through is more
+        // relics to collect), and 24 is headroom over it. RelicColumnsForBand
+        // keeps the grid to MaxRelicRows at any count, so what these actually
+        // pin is that it still does at the counts the game can produce.
+        foreach (int relicCount in new[] { 0, 6, 7, 13, 18, 21, 24 })
+        {
+            RunState.MapNodes = MapGenerator.Generate(new Random(seed), longest);
+            RunState.VisitedNodeIds = new HashSet<string>();
+            RunState.Relics = RelicDatabase.All.Take(relicCount).Select(r => new RelicInstance(r)).ToList();
+
+            // The middle of the widest floor, so the ring is measured with a
+            // neighbour above and below it rather than at the end of a column.
+            var widest = RunState.MapNodes.GroupBy(n => n.Floor)
+                .OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First()
+                .OrderBy(n => n.Column).ToList();
+            RunState.CurrentNodeId = widest[widest.Count / 2].Id;
+
+            var instance = GD.Load<PackedScene>("res://scenes/MapScreen.tscn").Instantiate();
+            AddChild(instance);
+            var nodeButtons = instance.GetNode<Control>("NodeButtons");
+            var buttons = nodeButtons.GetChildren().OfType<Button>().ToList();
+
+            float closest = float.MaxValue;
+            string closestPair = "none";
+            for (int i = 0; i < buttons.Count; i++)
+            {
+                for (int j = i + 1; j < buttons.Count; j++)
+                {
+                    var a = new Rect2(buttons[i].Position, buttons[i].Size);
+                    var b = new Rect2(buttons[j].Position, buttons[j].Size);
+                    // Gap along whichever axis they are actually separated on;
+                    // a negative on both axes is an overlap.
+                    float gapX = Mathf.Max(a.Position.X - b.End.X, b.Position.X - a.End.X);
+                    float gapY = Mathf.Max(a.Position.Y - b.End.Y, b.Position.Y - a.End.Y);
+                    float gap = Mathf.Max(gapX, gapY);
+                    if (gap < closest)
+                    {
+                        closest = gap;
+                        closestPair = $"{buttons[i].Position} vs {buttons[j].Position}";
+                    }
+                }
+            }
+            var block = instance.GetNode<Control>("RunStatusBar");
+            Check($"nodes_stay_apart_with_{relicCount}_relics", closest >= MinNodeGap,
+                $"closest gap {closest:F1}px (need {MinNodeGap}), {closestPair}, " +
+                $"block is {block.GetCombinedMinimumSize().Y:F0}px tall");
+
+            // The pitch the layout settled on, read back off the rendered
+            // buttons rather than recomputed - a test that redoes the
+            // arithmetic agrees with itself rather than with the screen.
+            var column = buttons.GroupBy(b => Mathf.RoundToInt(b.Position.X))
+                .OrderByDescending(g => g.Count()).First()
+                .OrderBy(b => b.Position.Y).ToList();
+            float pitch = column.Count < 2
+                ? float.MaxValue
+                : column.Skip(1).Zip(column, (lower, upper) => lower.Position.Y - upper.Position.Y).Min();
+
+            // The relic grid is what the band is competing with, so cap it
+            // directly rather than only measuring the consequence. Without
+            // this the mechanism is invisible: at the widths in play either
+            // half of the fix alone squeaks past the gap check, so a dropped
+            // RelicColumnsForBand would leave every other assertion green.
+            int relicRows = relicCount == 0 ? 0 : Mathf.CeilToInt(
+                relicCount / (float)instance.GetNode<GridContainer>(
+                    "RunStatusBar/RelicRow").Columns);
+            Check($"relic_grid_stays_within_its_row_budget_with_{relicCount}_relics",
+                relicRows <= MaxRelicRowsOnTheMap,
+                $"{relicRows} rows (budget {MaxRelicRowsOnTheMap}), pitch {pitch:F1}px");
+
+            // The ring is added first and moved to index 0 so it draws under
+            // the buttons; it is the only Panel in there.
+            var ring = nodeButtons.GetChildren().OfType<Panel>().FirstOrDefault();
+
+            // A ring wider than the pitch bleeds into the cell of the node
+            // above and below even when it misses their button rects, which
+            // muddies the one thing it exists to say. This is the assertion
+            // that makes the ring's derivation observable - a flat
+            // NodeSize + 20f passes every other check in this file.
+            Check($"current_node_ring_is_no_wider_than_the_pitch_with_{relicCount}_relics",
+                ring is not null && ring.Size.Y <= pitch,
+                ring is null ? "no ring" : $"ring {ring.Size.Y:F1}px against a {pitch:F1}px pitch");
+            var currentButton = buttons.FirstOrDefault(b =>
+                b.GetRect().HasPoint(ring?.GetRect().GetCenter() ?? new Vector2(-1, -1)));
+            var ringCollisions = ring is null
+                ? new List<string>()
+                : buttons.Where(b => b != currentButton && ring.GetRect().Intersects(b.GetRect()))
+                    .Select(b => $"node at {b.Position}").ToList();
+            Check($"current_node_ring_clears_its_neighbours_with_{relicCount}_relics",
+                ring is not null && ringCollisions.Count == 0,
+                ring is null
+                    ? "no ring was built - CurrentNodeId did not take"
+                    : $"ring {ring.GetRect()} hits {ringCollisions.Count}: {string.Join(", ", ringCollisions)}");
+
+            instance.QueueFree();
+        }
+
+        RunState.Relics = relicsBefore;
+        RunState.CurrentNodeId = "";
+        RunState.ActIndex = 0;
     }
 }

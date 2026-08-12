@@ -799,9 +799,13 @@ public partial class ScreenShot : Node
     //   the first "?" it reveals - stopping there is what puts a revealed one
     //              behind the player and, usually, a live one still ahead.
     //              Without it the walk length decides whether the feature is in
-    //              the shot at all by coincidence: act 1 / seed 7 has exactly
-    //              two concealed nodes and the 3-floor walk consumed both, so
-    //              the map shot a human reaches for first contained no "?".
+    //              the shot at all by coincidence: seed 7's act 1 map once held
+    //              exactly two concealed nodes and a 3-floor walk consumed
+    //              both, so the map shot a human reaches for first contained
+    //              no "?" at all. Deliberately not restated as a count here -
+    //              widening the floors to 3-5 regenerated every seed's graph
+    //              and would have made any number written down wrong. The rule
+    //              is what survives that; the incident is only why it exists.
     private static void SeedMapWalkedTo(int floors)
     {
         RunState.MapNodes = MapGenerator.Generate(new Random(7), RunState.CurrentAct);

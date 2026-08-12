@@ -396,6 +396,31 @@ public partial class BalanceSmokeTest : Node
             Check($"score_{label}_is_reachable", metric.Best >= needs,
                 $"needs {needs}, best over {Seeds} seeds is {metric.Best}");
         }
+
+        // The other end, which every check above is structurally blind to.
+        // Best >= needs is one-sided: anything that hands the player more map
+        // to route through can only push Best up, so a change that made a
+        // category free would leave this whole test greener than before. That
+        // is not hypothetical - widening the map 3-4 to 3-5 is exactly such a
+        // change, and the only signal it had was a Sweep row in the report
+        // that *disappears* when the category collapses.
+        //
+        // Banded rather than pinned, and only against the categories that are
+        // supposed to be hard. Gold and relics sit at 100% by design (a run
+        // that reaches act 3 has earned them), so a blanket "nothing may be
+        // easy" would be false on main.
+        // Max(), not [^1]: RunScore's tier tables are authored hardest-first,
+        // so indexing from the end picks the *easiest* tier and asserts
+        // nothing (measured - it reads 99% and fails on main).
+        const double Free = 0.95;
+        int hardestTier = deckTiers.Max();
+        double hardestDeck = reach.DeckSize.FractionAtLeast(hardestTier);
+        Check("score_hardest_deck_tier_stays_demanding", hardestDeck < Free,
+            $"the deepest deck threshold ({hardestTier}) is routable on {hardestDeck:P0} of seeds");
+
+        bool anythingDemanding = categories.Any(c => c.Metric.FractionAtLeast(c.Needs) < Free);
+        Check("score_ladder_still_has_something_to_route_for", anythingDemanding,
+            $"every category is reachable on >={Free:P0} of seeds - the track asks nothing");
     }
 
     // The potion drop yield. Potions were shop- and event-only until Phase 9,
