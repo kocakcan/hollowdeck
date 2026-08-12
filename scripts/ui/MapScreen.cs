@@ -44,8 +44,37 @@ public partial class MapScreen : Control
     // 116 survived three phases: the seventh relic wraps the grid to a second
     // row and the block grows past it.
     private const float TopMargin = 116f;
-    private const float BottomMargin = 88f;
+
+    // Derived, not chosen, and it had to be re-derived when floors went 3-4
+    // wide to 3-5: the band is always spent in full, so every pixel here is a
+    // pixel off the pitch. The bottom node's lower edge lands at exactly
+    // DesignHeight - BottomMargin, the current-node ring bleeds at most
+    // MaxRingBleed/2 past it, and BackButton sits at y=592 (a -56 offset from
+    // the bottom in MapScreen.tscn). So 648 - BM + 10 <= 590, i.e. BM >= 68.
+    // It was 88, which was 20px of clear air nothing was using.
+    //
+    // Headroom rather than a fix, and labelled as such deliberately:
+    // RelicColumnsForBand is what actually makes five wide fit, and reverting
+    // this line alone leaves every suite green. It is here because a denser
+    // map is worth the pitch (79.75px against 74.75 at three relic rows), not
+    // because anything breaks without it.
+    private const float BottomMargin = 68f;
     private const float DesignHeight = 648f;
+
+    // The floor on vertical pitch: two nodes closer than this read as one
+    // block rather than as two rooms, since all that separates them is the
+    // theme's 2px border on each. Nothing enforces it at layout time - the
+    // pitch is fully determined by the band, so there is no clamp that could
+    // (raising columnSpacing pushes nodes off the bottom, lowering bandTop
+    // buries them under the relic grid). It is a *budget*, spent by
+    // MaxNodesPerFloor at one end and by how many relic rows the run is
+    // carrying at the other, and MapSmokeTest.TestNodesStayApartAtEveryRelicCount
+    // is what actually holds it.
+    private const float MinNodeGap = 4f;
+
+    // Relic rows the map is willing to give the status block before it starts
+    // widening the grid instead - see RelicColumnsForBand.
+    private const int MaxRelicRows = 3;
 
     // Clear air between the status block and the topmost node, when the block
     // is what decides the band top.
@@ -53,6 +82,14 @@ public partial class MapScreen : Control
 
     private Control _nodeButtons = null!;
     private readonly Dictionary<string, Vector2> _nodeCenters = new();
+
+    // The pitch BuildLayout settled on. A field rather than a parameter for
+    // the same reason _nodeCenters is one: _Draw needs it too, and _Draw can
+    // fire on a screen whose RunState has already moved on to the next act
+    // (see the comment above it). Everything that has to stay legible as the
+    // band tightens - the current-node ring, the bow on the paths - is derived
+    // from this rather than from a constant that was measured at four wide.
+    private float _columnSpacing = MaxColumnSpacing;
 
     // Where the keyboard starts. From here Tab and the arrow keys only ever
     // visit legal moves, so the map still needs no navigation code of its own -
@@ -100,7 +137,7 @@ public partial class MapScreen : Control
         // so a player who had just cleared act 2's boss had no way to know a
         // third chapter was what the fresh map in front of them meant.
         ScreenChrome.AddTitle(this, $"Act {RunState.ActIndex + 1} of {ActDatabase.Count} — {act.Name}");
-        var runStatus = ScreenChrome.AddRunStatus(this);
+        var runStatus = ScreenChrome.AddRunStatus(this, relicColumns: RelicColumnsForBand(RunState.Relics.Count));
 
         BuildLayout(BandTop(runStatus));
         BuildButtons();
@@ -167,11 +204,17 @@ public partial class MapScreen : Control
     // node on the same pixels. The relics are drawn after the nodes and win,
     // so the node underneath was simply unreadable.
     //
-    // Vertical is the axis that has the room to give. Indenting the left-hand
-    // floors instead is the other fix and a worse one: floor spacing is already
-    // derived from a width act 3's ten floors do not comfortably fit (104px
-    // against MaxFloorSpacing's 130), so paying for the block out of the
-    // horizontal budget squeezes every act's longest map.
+    // Vertical is the axis that has the room to give - but only up to a point,
+    // and where that point is moved when floors went 3-4 wide to 3-5. Every
+    // relic row costs 44px of band, which is 11px of pitch at five wide, so
+    // the block can no longer be allowed to grow without limit: past
+    // MaxRelicRows the trade runs the other way and RelicColumnsForBand pays
+    // for the band out of the block's *width* instead.
+    //
+    // Indenting the left-hand floors is the third option and still the worst
+    // one: floor spacing is already derived from a width act 3's ten floors do
+    // not comfortably fit (104px against MaxFloorSpacing's 130), so paying for
+    // the block out of the horizontal budget squeezes every act's longest map.
     //
     // GetCombinedMinimumSize rather than Size, because this runs in _Ready:
     // the container has not sorted yet and Size is still zero. The minimum is
@@ -179,6 +222,33 @@ public partial class MapScreen : Control
     // height the block will settle at - it has no expand flags.
     private static float BandTop(Control runStatus) =>
         Mathf.Max(TopMargin, runStatus.Position.Y + runStatus.GetCombinedMinimumSize().Y + BandGap);
+
+    // How wide to wrap the relic grid *on this screen*. ScreenChrome's default
+    // 6 costs a row per 6 relics and each row costs 44px of band, which at
+    // five wide is 11px of pitch - so a relic-heavy run walks the map's nodes
+    // into each other. Past MaxRelicRows the map buys height back by spending
+    // width, which is the same trade ShopScreen makes in the opposite
+    // direction (its four-card row reaches further left than the default grid,
+    // so it narrows the grid to stay clear of the cards).
+    //
+    // The number this has to cover is measured, not guessed:
+    // BalanceModel.Reachable puts the best routed relic count at 21 (it was
+    // 20 before the map widened - more map to route through is more relics to
+    // collect), which at the default six columns is a fourth row.
+    //
+    // This is the load-bearing half of paying for the width, and BottomMargin's
+    // 20 reclaimed pixels are not - a distinction worth stating because the
+    // tidy version of the story ("two halves, both needed") is false and was
+    // committed once before mutation testing caught it. Measured, with the
+    // derived ring in place: without this cap, four relic rows at five wide
+    // leave a 63.75px pitch under 64px nodes and they overlap outright. With
+    // it, the old 88px bottom margin was already fine (74.75px pitch, 10.75px
+    // gap). The margin buys headroom on top - 79.75 and 15.75 - which is worth
+    // having on a map that just got denser, but nothing depends on it and
+    // reverting it alone leaves every suite green.
+    private static int RelicColumnsForBand(int relicCount) => Mathf.Max(
+        ScreenChrome.RelicColumns,
+        Mathf.CeilToInt(relicCount / (float)MaxRelicRows));
 
     private void BuildLayout(float bandTop)
     {
@@ -192,14 +262,22 @@ public partial class MapScreen : Control
             : Mathf.Min(MaxFloorSpacing, availableWidth / (floorCount - 1));
 
         // Same derivation, vertically: the widest floor decides the pitch, so
-        // a 4-deep act spreads across the whole band and a 2-deep one does not
+        // a 5-deep act spreads across the whole band and a 2-deep one does not
         // stretch into a ladder.
+        //
+        // This is where the width of the map is actually paid for. The band is
+        // always spent in full, so the pitch is availableHeight / (widest - 1)
+        // and nothing else - measured at five wide, that is 100 / 90.75 /
+        // 79.75 px for one, two and three rows of relics, against 64px nodes
+        // and a MinNodeGap of 4. RelicColumnsForBand is what stops a fourth
+        // row existing.
         var floors = RunState.MapNodes.GroupBy(n => n.Floor).ToList();
         int widestFloor = floors.Count == 0 ? 1 : floors.Max(f => f.Count());
         float availableHeight = DesignHeight - bandTop - BottomMargin - NodeSize;
         float columnSpacing = widestFloor <= 1
             ? MaxColumnSpacing
             : Mathf.Min(MaxColumnSpacing, availableHeight / (widestFloor - 1));
+        _columnSpacing = columnSpacing;
         float bandCenterY = bandTop + (availableHeight + NodeSize) / 2f;
 
         foreach (var floor in floors)
@@ -225,6 +303,12 @@ public partial class MapScreen : Control
     // plus an always-on glow, instead of relying solely on its icon/"BOSS"
     // text to carry that weight like every other node type does.
     private const float BossNodeSize = PixelSpec.IconGrid * 3;
+
+    // How far the current-node ring may stand off its node, and the clear air
+    // it keeps from the node above and below. Both are ceilings that only bind
+    // when the band is roomy - see BuildCurrentNodeRing.
+    private const float MaxRingBleed = 20f;
+    private const float RingGap = 4f;
 
     private void BuildButtons()
     {
@@ -328,7 +412,25 @@ public partial class MapScreen : Control
         if (string.IsNullOrEmpty(RunState.CurrentNodeId)) return;
         if (!_nodeCenters.TryGetValue(RunState.CurrentNodeId, out var center)) return;
 
-        const float ringSize = NodeSize + 20f;
+        // Derived from the pitch, not from NodeSize alone. This is the widest
+        // thing in the vertical stack - 20px wider than the node it marks - so
+        // it is what runs out of room first as the band tightens, and a flat
+        // NodeSize + 20f is a constant measured against a band that four-wide
+        // floors never came close to filling. At five wide it is live: the
+        // crowded case leaves a 79.75px pitch, and an 84px ring is wider than
+        // the cell it sits in.
+        //
+        // Measured, so the honest version rather than the tidy one: this was
+        // *not* already broken at four wide. The worst case a run can actually
+        // reach there (20 relics, four rows) leaves an 85px pitch and the flat
+        // ring cleared it by a pixel. Widening is what made the derivation
+        // necessary, and MapSmokeTest holds it as a ring-against-pitch
+        // assertion rather than trusting this comment.
+        //
+        // Clamped at NodeSize on the low end rather than allowed to keep
+        // shrinking: a ring narrower than the node it marks stops reading as a
+        // ring, and stops being the thing a too-tight band shows up on.
+        float ringSize = Mathf.Clamp(_columnSpacing - RingGap, NodeSize, NodeSize + MaxRingBleed);
         var ring = new Panel
         {
             Position = center - new Vector2(ringSize / 2f, ringSize / 2f),

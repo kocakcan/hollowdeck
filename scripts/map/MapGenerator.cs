@@ -17,8 +17,23 @@ namespace Hollowdeck.Map;
 // of the run seed too.
 public static class MapGenerator
 {
+    // How wide a branching floor gets. 5 is not a taste call and not the
+    // genre's number - Slay the Spire is seven wide and scrolls. This map does
+    // not scroll (Phase 4 made it fill one canvas deliberately), and MapScreen
+    // derives the vertical pitch from the band it has left, so width is spent
+    // directly out of the space between nodes: at 1152x648 a 6-wide floor puts
+    // 58px of pitch under 64px nodes once the run is carrying three rows of
+    // relics, and a 7-wide floor overlaps with no relics at all. 5 is the
+    // widest the canvas holds.
+    //
+    // So this constant and MapScreen's layout are coupled, which nothing about
+    // reading either file alone would suggest: raising it without re-deriving
+    // the pitch there draws nodes on top of each other, and every suite stays
+    // green while it happens. MapSmokeTest.TestFloorWidthsAreInBand restates
+    // the band rather than importing it from here, so widening has to be
+    // argued for in two places instead of inherited in one.
     private const int MinNodesPerFloor = 3;
-    private const int MaxNodesPerFloor = 4;
+    private const int MaxNodesPerFloor = 5;
 
     public static List<MapNode> Generate(Random rng, ActDefinition act)
     {
@@ -44,6 +59,14 @@ public static class MapGenerator
         // the boss is always a forced single Rest node (guaranteed reachable
         // from every path since it's the sole node on its floor - see
         // ConnectFloors); the boss floor is always a single Boss node.
+        //
+        // Floor 0 stays pinned at MinNodesPerFloor rather than rolling up to
+        // MaxNodesPerFloor with everything else, and that is a design rule
+        // rather than an oversight. Every node on it is a Combat by
+        // construction (see the tuple below), so a wider opening floor is a
+        // wider choice between rooms that are the same room - five identical
+        // doors, which is the opposite of what the width is being bought for.
+        // The fan-out starts on floor 1, where the types start differing.
         if (floor == floorCount - 1) return new List<MapNode> { MakeNode(floor, 0, MapNodeType.Boss, false, act, rng) };
         if (floor == floorCount - 2) return new List<MapNode> { MakeNode(floor, 0, MapNodeType.Rest, false, act, rng) };
 
@@ -165,6 +188,31 @@ public static class MapGenerator
     // connects it to its nearest 1-2 neighbours there, then backfills any
     // next-floor node that ended up with no incoming edge (so nothing is
     // ever unreachable) by wiring it to its nearest current-floor node.
+    //
+    // None of this changed when the floor width band went 3-4 to 3-5, but what
+    // it *does* changed enough to be worth writing down, because the width
+    // gap between adjacent floors can now be 2 rather than 1:
+    //
+    //   - Widening a floor does not widen the fan-in. Across a 3 -> 5
+    //     transition the primaries land on columns 0, 2 and 4, so columns 1
+    //     and 3 get no primary at all and are reachable only by a +-1
+    //     secondary from one of their two neighbours - 55% * 50% = 27.5%
+    //     each, so a bit over half of all 3 -> 5 transitions hand at least one
+    //     interior node to the backfill below. 4 -> 5 is the same shape for
+    //     column 2.
+    //   - The backfill is not the long crossing edge that suggests. It inverts
+    //     the same projection, so the orphaned to-column 1 wires back to
+    //     from-column 0 and to-column 3 to from-column 2: half a row in screen
+    //     space, crossing nothing that was not already crossed. What a wider
+    //     floor actually costs visually is steepness, since a 5-wide floor is
+    //     four pitches tall against a 3-wide floor's two.
+    //   - Out-degree is deliberately untouched (one edge, plus 55% of a
+    //     second), so a wider floor is a *thinner* graph per node: more nodes
+    //     whose only parent is the backfill. That is the accepted cost of
+    //     changing one thing at a time - width and connectivity have separate
+    //     balance signatures, and moving both at once makes any drift in the
+    //     report unattributable to either. Don't "fix" it by raising the 55%
+    //     without measuring that on its own.
     private static void ConnectFloors(List<MapNode> from, List<MapNode> to, Random rng)
     {
         foreach (var node in from)
@@ -189,6 +237,14 @@ public static class MapGenerator
         }
     }
 
+    // Math.Round(double) is banker's rounding - ties go to even - and at a 3-5
+    // band that is now load-bearing in four transitions (3->5, 4->5, 5->4,
+    // 5->3) rather than the two a 3-4 band could reach. It is what keeps
+    // 5 -> 3 symmetric: columns 0,1,2,3,4 project to 0,0,1,2,2 only because
+    // the 0.5 tie rounds down and the 1.5 tie rounds up. Passing
+    // MidpointRounding.AwayFromZero here - the "obvious" fix if this ever
+    // looks wrong - would bias every odd-to-odd transition toward the bottom
+    // of the screen, and nothing in the suite is shaped to notice.
     private static int ProjectColumn(float column, int fromCount, int toCount)
     {
         if (toCount == 1) return 0;

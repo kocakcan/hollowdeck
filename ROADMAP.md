@@ -16,10 +16,10 @@ than as this genre.
 
 **Phase 7 closed the card half of that, and Phase 8 has since closed both of its own — the status
 roster and the enemy behaviours.** The six struck rows below are done; the live ones are what the
-rest of Phases 9 through 10 own. Phase 9 is open, and six of its items have landed: the `?` node,
+rest of Phase 10 owns. **Phase 9 is closed**, and all seven of its items landed: the `?` node,
 the potion pass, relic tiers — which closes the last row of the diagnosis table — the boss-relic
-choice those tiers made worth having, the start-of-run screen, and the card-reward skip streak.
-What is left in it is the map's width, which is a judgment call rather than a task.
+choice those tiers made worth having, the start-of-run screen, the card-reward skip streak, and the
+map's width, which was the judgment call the phase held open longest and turned out to be arithmetic.
 
 ### The diagnosis
 
@@ -597,9 +597,63 @@ distribution held against 20k samples of the real picker).
   gold 0 to 279 across the pool, banded at both ends in `BalanceSmokeTest` against `RunState`'s own
   constants rather than against 50 and 99, which is the "no rung may make act I unwinnable"
   assertion Phase 10 was going to need arriving one phase early.
-- **Map width is a judgment call, not an obvious fix.** The map is 3–4 nodes wide against the genre's
-  seven, and non-scrolling because Phase 4 deliberately made it *fill* one canvas. Widening it buys
-  real route planning and costs that layout. Decide it explicitly; do not drift into either.
+- ~~**Map width is a judgment call, not an obvious fix.**~~ **Shipped**, as 3–5 rather than the
+  genre's seven, and the judgment turned out to be arithmetic rather than taste. `MapScreen` derives
+  the vertical pitch from the band it has left (`availableHeight / (widest - 1)`), so width is spent
+  directly out of the space *between* nodes: at 1152x648 a 6-wide floor puts 58px of pitch under 64px
+  nodes once a run carries three rows of relics, and a 7-wide floor overlaps with no relics at all.
+  Seven is unreachable without scrolling, which is the fill-one-canvas property Phase 4 built. Five is
+  what the canvas holds. `MaxNodesPerFloor` 4 → 5, floor 0 pinned at 3 (every node on it is a Combat,
+  so a wider opening is a wider choice between identical rooms), connectivity untouched, no schema
+  change and no save bump.
+
+  Four things the forecast did not contain:
+
+  - **The cost does not land where this bullet said it would.** "Costs that layout" reads as the
+    graph outgrowing the canvas; the band is spent in full at *any* width, so nothing outgrows
+    anything. What width actually spends is the pitch, and the pitch's competitor is not the map at
+    all — it is the run-status block, which grows 44px per relic row. The binding constraint on how
+    wide this map can be is **how many relics the player is carrying**, which is not a fact about the
+    map and is why no amount of staring at `MapGenerator` would have found it.
+  - **The constant that broke first was the current-node ring**, `NodeSize + 20f` — the widest thing
+    in the vertical stack and the one nobody had listed as width-dependent. It is derived from the
+    pitch now. Measured, and worth recording because the tempting version of this story is false:
+    it was **not** already broken at four wide. The worst case a run can reach there (20 relics, four
+    rows) left an 85px pitch and the flat ring cleared it by a pixel. Widening is what made the
+    derivation necessary — the fourth instance of Phase 11's caps-and-margins shape, but the first
+    one that was genuinely latent rather than already shipping.
+  - **What actually pays for the width is a relic grid capped at three rows on this screen**
+    (`RelicColumnsForBand`, the trade `ShopScreen` already makes in the opposite direction). Without
+    it, four relic rows at five wide leave a 63.75px pitch under 64px nodes — they overlap outright.
+  - **Mutation testing is the only reason any of the above is stated correctly, and it cost this
+    branch two wrong claims.** The first draft shipped four mechanisms; reverting the derived ring,
+    the relic cap or the reclaimed `BottomMargin` *one at a time* left all 22 suites green. So the
+    assertions were re-pointed at the mechanisms rather than at the overlap they prevent — ring
+    against pitch, grid against row budget — and a fourth change, deriving the path bow from the
+    pitch, turned out to move rendered output by 0.04px and was deleted.
+    Then the *review* pass found the claim this bullet originally made — that `BottomMargin` 88 → 68
+    and the column cap were "two halves of one fix, both needed" — was itself false: the 0.75px that
+    priced the cap "alone" was computed against the flat ring the same branch had already replaced.
+    With the cap and the derived ring in place the old 88px margin is fine, and reverting it alone is
+    green. It stays, as measured headroom on a denser map (79.75px pitch against 74.75), and is
+    labelled as headroom rather than as a fix. **A number that prices one change while holding
+    another change's before-state is the arithmetic version of the moved-denominator trap this
+    project has now hit in four different forms.**
+
+  Landing: the encounter-cost, curve, band, boss, ramp, player-curve, card-reward-odds, blessing and
+  upgrade tables **byte-identical** against `main` — nothing that does not read the map moved. Means
+  wobble ≤0.2 (Combat 11.3 → 11.4, fights 16.2 → 16.4, gold 707 → 715), which is resampling rather
+  than a shift: both samplers draw all three acts from one `Random` and a wider map consumes a
+  different number of draws, so those rows are re-sampled, not re-computed. What moved for real is
+  what should — best-any-path (Elite 9 → 11, Rest 13 → 14, Treasure 9 → 10) and reachability
+  (Encyclopedian 23% → 26%, Librarian 97% → 99%, Mystery Machine 95% → 98%, relics 20 → 21). Nothing
+  collapsed, so no threshold needed retuning.
+
+  The last of those is the one worth carrying: **`BalanceSmokeTest` could not have told us if one
+  had.** `TestScoreThresholdsAreReachable` asserts `Best >= needs`, which is one-sided — anything
+  handing the player more map to route through can only make it greener, and the only signal a
+  category had gone free was a `Sweep` row in the report that *disappears* when it collapses. It is
+  banded now.
 - ~~Smaller: a skip streak or rarity boost on card rewards, so skipping is a strategy rather than a
   shrug.~~ **Shipped**, and the "or" in that line was the decision worth making rather than a choice
   between two spellings of one feature. A flat rarity boost is a dial the player does not touch; a
@@ -657,6 +711,20 @@ their type in the tooltip as well as the icon while their neighbours still show 
 on entry — plus every `MapNodeType` routing to a screen through the extracted `EnterNode`),
 `RunSaveSmokeTest` (a concealed node surviving a round trip in both directions, and a v3 save whose
 map nodes omit the flag loading as visible).
+
+For the map's width: `MapSmokeTest` (branching floors inside a 3–5 band with **both ends actually
+occurring**, floor 0 pinned to the minimum, and — the first node-vs-node overlap check in this repo —
+no two node rects closer than `MinNodeGap` at every relic count a run can reach, driven at the
+longest act against a seed *searched for* rather than written down, since a hardcoded one tests
+whatever width it happens to roll and would go quietly narrow as content moves — and the search
+reports a miss as a red line rather than throwing out of `_Ready`, which would surface as a watchdog
+TIMEOUT, with the check reading the search's *result* rather than re-running its predicate. Plus the two checks
+aimed at the mechanisms rather than their consequence, which is what mutation testing established
+were needed: the current-node ring never wider than the pitch, and the relic grid never past its row
+budget — reverting either alone leaves every other assertion in the file green). And
+`BalanceSmokeTest`, where `TestScoreThresholdsAreReachable` gained its other end: the hardest deck
+tier must stay demanding, and the ladder as a whole must keep something worth routing for, because
+`Best >= needs` can only get greener as the map grows.
 
 For the start-of-run screen: a new `BlessingSmokeTest` (21 → 22 suites) — the database loading an
 exact count, ids unique and ASCII, every outcome key registered *and* priced by `BalanceModel`

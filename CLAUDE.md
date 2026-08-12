@@ -465,6 +465,37 @@ smoke test can drive it. It gained the `default:` arm that switch never had: an 
 `MapNodeType` used to advance `CurrentNodeId` onto a node nothing routes from and change no screen,
 which is a soft-lock rather than a crash.
 
+**How wide the map may be is a layout budget, and the thing it is spent against is the relic grid.**
+Branching floors are 3–5 nodes (`MapGenerator.MinNodesPerFloor`/`MaxNodesPerFloor`), floor 0 pinned
+at the minimum because every node on it is a Combat and a wider opening is a wider choice between
+identical rooms. Five is not the genre's number — Slay the Spire is seven and *scrolls*, which is
+the one canvas Phase 4 deliberately made this map fill. `MapScreen.BuildLayout` derives the vertical
+pitch as `availableHeight / (widest - 1)`, so width comes straight out of the gap between nodes:
+6-wide overlaps at three relic rows, 7-wide overlaps with no relics at all.
+
+Four things follow, and none is visible from either file alone:
+
+- **The generator's width and `MapScreen`'s pitch are coupled.** Raising `MaxNodesPerFloor` without
+  re-deriving the layout draws nodes on top of each other and every suite stays green through it,
+  which is why `MapSmokeTest` restates the 3–5 band rather than importing the constants — the same
+  argument `LegalConcealedTypes` makes one feature over.
+- **The competitor for the band is not the map.** The run-status block grows 44px per relic row and
+  `BandTop` is derived from it, so the binding constraint on map width is *how many relics the run is
+  carrying* — a fact about the player, not the graph. `MapScreen.RelicColumnsForBand` caps the grid at
+  three rows by spending width instead, which is `ShopScreen`'s trade running the other way.
+- **That cap is load-bearing; `BottomMargin`'s 20 reclaimed pixels are not**, and the distinction is
+  worth stating because the tidy version ("two halves, both needed") is false and shipped once before
+  mutation testing caught it. Without the cap, four relic rows at five wide leave a 63.75px pitch
+  under 64px nodes. With it, the old 88px margin was already fine; the reclaimed 20px buys headroom
+  (79.75px pitch against 74.75) and reverting it alone leaves every suite green. The assertions
+  therefore point at the mechanisms that *are* load-bearing — ring against pitch, grid against row
+  budget — rather than only at the overlap they prevent, because each one reverted alone slips past
+  a check on the overlap itself.
+- **The current-node ring is the widest thing in the vertical stack**, so it runs out of room before
+  the nodes do and is derived from the pitch rather than being `NodeSize + 20f`. It was *not* already
+  broken at four wide (20 relics leaves 85px and the flat ring cleared by one pixel) — widening is
+  what made it live.
+
 **Combat loop** (`CombatManager`) is an explicit `CombatState` enum machine — `Start`,
 `PlayerTurn`, `AwaitingTarget`, `ResolvingCard`, `EnemyTurn`, `ResolvingEnemyIntent`, `CombatEnd`
 — not loose booleans. Sub-states like "awaiting target" and "animation playing (input locked)"
@@ -711,8 +742,8 @@ primitive, unplayable card types, X-cost — and now the *status* half — `Arti
 shipped, as has the `?` node that opened Phase 9 and the potion pass that followed it — rarity,
 per-act combat drops, and the reward screen those drops forced — plus relic tiers and the
 boss-relic choice those tiers made worth having, the start-of-run screen: blessings and typed
-seed entry, and the card-reward skip streak. What's open is the map's width and an ascension ladder.
-Don't treat this section as a to-do list.
+seed entry, the card-reward skip streak, and the map's width at 3–5. **That closes Phase 9**; what's
+open is an ascension ladder. Don't treat this section as a to-do list.
 
 One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap
 is next read:
@@ -795,7 +826,10 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   Strength/Weak, split for the same no-drift reason
 - `scripts/map/MapGenerator.cs` — branching node DAG, per-act (floor count, encounter pools and
   boss pool all come from the `ActDefinition` passed in). Owns both weight tables: the node-type
-  one, and `PickConcealedType`'s separate table for what is behind a `?`
+  one, and `PickConcealedType`'s separate table for what is behind a `?`. Branching floors are
+  **3–5 wide with floor 0 pinned at 3**, and `MaxNodesPerFloor` is **coupled to `MapScreen`'s
+  layout** in a way neither file suggests on its own — see the map-width rule in Architecture.
+  Length is per-act data (`FloorCount`); width is one constant shared by every act
 - `scripts/data/ActDefinition.cs` + `ActDatabase.cs` — the three acts and what varies per act
 - `data/*/*.json` — the content layer; the schema is the data-vs-code split everything depends on
 - `scripts/data/DataFile.cs` — the one place a content JSON is read off `res://`. The null guard
