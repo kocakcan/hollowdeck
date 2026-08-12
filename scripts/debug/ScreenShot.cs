@@ -74,6 +74,14 @@ public partial class ScreenShot : Node
         // ever holds, so this is where it would run into the deck button or
         // wrap into the cards.
         ["rewardactclear"] = new("res://scenes/RewardScreen.tscn", SeedActClearedReward),
+        // The card row's second line carrying a live skip streak, at the cap -
+        // the longest form the line takes, since that is the only rung that
+        // also prints "(max)". Plain "reward" is the same row at rung 0, which
+        // is the other string it can hold ("Skip to sharpen the next offer");
+        // between them the two shots cover both. Worth a fixture of its own
+        // because the line shares its row with the name above it and the odds
+        // are the one part that grows as the ladder is retuned.
+        ["rewardskip"] = new("res://scenes/RewardScreen.tscn", SeedSkipStreakReward),
         // The list at its fullest: gold, relic, potion and card all on offer at
         // once, which is what an elite that also dropped a potion pays. Seeded
         // with the longest potion name in the content, since a row's name and
@@ -315,6 +323,11 @@ public partial class ScreenShot : Node
         RunState.Potions = new List<PotionInstance> { new(PotionDatabase.Get("healing_potion")) };
         RunState.Stats = new RunStats();
         RunState.ActIndex = 0;
+        // Same reason as the cover and RewardContext above, one static further
+        // out: the streak lives on RunState, so without this the capped rung
+        // "rewardskip" seeds would leak onto every reward shot taken after it
+        // and rewrite the card row's second line in all of them.
+        RunState.CardSkipStreak = 0;
         RunState.MapNodes = new List<MapNode>();
         RunState.CurrentNodeId = "";
         RunState.VisitedNodeIds = new HashSet<string>();
@@ -618,6 +631,18 @@ public partial class ScreenShot : Node
         {
             CardDatabase.Get("twin_strike"), CardDatabase.Get("shrug_it_off"), CardDatabase.Get("inflame"),
         };
+    }
+
+    // The same offer after three declined rewards in a row. At the cap rather
+    // than mid-ladder on purpose: it is the only rung whose line carries the
+    // "(max)" suffix, so it is the widest the string ever gets. The rung is set
+    // rather than the odds - the row computes those out of CardPool.WeightOf,
+    // which is what stops this shot from agreeing with a table the game does
+    // not play.
+    private static void SeedSkipStreakReward()
+    {
+        SeedReward();
+        RunState.CardSkipStreak = CardPool.MaxSkipStreak;
     }
 
     // A drop on offer beside the relic SeedReward already sets, so all four row

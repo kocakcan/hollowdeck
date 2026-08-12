@@ -58,6 +58,7 @@ public partial class BalanceReport : Node
         PrintRamps();
         PrintPlayerCurve(acts, playerHp, throughput);
         PrintPaths(paths);
+        PrintCardRewardOdds();
         PrintScoreReachability(reach);
         PrintBlessings();
         PrintUpgradeDeltas();
@@ -359,6 +360,31 @@ public partial class BalanceReport : Node
         GD.Print($"  {label} at each value: "
                  + string.Join("  ", candidates.Select(v =>
                      $"{v}={metric.FractionAtLeast(v):P0}{(v == current ? "*" : "")}")));
+    }
+
+    // ---------------------------------------------------------- card rewards
+
+    // Printed rather than left as a consequence, per the rule the potion pass
+    // wrote down and the node-weight pass repeated: both of those incidents hid
+    // the same way, with a data number moving and only its effect visible. The
+    // ladder here is exactly that kind of number - nothing else in this report
+    // can see a rarity, so if these four rows are not on the page the only way
+    // to find out what a skip is worth is to read CardPool.
+    private void PrintCardRewardOdds()
+    {
+        Header("CARD REWARD ODDS - what a skip streak buys");
+        GD.Print($"  A won fight offers {CombatScreen.RewardCardChoices} cards. Declining them all "
+                 + "shifts the next offer's weights;");
+        GD.Print("  taking one resets the streak. Shop stock and event grants stay on rung 0.");
+        GD.Print("");
+        GD.Print("  streak   common  uncommon    rare    a rare in the offer");
+
+        foreach (var rung in BalanceModel.SkipStreakOdds())
+        {
+            string cap = rung.Streak == CardPool.MaxSkipStreak ? "  (max)" : "";
+            GD.Print($"  {rung.Streak,6}   {rung.Common,6:P0}  {rung.Uncommon,8:P0}  {rung.Rare,6:P0}"
+                     + $"    {rung.RareInAnOffer,6:P0}{cap}");
+        }
     }
 
     // -------------------------------------------------------------- upgrades

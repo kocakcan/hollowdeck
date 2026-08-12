@@ -25,7 +25,7 @@ With no screen names it shoots all of them. Unknown names exit 1 and list the va
 
 `combat` `combatfull` `combatintents` `combatsummon` `combattarget` `combatvocab` `combat2`
 `combat3` `reward` `rewardactclear` `rewardpotion` `rewardpotionfull` `rewardcards`
-`rewardbossrelic` `shop` `shopfull` `shopremove` `map` `map2` `map3` `mapfull` `rest`
+`rewardbossrelic` `rewardskip` `shop` `shopfull` `shopremove` `map` `map2` `map3` `mapfull` `rest`
 `restupgrade` `treasure` `event` `eventpicker` `unlocks` `library` `libraryrelics`
 `libraryinspectcard` `libraryinspectrelic` `runend` `mainmenu` `settings` `deckpopup` `fade`
 
@@ -67,6 +67,12 @@ same list against a full belt, which is the refused-row state no assertion can l
 picker — each reachable only by pressing its row, so both use the `AfterReady` hook. Shoot
 `rewardbossrelic` for anything touching that overlay: the three tiles share an 800px band, and a
 relic name is the one thing in there that can grow.
+
+`rewardskip` is the card row's second line carrying a skip streak at the cap — the only rung that
+also prints "(max)", so the longest form that line takes. Plain `reward` is the same row at rung 0,
+holding the other string it can ever show; between them the two cover both. The odds in it are
+computed from `CardPool.WeightOf` rather than authored, so this shot moves when the ladder is
+retuned — which is the point of having it.
 
 `deckpopup` opens the pile popup over the map with a 13-card deck, since the popup is spawned on
 demand by `DeckViewButtons` rather than being a screen of its own. `restupgrade` is the same idea

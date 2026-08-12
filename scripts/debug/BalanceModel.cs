@@ -1116,6 +1116,48 @@ public static class BalanceModel
         return tiers.Sum(t => RelicPool.WeightOf(t) * (double)ShopScreen.RelicPriceFor(t)) / weight;
     }
 
+    /// One rung of the card-reward skip ladder: the three tier shares a reward
+    /// is drawn on after `Streak` consecutive skips, and the chance at least one
+    /// of the offered cards comes back Rare.
+    public readonly record struct SkipRung(
+        int Streak, double Common, double Uncommon, double Rare, double RareInAnOffer);
+
+    /// The whole ladder, read out of CardPool rather than restated here.
+    ///
+    /// Same discipline as ExpectedShopRelicPrice above and for the same reason:
+    /// the alternative is a second copy of the weights living in the analyser,
+    /// which is how a report ends up pricing a table the game does not play.
+    /// The offer size comes from CombatScreen.RewardCardChoices for the same
+    /// reason - it was a literal 3 in that file until this needed it.
+    ///
+    /// RareInAnOffer is exact rather than an approximation. TierPool draws a
+    /// tier per card and renormalises only over tiers that still have stock, and
+    /// with ~90 offerable cards no tier can be exhausted inside a three-card
+    /// draw - so the draws are independent in *tier* and 1-(1-p)^n holds. It
+    /// would not if this pool were small, which is worth knowing before reusing
+    /// the shape for potions or relics.
+    public static List<SkipRung> SkipStreakOdds()
+    {
+        var rungs = new List<SkipRung>();
+        int offered = CombatScreen.RewardCardChoices;
+
+        for (int streak = 0; streak <= CardPool.MaxSkipStreak; streak++)
+        {
+            double total = Enum.GetValues<Rarity>().Sum(r => (double)CardPool.WeightOf(r, streak));
+            if (total <= 0) continue;
+
+            double rare = CardPool.WeightOf(Rarity.Rare, streak) / total;
+            rungs.Add(new SkipRung(
+                streak,
+                CardPool.WeightOf(Rarity.Common, streak) / total,
+                CardPool.WeightOf(Rarity.Uncommon, streak) / total,
+                rare,
+                1.0 - Math.Pow(1.0 - rare, offered)));
+        }
+
+        return rungs;
+    }
+
     public static Reachability Reachable(int seeds = 500, int startingGold = RunState.StartingGold,
         int startingRelics = 1, int startingDeckSize = 10)
     {
@@ -1174,6 +1216,13 @@ public static class BalanceModel
 
     // One card from each fight's three-card reward pick, plus whatever the
     // purse covers at a shop.
+    //
+    // Deliberately blind to the skip streak, and that is not an omission. The
+    // streak moves what a reward card *is* (its rarity), never how many are
+    // gained - a player who skips three and takes the fourth has the same deck
+    // size as one who took all four. This model has no rarity axis for a deck
+    // at all, so there is nothing here for the streak to move; what it buys is
+    // reported on its own terms by SkipStreakOdds instead.
     private static (int Gained, int Spent) CardsAt(MapNode n, int gold)
     {
         if (n.Type is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss) return (1, 0);

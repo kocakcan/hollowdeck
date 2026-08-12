@@ -27,7 +27,12 @@ public class RunSaveData
     // carry no `concealed` key and deserialize as false, which is again exactly
     // right - every map drawn before this feature was fully visible, and that
     // is what resuming one should show. No migration code needed.
-    public int SaveVersion { get; set; } = 4;
+    // v5 added CardSkipStreak - how many card rewards have been declined in a
+    // row. A v4 save carries no `cardSkipStreak` key and deserializes it as 0,
+    // which is once again exactly right: a run saved before the streak existed
+    // has skipped nothing, and its next reward should be drawn on the flat
+    // table it always was. No migration code needed.
+    public int SaveVersion { get; set; } = 5;
     public int RunSeed { get; set; }
     public int Gold { get; set; }
     public int PlayerMaxHp { get; set; }
@@ -36,6 +41,7 @@ public class RunSaveData
     public List<string> RelicIds { get; set; } = new();
     public List<PotionSaveEntry> Potions { get; set; } = new();
     public int ActIndex { get; set; }
+    public int CardSkipStreak { get; set; }
     public List<MapNode> MapNodes { get; set; } = new();
     public string CurrentNodeId { get; set; } = "";
     public List<string> VisitedNodeIds { get; set; } = new();

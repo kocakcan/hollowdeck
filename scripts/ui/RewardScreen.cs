@@ -59,6 +59,10 @@ public partial class RewardScreen : Control
     // back on a legal control.
     private ScreenKeyboardNavListener? _keyboardNav;
 
+    // Set the first time this screen is left. See OnSkipPressed for why one
+    // press has to be one skip.
+    private bool _skipResolved;
+
     private VBoxContainer _rowList = null!;
     private Control _overlay = null!;
     private Button _skipButton = null!;
@@ -281,7 +285,7 @@ public partial class RewardScreen : Control
             // one of the offered cards' own art says "this card" when the row
             // is about choosing between three. The 72px slot is still laid out,
             // so the text column stays aligned with the rows above it.
-            AddRow(RewardKind.Card, null, "Add a card to your deck", "");
+            AddRow(RewardKind.Card, null, "Add a card to your deck", CardRowDetail());
         }
 
         // Centred in the band rather than pinned to its top, so a fight that
@@ -293,6 +297,41 @@ public partial class RewardScreen : Control
         centre.AddChild(ScreenChrome.Frame(_rowList, UiTheme.Spacing.Md));
         area.AddChild(centre);
         RefreshRows();
+    }
+
+    // The line under the Card row's name: the rule when there is no streak, and
+    // the streak's own odds when there is one.
+    //
+    // Present at streak 0 rather than appearing on the first skip, which was the
+    // cheaper option and the wrong one. A player who never happens to skip would
+    // never be told the mechanic exists, and "skipping is a strategy" is not a
+    // strategy anyone can adopt from a rule they cannot see. The row already
+    // reserves the second line's height for every other row on the screen, so it
+    // costs no layout.
+    //
+    // Describes *this* offer, which is why it is captured when the row is built
+    // and not recomputed on refresh: the three cards behind this row were drawn
+    // at the rung named here, and claiming one does not retroactively change the
+    // odds they came out of.
+    private static string CardRowDetail()
+    {
+        int streak = RunState.CardSkipStreak;
+        if (streak <= 0) return "Skip to sharpen the next offer";
+
+        string capped = streak >= CardPool.MaxSkipStreak ? " (max)" : "";
+        return $"{streak} skipped - Rare odds {RarePercent(streak)}%{capped}";
+    }
+
+    // Computed from the weight table rather than written down beside it. A
+    // literal here would be a second copy of the ladder, and the one that shows
+    // the player a number - which is the drifted-telegraph shape this project
+    // refuses everywhere else. Normalised over the whole enum rather than
+    // divided by 100, so it survives the weights being retuned to any total.
+    private static int RarePercent(int streak)
+    {
+        int total = 0;
+        foreach (var rarity in Enum.GetValues<Rarity>()) total += CardPool.WeightOf(rarity, streak);
+        return total <= 0 ? 0 : Mathf.RoundToInt(100f * CardPool.WeightOf(Rarity.Rare, streak) / total);
     }
 
     /// The node name a reward row is given, so a test or a screenshot fixture
@@ -664,6 +703,14 @@ public partial class RewardScreen : Control
         if (RewardContext.Claimed.Contains(RewardKind.Card)) return;
 
         RunState.Deck.Add(card.Definition);
+
+        // Taking a card spends the streak, on the same line the deck gains it
+        // rather than inside MarkClaimed - the reset and the increment in
+        // OnSkipPressed are one rule, and a reader should find both halves of
+        // it where the two outcomes actually happen. MarkClaimed's re-save is
+        // what persists this.
+        RunState.CardSkipStreak = 0;
+
         _overlay.Visible = false;
         ClearChoices();
 
@@ -772,7 +819,52 @@ public partial class RewardScreen : Control
         MarkClaimed(RewardKind.Relic);
     }
 
-    private void OnSkipPressed() => Advance();
+    // Leaving the screen, and the one place a skip streak is built.
+    //
+    // The guard is CombatScreen._continueResolved's, one screen over and for
+    // the same reason: there are two independent ways in - the button (_Ready)
+    // and hd_cancel through OnCancelPressed - and Advance is not instant
+    // because ScreenFade holds the scene up. That window used to be harmless
+    // here, since a second ChangeScreen to the same state does nothing visible.
+    // It stops being harmless the moment this handler moves a counter: a click
+    // plus an Escape inside the fade would build two rungs off one skip, which
+    // is exactly how the double relic grant happened.
+    private void OnSkipPressed()
+    {
+        if (_skipResolved) return;
+        _skipResolved = true;
+
+        if (LeavingDeclinesACard())
+        {
+            // Capped as it is built rather than only where it is spent, so the
+            // counter and the ladder rung are one number. Letting it run to 7
+            // while CardPool clamped the draw at 3 would put "7 skipped" on the
+            // row beside rung 3's odds.
+            RunState.CardSkipStreak = Math.Min(RunState.CardSkipStreak + 1, CardPool.MaxSkipStreak);
+        }
+
+        // No explicit save: ChangeScreen below autosaves on *entering* Map
+        // (RunManager.AutoSaveScreens), and it does so before the scene swap,
+        // so the line above is already in the file by the time the map loads.
+        Advance();
+    }
+
+    /// Whether leaving the screen right now declines a card reward - the fact a
+    /// skip streak is built from.
+    ///
+    /// The offer and the claim set, never the button's label. RefreshExitButton
+    /// already retitles Skip as "Continue" once every row is taken, so a player
+    /// who took the card and pressed it is leaving through the same handler
+    /// while having skipped nothing.
+    ///
+    /// Public and static because it is the whole condition, and driving it
+    /// through the screen costs a scene change: Skip ends in ChangeScreen, which
+    /// on a hard cut swaps the tree's current scene out from under the suite
+    /// that pressed it. So a test asks this directly and presses the real button
+    /// only for the one thing a predicate cannot show - that two presses build
+    /// one rung.
+    public static bool LeavingDeclinesACard() =>
+        RewardContext.CardChoices.Count > 0 && !RewardContext.Claimed.Contains(RewardKind.Card);
 
     private static void Advance() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.Map);
 }

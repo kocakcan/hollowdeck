@@ -55,6 +55,23 @@ public static class RunState
     // VisitedNodeIds is reset with them.
     public static int ActIndex;
 
+    // How many card rewards have been declined back to back. Spent by the next
+    // fight's reward draw (CombatScreen.SampleCardChoices -> CardPool.Sample),
+    // which shifts the rarity weights by it; reset to 0 the moment a card is
+    // taken. See CardPool.MaxSkipStreak for the ladder.
+    //
+    // Deliberately here rather than on RunStats: that type's own header says it
+    // is what a finished run needs to be *scored*, and this is a live dial the
+    // next draw reads. It would have cost three fewer lines there (Stats
+    // round-trips as an object), which is exactly the reason to be careful
+    // about it.
+    //
+    // AdvanceAct does not clear it. The deck, relics and gold all carry across
+    // an act boundary and a streak is the same kind of fact - a player who
+    // skipped two rewards to set up the act-2 opener should get what they paid
+    // for.
+    public static int CardSkipStreak;
+
     public static ActDefinition CurrentAct => ActDatabase.At(ActIndex);
 
     public static bool IsFinalAct => ActIndex >= ActDatabase.Count - 1;
@@ -81,6 +98,7 @@ public static class RunState
         Potions = new List<PotionInstance>();
 
         ActIndex = 0;
+        CardSkipStreak = 0;
         MapNodes = MapGenerator.Generate(RngStreams.Map, CurrentAct);
         CurrentNodeId = "";
         VisitedNodeIds = new HashSet<string>();

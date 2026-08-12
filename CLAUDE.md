@@ -54,6 +54,40 @@ existing effects.
 to `PileManager.Powers`, which is neither Discard (it would cycle back) nor Exhaust (a cost the HUD
 renders as one).
 
+**60/37/3 is rung 0 of a ladder the player climbs by declining.** `RunState.CardSkipStreak` counts
+card rewards skipped back to back, and `CardPool.WeightOf(rarity, streak)` shifts that turn's weights
+out of Common — 45/46/9, 30/55/15, 15/64/21 — which takes a Rare somewhere in the three-card offer
+from 9% to 51%. Taking a card resets it; `AdvanceAct` does not, because a streak carries an act
+boundary the way the deck and gold do. Five things are load-bearing:
+
+- **The three steps sum to zero, so the total is 100 at every rung.** A weight therefore reads
+  directly as its tier's percentage share, which three separate readers depend on: `CardPool`'s own
+  comment, `BalanceReport`, and the reward row shown to the player. A step set that did not cancel
+  would leave all three describing different ladders.
+- **`MaxSkipStreak = 3` is a correctness bound, not a taste one.** At rung 4 the Common weight hits
+  0, and `TierPool.PickTier` would leave Common in the pool and *unreachable* — a tier that exists
+  and can never be drawn, with nothing thrown. `WeightOf` clamps rather than trusting its caller,
+  because the value reaches it from a save file.
+- **Uncommon leads at every rung.** Rare passing Common at the cap is intended and paid for by three
+  given-up cards; Rare passing *Uncommon* would make the top rung a Rare dispenser rather than a
+  richer pool, which is a different feature.
+- **The streak is reward-only** — a per-draw offset the player moves, not a second authored table.
+  The shop and the random-card event call the streakless overload, because a shop that got richer
+  because the player walked past two cards would be pricing something it had no part in.
+- **It changes which cards come back and not how many `Next()` calls the draw spends**, so a boosted
+  reward leaves `RngStreams.Shop` where an unboosted one would and a seed's later shop stock still
+  reproduces. That is risk 2, and it would have been easy to break here.
+
+Two traps live on the reward screen rather than in the pool. `RewardScreen._skipResolved` is
+`CombatScreen._continueResolved` one screen over and for the same reason: Skip is reachable from the
+button *and* `hd_cancel`, `ScreenFade` holds the scene up in between, and a click plus an Escape
+inside that window built two rungs off one skip. And the condition is
+`RewardScreen.LeavingDeclinesACard` — the offer and the claim set, **never the button's label**,
+since `RefreshExitButton` already retitles Skip as "Continue" once every row is taken. The row states
+the rule at rung 0 rather than appearing on the first skip (a strategy nobody can see is not one
+anyone adopts), and computes its printed odds from `WeightOf` rather than restating them, which is
+the drifted-telegraph shape this project refuses everywhere else.
+
 `Rarity` is shared with `PotionDefinition`, and **the weight tables are not**. Cards are 60/37/3;
 potions are 65/25/10 in `PotionPool`, because a card is a permanent deck slot and a potion is one
 shot out of a three-slot belt — at the card weights a *named* Rare potion would sit under 1% against
@@ -391,9 +425,10 @@ act's graph. Killing a non-final act's boss goes RewardScreen-then-Map like any 
 `RunState.AdvanceAct()` regenerating the map, resetting `CurrentNodeId`/`VisitedNodeIds` (node ids
 repeat across acts), banking the cleared act's floors into `RunStats.FloorsInPreviousActs`, and
 applying the act's max-HP bonus and heal. Only `IsFinalAct`'s boss routes to Victory. The run save
-is v4 for `MapNode.Concealed`; neither bump carries migration code, because both fields' absent-is-
-false/zero default is already the right reading of an older save (a v2 save loads as act 1, which is
-what it always was; a v3 map loads fully visible, which is what it always was).
+is v5 for `RunState.CardSkipStreak`, v4 for `MapNode.Concealed`; no bump carries migration code,
+because every one of those fields' absent-is-false/zero default is already the right reading of an
+older save (a v2 save loads as act 1, which is what it always was; a v3 map loads fully visible,
+which is what it always was; a v4 run has declined nothing, which is what it always had).
 
 **A `?` node hides its type from the player and from nothing else.** `MapNode.Concealed` is a bool
 beside `Type`, not a `MapNodeType.Unknown` in place of it: the roll happens in `MapGenerator` like
@@ -675,8 +710,8 @@ primitive, unplayable card types, X-cost — and now the *status* half — `Arti
 `wake_on_damage` picker, and the `WeightedRandomIntentPicker` run cap that closed it — have all
 shipped, as has the `?` node that opened Phase 9 and the potion pass that followed it — rarity,
 per-act combat drops, and the reward screen those drops forced — plus relic tiers and the
-boss-relic choice those tiers made worth having, and the start-of-run screen: blessings and typed
-seed entry. What's open is the map's width, a skip streak on card rewards, and an ascension ladder.
+boss-relic choice those tiers made worth having, the start-of-run screen: blessings and typed
+seed entry, and the card-reward skip streak. What's open is the map's width and an ascension ladder.
 Don't treat this section as a to-do list.
 
 One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap
@@ -719,7 +754,9 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
 - `scripts/run/CardPool.cs` — rarity-weighted sampling; the single place "which cards does the
   player get offered" is decided (reward picks, shop stock, the random-card event outcome), and
   therefore the single place unplayable cards are excluded from being offered at all — that
-  `IsPlayable` filter lives here rather than in `TierPool`, because it is a card rule
+  `IsPlayable` filter lives here rather than in `TierPool`, because it is a card rule. Also owns the
+  skip-streak ladder (`MaxSkipStreak`, the three steps, and the `WeightOf`/`Sample` overloads that
+  take a rung) — the reward site passes `RunState.CardSkipStreak`, the other two grant sites do not
 - `scripts/run/PotionPool.cs` — the same for potions, at 65/25/10, across all four grant sites: the
   combat drop, the shop's two-potion stock, and the `gain_potion` event. No `IsPlayable` analogue —
   every potion in the database is offerable and none is unlock-gated
