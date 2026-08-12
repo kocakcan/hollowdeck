@@ -622,20 +622,23 @@ distribution held against 20k samples of the real picker).
     rows) left an 85px pitch and the flat ring cleared it by a pixel. Widening is what made the
     derivation necessary — the fourth instance of Phase 11's caps-and-margins shape, but the first
     one that was genuinely latent rather than already shipping.
-  - **Two half-fixes, and pricing them separately is the only way to see both are needed.**
-    `BottomMargin` 88 → 68 (derived from the Back button's y=592 rather than chosen) and a relic grid
-    capped at three rows on this screen (`RelicColumnsForBand`, the trade `ShopScreen` already makes
-    in the opposite direction). At five wide and four relic rows the old margin leaves a 63.75px pitch
-    under 64px nodes — they overlap outright. Either change alone clears the gap and *neither clears
-    it comfortably*: the margin alone leaves 4.75px, the column cap alone leaves the ring 0.75px.
-    Together the pitch is 79.75 and the gap 15.75.
-  - **Three of the four mechanisms this branch first wrote were unobservable, and only mutation
-    testing said so.** Reverting the derived ring, the relic cap and the reclaimed margin *one at a
-    time* left all 22 suites green, because each half independently squeaks past a gap check — and a
-    fourth change, deriving the path bow from the pitch, moved the rendered output by 0.04px and was
-    deleted. The assertions that now hold them are pointed at the mechanisms rather than at the
-    consequence: the ring against the pitch, and the relic grid against its row budget. Reverting
-    both halves at once is what finally overlaps nodes, by 0.2px.
+  - **What actually pays for the width is a relic grid capped at three rows on this screen**
+    (`RelicColumnsForBand`, the trade `ShopScreen` already makes in the opposite direction). Without
+    it, four relic rows at five wide leave a 63.75px pitch under 64px nodes — they overlap outright.
+  - **Mutation testing is the only reason any of the above is stated correctly, and it cost this
+    branch two wrong claims.** The first draft shipped four mechanisms; reverting the derived ring,
+    the relic cap or the reclaimed `BottomMargin` *one at a time* left all 22 suites green. So the
+    assertions were re-pointed at the mechanisms rather than at the overlap they prevent — ring
+    against pitch, grid against row budget — and a fourth change, deriving the path bow from the
+    pitch, turned out to move rendered output by 0.04px and was deleted.
+    Then the *review* pass found the claim this bullet originally made — that `BottomMargin` 88 → 68
+    and the column cap were "two halves of one fix, both needed" — was itself false: the 0.75px that
+    priced the cap "alone" was computed against the flat ring the same branch had already replaced.
+    With the cap and the derived ring in place the old 88px margin is fine, and reverting it alone is
+    green. It stays, as measured headroom on a denser map (79.75px pitch against 74.75), and is
+    labelled as headroom rather than as a fix. **A number that prices one change while holding
+    another change's before-state is the arithmetic version of the moved-denominator trap this
+    project has now hit in four different forms.**
 
   Landing: the encounter-cost, curve, band, boss, ramp, player-curve, card-reward-odds, blessing and
   upgrade tables **byte-identical** against `main` — nothing that does not read the map moved. Means
@@ -713,7 +716,9 @@ For the map's width: `MapSmokeTest` (branching floors inside a 3–5 band with *
 occurring**, floor 0 pinned to the minimum, and — the first node-vs-node overlap check in this repo —
 no two node rects closer than `MinNodeGap` at every relic count a run can reach, driven at the
 longest act against a seed *searched for* rather than written down, since a hardcoded one tests
-whatever width it happens to roll and would go quietly narrow as content moves. Plus the two checks
+whatever width it happens to roll and would go quietly narrow as content moves — and the search
+reports a miss as a red line rather than throwing out of `_Ready`, which would surface as a watchdog
+TIMEOUT, with the check reading the search's *result* rather than re-running its predicate. Plus the two checks
 aimed at the mechanisms rather than their consequence, which is what mutation testing established
 were needed: the current-node ring never wider than the pitch, and the relic grid never past its row
 budget — reverting either alone leaves every other assertion in the file green). And

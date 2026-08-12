@@ -52,6 +52,12 @@ public partial class MapScreen : Control
     // MaxRingBleed/2 past it, and BackButton sits at y=592 (a -56 offset from
     // the bottom in MapScreen.tscn). So 648 - BM + 10 <= 590, i.e. BM >= 68.
     // It was 88, which was 20px of clear air nothing was using.
+    //
+    // Headroom rather than a fix, and labelled as such deliberately:
+    // RelicColumnsForBand is what actually makes five wide fit, and reverting
+    // this line alone leaves every suite green. It is here because a denser
+    // map is worth the pitch (79.75px against 74.75 at three relic rows), not
+    // because anything breaks without it.
     private const float BottomMargin = 68f;
     private const float DesignHeight = 648f;
 
@@ -230,16 +236,16 @@ public partial class MapScreen : Control
     // 20 before the map widened - more map to route through is more relics to
     // collect), which at the default six columns is a fourth row.
     //
-    // This and BottomMargin's 20 reclaimed pixels are two halves of one fix
-    // and both are needed, which is only visible if you price them
-    // separately: at five wide and four relic rows the old 88px bottom margin
-    // leaves a 63.75px pitch under 64px nodes (they overlap outright). Either
-    // change alone clears MinNodeGap and neither clears it comfortably - the
-    // reclaimed margin on its own leaves 4.75px, the column cap on its own
-    // leaves the ring 0.75px of room. Together the pitch is 79.75 and the gap
-    // 15.75, which is the difference between a layout that fits and one that
-    // fits the case that was measured. This project has shipped the latter
-    // three times (ROADMAP Phase 11).
+    // This is the load-bearing half of paying for the width, and BottomMargin's
+    // 20 reclaimed pixels are not - a distinction worth stating because the
+    // tidy version of the story ("two halves, both needed") is false and was
+    // committed once before mutation testing caught it. Measured, with the
+    // derived ring in place: without this cap, four relic rows at five wide
+    // leave a 63.75px pitch under 64px nodes and they overlap outright. With
+    // it, the old 88px bottom margin was already fine (74.75px pitch, 10.75px
+    // gap). The margin buys headroom on top - 79.75 and 15.75 - which is worth
+    // having on a map that just got denser, but nothing depends on it and
+    // reverting it alone leaves every suite green.
     private static int RelicColumnsForBand(int relicCount) => Mathf.Max(
         ScreenChrome.RelicColumns,
         Mathf.CeilToInt(relicCount / (float)MaxRelicRows));

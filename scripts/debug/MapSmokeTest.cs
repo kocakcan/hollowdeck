@@ -680,16 +680,23 @@ public partial class MapSmokeTest : Node
         // per floor, so a hardcoded seed tests whatever width it happens to
         // produce - and a fixture that quietly stopped containing a widest
         // floor would leave every assertion below green while measuring a
-        // narrower map than the one that can actually be generated. Seed 11 is
-        // where the other two layout tests start, so this is also the diff
-        // that shows if it stops being the crowded case.
-        int seed = Enumerable.Range(0, 200).First(s =>
-            MapGenerator.Generate(new Random(s), longest)
-                .GroupBy(n => n.Floor).Max(g => g.Count()) == MaxFloorWidth);
-        Check("layout_is_driven_at_the_widest_floor_the_generator_makes",
-            MapGenerator.Generate(new Random(seed), longest).GroupBy(n => n.Floor).Max(g => g.Count())
-                == MaxFloorWidth,
-            $"{longest.Id} seed {seed} is {MaxFloorWidth} wide");
+        // narrower map than the one that can actually be generated.
+        //
+        // FirstOrDefault(-1) rather than First(), and the check reads the
+        // *result* rather than re-running the predicate. First() would throw
+        // inside _Ready, which never reaches Quit() and so surfaces as a
+        // watchdog TIMEOUT rather than a red line; and an assertion that
+        // recomputes its own selection criterion is one that cannot fail,
+        // which is the shape this suite exists to refuse.
+        int seed = Enumerable.Range(0, 200).FirstOrDefault(
+            s => MapGenerator.Generate(new Random(s), longest)
+                .GroupBy(n => n.Floor).Max(g => g.Count()) == MaxFloorWidth,
+            -1);
+        if (!Check("a_seed_producing_the_widest_floor_exists", seed >= 0,
+                $"no seed under 200 gives {longest.Id} a {MaxFloorWidth}-wide floor"))
+        {
+            return;
+        }
 
         // 21 is BalanceModel.Reachable's best routed relic count *after* the
         // widening (it was 20 before - more map to route through is more

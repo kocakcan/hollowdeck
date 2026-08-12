@@ -483,12 +483,14 @@ Four things follow, and none is visible from either file alone:
   `BandTop` is derived from it, so the binding constraint on map width is *how many relics the run is
   carrying* — a fact about the player, not the graph. `MapScreen.RelicColumnsForBand` caps the grid at
   three rows by spending width instead, which is `ShopScreen`'s trade running the other way.
-- **`BottomMargin` and that cap are two halves of one fix and both are load-bearing.** Priced
-  separately: at five wide and four relic rows the old 88px margin leaves a 63.75px pitch under 64px
-  nodes. Either alone clears `MinNodeGap`, neither clears it comfortably (4.75px and 0.75px
-  respectively); together the pitch is 79.75. A revert of either one alone leaves every suite green,
-  which is why the assertions point at the mechanisms — ring against pitch, grid against row budget —
-  rather than only at the overlap they prevent.
+- **That cap is load-bearing; `BottomMargin`'s 20 reclaimed pixels are not**, and the distinction is
+  worth stating because the tidy version ("two halves, both needed") is false and shipped once before
+  mutation testing caught it. Without the cap, four relic rows at five wide leave a 63.75px pitch
+  under 64px nodes. With it, the old 88px margin was already fine; the reclaimed 20px buys headroom
+  (79.75px pitch against 74.75) and reverting it alone leaves every suite green. The assertions
+  therefore point at the mechanisms that *are* load-bearing — ring against pitch, grid against row
+  budget — rather than only at the overlap they prevent, because each one reverted alone slips past
+  a check on the overlap itself.
 - **The current-node ring is the widest thing in the vertical stack**, so it runs out of room before
   the nodes do and is derived from the pitch rather than being `NodeSize + 20f`. It was *not* already
   broken at four wide (20 relics leaves 85px and the flat ring cleared by one pixel) — widening is
