@@ -43,6 +43,7 @@ public static class RunSaveManager
             RelicIds = RunState.Relics.Select(r => r.Definition.Id).ToList(),
             Potions = RunState.Potions.Select(p => new PotionSaveEntry { DefinitionId = p.DefinitionId }).ToList(),
             ActIndex = RunState.ActIndex,
+            CardSkipStreak = RunState.CardSkipStreak,
             MapNodes = RunState.MapNodes,
             CurrentNodeId = RunState.CurrentNodeId,
             VisitedNodeIds = RunState.VisitedNodeIds.ToList(),
@@ -97,6 +98,12 @@ public static class RunSaveManager
         // with more acts) must land on the last act rather than throw when
         // CurrentAct is read. ActDatabase.At does the clamping.
         RunState.ActIndex = Mathf.Clamp(data.ActIndex, 0, Mathf.Max(0, ActDatabase.Count - 1));
+        // Clamped for the same reason, and to the same range the counter is
+        // held in while the run is live (RewardScreen caps it as it builds it).
+        // CardPool.WeightOf clamps again on its own, so an out-of-range value
+        // could never bias a draw - what this stops is the reward row reading
+        // "7 skipped" beside rung 3's odds, which is a telegraph that lies.
+        RunState.CardSkipStreak = Mathf.Clamp(data.CardSkipStreak, 0, CardPool.MaxSkipStreak);
         RunState.MapNodes = data.MapNodes;
         RunState.CurrentNodeId = data.CurrentNodeId;
         RunState.VisitedNodeIds = data.VisitedNodeIds.ToHashSet();

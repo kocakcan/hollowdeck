@@ -74,6 +74,12 @@ public partial class ScreenSmokeTest : Node
         // and the first await on GetTree() hangs until the watchdog kills the
         // suite with no summary. Neither awaits anything after its own
         // navigation, which is what makes two of them in a row safe.
+        // The skip-streak test navigates too, but it holds the fade *on* for
+        // exactly that reason and so never actually swaps the scene - see the
+        // guard it takes out. That is what lets it sit ahead of these two
+        // instead of having to be the one build-then-navigate test in the file,
+        // which TestRestScreen already is.
+        TestRewardSkipBuildsTheStreak();
         TestRestScreen();
         TestStartingARunGoesToRunSetup();
 
@@ -326,6 +332,11 @@ public partial class ScreenSmokeTest : Node
     // picked, so two of the four rows were things the player already had.
     private void TestRewardScreen()
     {
+        // Mid-ladder, so the card row's second line has a streak to name and
+        // the pick below has one to clear. Set explicitly rather than left at
+        // whatever the previous test finished on - RunState is static and lives
+        // for the whole suite.
+        RunState.CardSkipStreak = 2;
         RunState.Gold = 0;
         RunState.Relics = new List<RelicInstance>();
         RunState.Potions = new List<PotionInstance>();
@@ -369,6 +380,18 @@ public partial class ScreenSmokeTest : Node
         Check("reward_skip_button_has_a_handler", skip.GetSignalConnectionList("pressed").Count > 0,
             "no pressed connections");
 
+        // The streak has to be on the row, not only in the draw. A rarity boost
+        // the player is never shown is a mechanic that exists in the rules and
+        // nowhere else - and the number has to be the real one, so this asserts
+        // the rung's own Rare share out of CardPool rather than a literal.
+        int rare2 = CardPool.WeightOf(Rarity.Rare, 2) * 100
+            / System.Enum.GetValues<Rarity>().Sum(r => CardPool.WeightOf(r, 2));
+        var cardLabels = Row(screen, RewardKind.Card)!
+            .FindChildren("*", "Label", recursive: true, owned: false).OfType<Label>().ToList();
+        Check("reward_card_row_names_a_live_streak",
+            cardLabels.Any(l => l.Text.Contains("2 skipped") && l.Text.Contains($"{rare2}%")),
+            string.Join(" | ", cardLabels.Select(l => l.Text)));
+
         // Claiming pays out exactly once. The second press is the real check:
         // RewardContext.Claimed is what refuses it, so the payout cannot be
         // repeated even by a row that is somehow still enabled.
@@ -409,6 +432,10 @@ public partial class ScreenSmokeTest : Node
 
         Check("reward_card_pick_adds_to_the_deck", RunState.Deck.Count == deckBefore + 1,
             $"deck went {deckBefore} -> {RunState.Deck.Count}");
+        // Taking a card spends the streak. Without this, the streak would only
+        // ever climb and every reward after the third would be drawn at the cap.
+        Check("reward_card_pick_resets_the_streak", RunState.CardSkipStreak == 0,
+            $"streak={RunState.CardSkipStreak} after taking a card");
         Check("reward_card_pick_closes_the_fan", !overlay.Visible, "the fan stayed open after a pick");
         // WATCHDOG NOTE: this one fails as a TIMEOUT rather than a FAIL.
         // LoadScene parents the screen under this test node, so a pick that
@@ -1360,6 +1387,101 @@ public partial class ScreenSmokeTest : Node
             $"deck={RunState.Deck.Count}, maxHp={RunState.PlayerMaxHp}, "
             + $"relics={RunState.Relics.Count}, map={RunState.MapNodes.Count}");
     }
+
+    // The skip streak: leaving the reward screen with a card still on offer is
+    // what builds it.
+    //
+    // Split deliberately. The *condition* is a pure fact about the offer
+    // (RewardScreen.LeavingDeclinesACard), so its three cases are asserted
+    // directly rather than driven through three presses of Skip - Skip ends in
+    // RunManager.ChangeScreen, and a suite gets exactly one of those.
+    //
+    // The press that is left needs the scene *not* to change, which is what the
+    // Reduce Motion line below buys. HardCutGuard exists to force the opposite
+    // (a synchronous swap, so an expected engine error stays machine-
+    // independent); here the fade is the point. With it on, ChangeSceneToFile is
+    // deferred into a tween callback that never runs before Quit, so the press
+    // resolves its state change and the tree survives it - which is the only
+    // reason this test can sit anywhere but last. Measured the hard way: with
+    // the cut synchronous this detached the suite and TestRestScreen two lines
+    // later failed on its own node paths, with nothing pointing back here.
+    private void TestRewardSkipBuildsTheStreak()
+    {
+        var settings = SettingsManager.Instance;
+        bool wasReduceMotion = settings.ReduceMotion;
+        settings.SetReduceMotion(false, FadeScratchPath);
+
+        RunState.CardSkipStreak = 0;
+        RunState.Gold = 0;
+        RewardContext.ActCleared = null;
+        RewardContext.GoldAwarded = 0;
+        RewardContext.RelicChoices = new List<RelicDefinition>();
+        RewardContext.PotionDrop = null;
+        RewardContext.Claimed.Clear();
+        RewardContext.CardChoices = new List<CardDefinition>
+        {
+            CardDatabase.Get("strike"), CardDatabase.Get("defend"), CardDatabase.Get("bash"),
+        };
+
+        Check("reward_leaving_with_a_card_on_offer_declines_it",
+            RewardScreen.LeavingDeclinesACard(), "an unclaimed card row should count as a skip");
+
+        // A card already taken pays no streak, even though the player leaves
+        // through the same button - which by then reads "Continue". This is what
+        // pins the condition to the offer rather than to the label.
+        RewardContext.Claimed.Add(RewardKind.Card);
+        Check("reward_leaving_with_the_card_taken_declines_nothing",
+            !RewardScreen.LeavingDeclinesACard(), "a claimed card row counted as a skip");
+
+        // And a fight that offered no cards at all is not a skip either.
+        RewardContext.Claimed.Clear();
+        RewardContext.CardChoices = new List<CardDefinition>();
+        Check("reward_leaving_a_fight_that_offered_no_card_declines_nothing",
+            !RewardScreen.LeavingDeclinesACard(), "an absent card row counted as a skip");
+
+        // Now the half a predicate cannot show. Skip is reachable from the
+        // button and from hd_cancel, and ScreenFade holds the scene up between
+        // the press and the swap - so without _skipResolved a click plus an
+        // Escape inside that window builds two rungs off one skip. That is
+        // CombatScreen's double relic grant, on the screen next door.
+        RewardContext.CardChoices = new List<CardDefinition>
+        {
+            CardDatabase.Get("strike"), CardDatabase.Get("defend"), CardDatabase.Get("bash"),
+        };
+        RewardContext.Claimed.Clear();
+
+        var screen = LoadScene("res://scenes/RewardScreen.tscn");
+
+        // The rule is on the row before there is any streak to show. A player
+        // who never happens to skip would otherwise never learn the mechanic
+        // exists, which makes "skipping is a strategy" unadoptable.
+        var labels = Row(screen, RewardKind.Card)!
+            .FindChildren("*", "Label", recursive: true, owned: false).OfType<Label>().ToList();
+        Check("reward_card_row_explains_the_streak_at_zero",
+            labels.Any(l => l.Text.Contains("Skip")),
+            string.Join(" | ", labels.Select(l => l.Text)));
+
+        var skip = screen.GetNode<Button>("SkipButton");
+        skip.EmitSignal(BaseButton.SignalName.Pressed);
+        skip.EmitSignal(BaseButton.SignalName.Pressed);
+        Check("reward_skip_builds_exactly_one_streak_rung", RunState.CardSkipStreak == 1,
+            $"streak={RunState.CardSkipStreak} after two presses of Skip");
+        // And the fade really did hold the swap, which is what the two tests
+        // after this one depend on. Asserted rather than assumed: if Godot ever
+        // stops deferring here, this says so instead of the next test failing on
+        // a node path.
+        Check("reward_skip_did_not_swap_the_scene_under_the_suite", IsInsideTree(),
+            "the suite left the tree - the fade did not defer ChangeSceneToFile");
+
+        screen.QueueFree();
+        RunState.CardSkipStreak = 0;
+        RewardContext.Claimed.Clear();
+        settings.SetReduceMotion(wasReduceMotion, FadeScratchPath);
+    }
+
+    // Written to instead of user://settings.json, so running the suite can never
+    // change what the player sees next launch - same discipline as HardCutGuard.
+    private const string FadeScratchPath = "user://skipstreak_settings_test.json";
 
     // The authored pool, reachable for the two tests that need a fixed offer.
     // Reflection rather than a test hook on BlessingDatabase: the production

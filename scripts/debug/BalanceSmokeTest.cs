@@ -51,6 +51,7 @@ public partial class BalanceSmokeTest : Node
         TestAnEscapeCostsMoreThanTheNodeItLeaves();
         TestScoreThresholdsAreReachable();
         TestPotionDropYield();
+        TestSkipStreakIsWorthTheCardsItCosts();
         TestBlessingsStayInTheirBand();
         TestUpgradeGrantsAreWhatTheDocsClaim();
 
@@ -432,6 +433,50 @@ public partial class BalanceSmokeTest : Node
         Check("expected_potion_drops_per_run_is_worth_the_belt",
             drops is >= 1.0 && drops <= RunState.MaxPotionSlots * 2,
             $"{drops:F1} drops per run against a {RunState.MaxPotionSlots}-slot belt");
+    }
+
+    // The skip streak has to pay for what it costs. Every rung is a card given
+    // up, and this is the only place in the suite that can say whether the odds
+    // bought back are worth one - EffectSmokeTest checks the ladder's shape,
+    // and shape is not payoff.
+    private void TestSkipStreakIsWorthTheCardsItCosts()
+    {
+        var rungs = BalanceModel.SkipStreakOdds();
+
+        // The ladder is the whole ladder. A rung missing from the report is a
+        // rung the player can reach and nobody has measured.
+        Check("skip_streak_report_covers_every_rung",
+            rungs.Count == CardPool.MaxSkipStreak + 1,
+            $"{rungs.Count} rungs printed, cap is {CardPool.MaxSkipStreak}");
+
+        // Worth the card. Three skips costs three cards, so if the top rung does
+        // not make a Rare in the offer better than even the streak is a strictly
+        // worse play than taking whatever was on the table - which is the shrug
+        // this item exists to remove, arrived at from the other direction.
+        var top = rungs[^1];
+        Check("the_top_rung_is_worth_the_cards_it_costs", top.RareInAnOffer >= 0.4,
+            $"a rare in the offer at rung {top.Streak} is {top.RareInAnOffer:P0}");
+
+        // And not so good it replaces the pool. Rung 0 is what almost every
+        // reward in a run is drawn on; a top rung that made a Rare the *likely*
+        // outcome would make skipping the default play rather than a bet.
+        Check("the_top_rung_does_not_make_rares_the_norm", top.Rare < 0.5,
+            $"rare share at the cap is {top.Rare:P0}");
+
+        // Monotone in the thing the player actually sees, and led by Uncommon at
+        // every rung. Both are asserted against the *printed* rows rather than
+        // against CardPool, so a report that computed them differently from the
+        // draw fails here rather than shipping a table nobody can act on.
+        for (int i = 1; i < rungs.Count; i++)
+        {
+            Check($"skip_streak_offer_odds_rise_at_rung_{rungs[i].Streak}",
+                rungs[i].RareInAnOffer > rungs[i - 1].RareInAnOffer,
+                $"{rungs[i - 1].RareInAnOffer:P0} -> {rungs[i].RareInAnOffer:P0}");
+        }
+
+        var ledByRare = rungs.Where(r => r.Rare >= r.Uncommon).Select(r => r.Streak).ToList();
+        Check("uncommon_leads_the_ladder_at_every_rung", ledByRare.Count == 0,
+            Join(ledByRare.Select(s => s.ToString()).ToList()));
     }
 
     // Every run takes exactly one blessing before the first map, so the pool

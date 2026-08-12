@@ -45,6 +45,7 @@ public partial class EffectSmokeTest : Node
         TestLiveTargetDamage();
         TestEveryCardDeclaresARarity();
         TestCardPoolIsRarityWeighted();
+        TestSkipStreakLadder();
         TestTierPoolAlgorithm();
         TestEveryPotionDeclaresARarity();
         TestPotionPoolIsRarityWeighted();
@@ -475,6 +476,102 @@ public partial class EffectSmokeTest : Node
         var everything = CardPool.Sample(CardDatabase.All, CardDatabase.All.Count + 5, rng);
         Check("card_pool_caps_at_offerable_pool_size", everything.Count == offerableCount,
             $"got {everything.Count} of {offerableCount}");
+    }
+
+    // The skip streak: declining a card reward shifts the *next* one's weights
+    // out of Common. Four properties of the ladder, then the one check that the
+    // ladder is actually wired into a draw - which is the half that can silently
+    // no-op, since a weight function nobody passes to TierPool compiles, prints
+    // a perfectly good balance report, and changes no card the player ever sees.
+    private void TestSkipStreakLadder()
+    {
+        var tiers = System.Enum.GetValues<Rarity>();
+
+        // The weights sum to the same total at every rung, which is what lets
+        // the table be read as percentages - in CardPool's own comment, in the
+        // balance report, and on the reward row. A step set that did not cancel
+        // would leave all three of those quietly describing a different ladder.
+        int baseTotal = tiers.Sum(r => CardPool.WeightOf(r, 0));
+        for (int rung = 0; rung <= CardPool.MaxSkipStreak; rung++)
+        {
+            int total = tiers.Sum(r => CardPool.WeightOf(r, rung));
+            Check($"skip_streak_rung_{rung}_keeps_the_total",
+                total == baseTotal, $"rung {rung} totals {total}, rung 0 totals {baseTotal}");
+
+            // Every tier still drawable at every rung. This is the one that
+            // guards MaxSkipStreak: a rung further up drives Common to 0, and
+            // PickTier would leave it in the pool and never roll it - a tier
+            // that exists and cannot come back, with nothing thrown.
+            foreach (var rarity in tiers)
+            {
+                Check($"skip_streak_rung_{rung}_keeps_{rarity.ToString().ToLowerInvariant()}_drawable",
+                    CardPool.WeightOf(rarity, rung) > 0,
+                    $"{rarity} weight is {CardPool.WeightOf(rarity, rung)} at rung {rung}");
+            }
+
+            // Uncommon carries the ladder. Rare passing Common at the cap is
+            // intended; Rare passing *Uncommon* would make the top rung a Rare
+            // dispenser rather than a richer pool, which is a different feature.
+            Check($"skip_streak_rung_{rung}_is_led_by_uncommon",
+                CardPool.WeightOf(Rarity.Uncommon, rung) > CardPool.WeightOf(Rarity.Rare, rung),
+                $"rung {rung}: uncommon {CardPool.WeightOf(Rarity.Uncommon, rung)}, "
+                + $"rare {CardPool.WeightOf(Rarity.Rare, rung)}");
+
+            if (rung == 0) continue;
+            Check($"skip_streak_rung_{rung}_beats_the_one_below",
+                CardPool.WeightOf(Rarity.Rare, rung) > CardPool.WeightOf(Rarity.Rare, rung - 1),
+                $"rare {CardPool.WeightOf(Rarity.Rare, rung - 1)} -> "
+                + $"{CardPool.WeightOf(Rarity.Rare, rung)}");
+        }
+
+        // Clamped at both ends. The counter is capped where it is built, so
+        // neither of these should be reachable in a live run - but WeightOf
+        // reads a number off a save file, and a hand-edited or corrupt one must
+        // land on a rung of the ladder rather than off the end of it.
+        Check("skip_streak_clamps_above_the_cap",
+            CardPool.WeightOf(Rarity.Rare, 99) == CardPool.WeightOf(Rarity.Rare, CardPool.MaxSkipStreak),
+            $"rung 99 gave {CardPool.WeightOf(Rarity.Rare, 99)}");
+        Check("skip_streak_clamps_below_zero",
+            CardPool.WeightOf(Rarity.Rare, -5) == CardPool.WeightOf(Rarity.Rare, 0),
+            $"rung -5 gave {CardPool.WeightOf(Rarity.Rare, -5)}");
+
+        // And the ladder actually reaches a draw. Same 400-trial shape
+        // TestCardPoolIsRarityWeighted uses, run at the cap against the same
+        // seed - if the streak never made it into TierPool's weightOf, these
+        // two shares are identical and every other check above still passes.
+        double flat = RareShareOverTrials(0);
+        double capped = RareShareOverTrials(CardPool.MaxSkipStreak);
+        Check("skip_streak_actually_moves_the_draw", capped > flat * 2,
+            $"rung 0 share={flat:P1}, rung {CardPool.MaxSkipStreak} share={capped:P1}");
+
+        // The other direction, and the one that pins the streak as reward-only:
+        // the overload the shop and the random-card event call is the rung-0
+        // draw, unchanged. Same seed, so this is an exact match rather than a
+        // band - a streak leaking into the shared overload would move it.
+        var viaShared = CardPool.Sample(CardDatabase.All, 8, new System.Random(99));
+        var viaRungZero = CardPool.Sample(CardDatabase.All, 8, new System.Random(99), 0);
+        Check("unboosted_sample_is_the_rung_zero_draw",
+            viaShared.Select(c => c.Id).SequenceEqual(viaRungZero.Select(c => c.Id)),
+            $"{string.Join(",", viaShared.Select(c => c.Id))} vs "
+            + $"{string.Join(",", viaRungZero.Select(c => c.Id))}");
+    }
+
+    // The Rare share of a reward-sized draw repeated 400 times at one rung.
+    // Seeded identically per rung so the two calls above differ only by the
+    // streak, which is what makes their comparison mean anything.
+    private static double RareShareOverTrials(int streak)
+    {
+        var rng = new System.Random(1234);
+        int rares = 0, draws = 0;
+        for (int trial = 0; trial < 400; trial++)
+        {
+            foreach (var card in CardPool.Sample(CardDatabase.All, 3, rng, streak))
+            {
+                draws++;
+                if (card.Rarity == Rarity.Rare) rares++;
+            }
+        }
+        return (double)rares / draws;
     }
 
     // The potion half of TestEveryCardDeclaresARarity, plus one check cards do

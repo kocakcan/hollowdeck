@@ -16,9 +16,10 @@ than as this genre.
 
 **Phase 7 closed the card half of that, and Phase 8 has since closed both of its own — the status
 roster and the enemy behaviours.** The six struck rows below are done; the live ones are what the
-rest of Phases 9 through 10 own. Phase 9 is open, and five of its items have landed: the `?` node,
+rest of Phases 9 through 10 own. Phase 9 is open, and six of its items have landed: the `?` node,
 the potion pass, relic tiers — which closes the last row of the diagnosis table — the boss-relic
-choice those tiers made worth having, and the start-of-run screen.
+choice those tiers made worth having, the start-of-run screen, and the card-reward skip streak.
+What is left in it is the map's width, which is a judgment call rather than a task.
 
 ### The diagnosis
 
@@ -599,8 +600,56 @@ distribution held against 20k samples of the real picker).
 - **Map width is a judgment call, not an obvious fix.** The map is 3–4 nodes wide against the genre's
   seven, and non-scrolling because Phase 4 deliberately made it *fill* one canvas. Widening it buys
   real route planning and costs that layout. Decide it explicitly; do not drift into either.
-- Smaller: a skip streak or rarity boost on card rewards, so skipping is a strategy rather than a
-  shrug.
+- ~~Smaller: a skip streak or rarity boost on card rewards, so skipping is a strategy rather than a
+  shrug.~~ **Shipped**, and the "or" in that line was the decision worth making rather than a choice
+  between two spellings of one feature. A flat rarity boost is a dial the player does not touch; a
+  streak is a *bet* — each rung costs a card and pays odds on the next offer, which is what makes
+  skipping a play rather than a shrug. `RunState.CardSkipStreak` counts consecutive declines, run
+  save v4 → v5, no migration code (absent reads as 0, which is what a run saved before the feature
+  had in fact skipped).
+
+  The ladder is `CardPool.WeightOf(rarity, streak)`, and four things about its shape are load-bearing:
+
+  - **The three steps sum to zero, so the total stays 100 at every rung.** That is not tidiness: a
+    weight reads directly as its tier's percentage share in `CardPool`'s own comment, in the balance
+    report, and *on the reward row the player reads*. A step set that did not cancel would leave all
+    three quietly describing different ladders. `EffectSmokeTest` asserts the total rather than the
+    steps.
+  - **`MaxSkipStreak = 3` is where the ladder stops, and the bound is a correctness one.** At rung 4
+    the Common weight reaches 0 — and `TierPool.PickTier` would leave Common *in the pool and
+    unreachable*, a tier that exists and can never be drawn, with nothing thrown. `WeightOf` clamps
+    rather than trusting its caller, because the number arrives from a save file.
+  - **Uncommon leads at every rung, and Rare passing Common at the cap is intended.** Rare passing
+    *Uncommon* would make the top rung a Rare dispenser rather than a richer pool, which is a
+    different feature; the suite asserts the ordering, not the numbers.
+  - **The streak is reward-only.** It is a per-draw offset the player moves, not a second authored
+    table, and it applies to exactly one site. A shop that got richer because the player walked past
+    two cards would be pricing something it had no part in — so the shop and the random-card event
+    call the unchanged overload, pinned by an exact same-seed match against the rung-0 draw.
+
+  Two traps the branch actually had to avoid, neither visible from the feature description:
+
+  - **A press is not a skip, and `Advance` is not instant.** Skip is reachable from the button *and*
+    from `hd_cancel`, and `ScreenFade` holds the scene up between the press and the swap. That window
+    was harmless while the handler only changed screens; it stops being harmless the moment it moves
+    a counter, and a click plus an Escape inside it built two rungs off one skip. `_skipResolved` is
+    `CombatScreen._continueResolved` one screen over, for the same reason and against the same bug
+    that shipped the double relic grant.
+  - **The condition is the offer, never the button's label.** `RefreshExitButton` already retitles
+    Skip as "Continue" once every row is taken, so a player who took the card leaves through the same
+    handler having skipped nothing. `LeavingDeclinesACard` reads `RewardContext` instead.
+
+  The row states the rule at rung 0 (`Skip to sharpen the next offer`) rather than appearing on the
+  first skip, which was the cheaper option and the wrong one: a player who never happens to skip
+  would never learn the mechanic exists, and a strategy nobody can see is not one they can adopt.
+  The odds it prints are computed from `CardPool.WeightOf` rather than written beside it — a literal
+  would be a second copy of the ladder, and the copy that shows the player a number.
+
+  Landing: every existing table byte-identical against `main` — the only new lines are the card
+  reward odds section, which prints 9% → 25% → 39% → 51% for a Rare somewhere in the three-card
+  offer. `BalanceModel.CardsAt` is deliberately blind to the streak and says so: the streak moves
+  what a reward card *is*, never how many are gained, and that model has no rarity axis for a deck
+  at all.
 
 *Proven by:* `MapSmokeTest` (concealed nodes actually appear, are never an Elite or the boss, never
 land on a forced floor, still carry enemies when they are a Combat, roll more than one type, hide
@@ -667,6 +716,24 @@ still shown against a full belt, the card row opening the fan and a pick returni
 rather than leaving the screen), `KeyboardSmokeTest` (claiming the focused row leaving the ring
 somewhere legal, and the modal taking focus while the list leaves the focus chain),
 `Phase4ContentSmokeTest` (an elite reward *offered* rather than banked before the screen).
+
+For the skip streak: `EffectSmokeTest` (the ladder's shape — the total held at every rung, every
+tier still drawable at every rung, Uncommon leading each one, Rare rising rung over rung, and the
+clamp at both ends — plus the two checks that shape alone cannot make, that a capped draw really
+does come back richer than a flat one over 400 trials, and that the overload the shop and the event
+call is byte-for-byte the rung-0 draw on the same seed; the first of those is the silent no-op
+guard, since a weight function nobody passes to `TierPool` compiles, prints a perfect balance
+report, and changes no card the player ever sees), `RunSaveSmokeTest` (a mid-ladder streak round
+tripping, a v4 save without the key loading as 0 against a *poisoned* field, and an out-of-range
+value clamping), `ScreenSmokeTest` (the row explaining the rule at rung 0 and naming a live streak
+with the rung's real odds read out of `CardPool` rather than a literal, taking a card resetting it,
+the three cases of `LeavingDeclinesACard` asserted directly, and two presses of Skip building
+exactly one rung — that last driven with the fade deliberately left *on*, so `ChangeSceneToFile` is
+deferred into a tween callback that never runs and the suite survives its own navigation), and
+`BalanceSmokeTest` (every rung printed, the top one worth the three cards it costs, not so good it
+makes Rares the norm, and the offer odds monotone — all asserted against the *printed* rows, so a
+report computing them differently from the draw fails rather than shipping a table nobody can act
+on).
 
 ## Phase 10 — Ascension
 

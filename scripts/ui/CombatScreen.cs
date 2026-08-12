@@ -141,6 +141,13 @@ public partial class CombatScreen : Control
     // PickRewardRelics for why the boss is the only site that gets a choice.
     private const int BossRelicChoices = 3;
 
+    // How many cards a won fight offers. Named rather than left as the literal
+    // it was because BalanceModel has to read it: the skip streak's payoff is
+    // "the chance of a Rare among the cards you are shown", which is not
+    // answerable without this number. A copy of it in the analyser is the
+    // ShopRelicPrice = 150 hazard, and this is the cheaper end of it.
+    public const int RewardCardChoices = 3;
+
     // Keyboard card-play (Left/Right/number keys to select, Space to play) -
     // a second input path feeding the exact same CombatManager.TryPlayCard
     // drag-and-drop already uses, so none of this touches CombatManager's
@@ -1441,7 +1448,7 @@ public partial class CombatScreen : Control
                 // Assigned unconditionally, so an act-clear banner can't be
                 // left over from the last boss onto an ordinary fight's reward.
                 RewardContext.ActCleared = CombatContext.IsBoss ? RunState.AdvanceAct() : null;
-                RewardContext.CardChoices = SampleCardChoices(3);
+                RewardContext.CardChoices = SampleCardChoices(RewardCardChoices);
                 RewardContext.GoldAwarded = CombatContext.GoldReward;
                 RewardContext.RelicChoices = PickRewardRelics();
                 RewardContext.Claimed.Clear();
@@ -1511,12 +1518,23 @@ public partial class CombatScreen : Control
         return PotionPool.SampleOne(PotionDatabase.All, RngStreams.Drops);
     }
 
+    // The one site in the game that draws cards on a boosted table.
+    //
+    // Same unlock-filtered pool ShopScreen and the random-card event outcome
+    // draw from (MetaProgressionManager.UnlockTrack), and the same rarity
+    // weighting - this used to be a uniform shuffle here, which made a Rare
+    // exactly as likely as a Strike.
+    //
+    // What is different is the streak: RunState.CardSkipStreak is how many
+    // rewards in a row the player has declined, and it shifts this draw's
+    // weights out of Common (CardPool.WeightOf). The other two grant sites pass
+    // no streak and are unchanged, which is what makes the streak a property of
+    // *skipping a fight reward* rather than a global rarity dial - a shop that
+    // got richer because the player walked past two cards would be pricing
+    // something it had no part in.
     private static List<CardDefinition> SampleCardChoices(int count)
     {
-        // Same unlock-filtered pool ShopScreen and the random-card event
-        // outcome draw from (MetaProgressionManager.UnlockTrack), and the same
-        // rarity weighting - this used to be a uniform shuffle here, which
-        // made a Rare exactly as likely as a Strike.
-        return CardPool.Sample(MetaProgressionManager.Instance.UnlockedCards(), count, RngStreams.Shop);
+        return CardPool.Sample(MetaProgressionManager.Instance.UnlockedCards(), count,
+            RngStreams.Shop, RunState.CardSkipStreak);
     }
 }

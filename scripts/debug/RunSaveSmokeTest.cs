@@ -29,6 +29,7 @@ public partial class RunSaveSmokeTest : Node
         TestSaveThenLoadRoundTrip();
         TestActIndexToleratesOldAndOutOfRangeSaves();
         TestConcealedFlagToleratesOldSaves();
+        TestSkipStreakToleratesOldAndOutOfRangeSaves();
         TestCorruptedFileFallsBackToNull();
         TestStaleCardRelicPotionIdsAreDropped();
         TestDeleteRemovesFile();
@@ -85,6 +86,10 @@ public partial class RunSaveSmokeTest : Node
         RunState.CurrentNodeId = "n0";
         RunState.VisitedNodeIds = new HashSet<string> { "n0" };
         RunState.ActIndex = 1;
+        // Mid-ladder rather than at the cap, so a load that clamped to the
+        // wrong end - or ignored the value and re-derived it - lands on a
+        // different number than the one written.
+        RunState.CardSkipStreak = 2;
 
         RunSaveManager.Save(runSeed: 12345, path: ScratchPath);
 
@@ -100,9 +105,12 @@ public partial class RunSaveSmokeTest : Node
         RunState.CurrentNodeId = "";
         RunState.VisitedNodeIds = new HashSet<string>();
         RunState.ActIndex = 0;
+        RunState.CardSkipStreak = 0;
 
         var seed = RunSaveManager.TryLoad(ScratchPath);
         Check("round_trip_seed", seed == 12345, $"seed={seed}");
+        Check("round_trip_card_skip_streak", RunState.CardSkipStreak == 2,
+            $"streak={RunState.CardSkipStreak}");
         Check("round_trip_gold", RunState.Gold == 42, $"gold={RunState.Gold}");
         Check("round_trip_max_hp", RunState.PlayerMaxHp == 60, $"maxHp={RunState.PlayerMaxHp}");
         Check("round_trip_current_hp", RunState.PlayerCurrentHp == 35, $"currentHp={RunState.PlayerCurrentHp}");
@@ -205,6 +213,46 @@ public partial class RunSaveSmokeTest : Node
         RunState.MapNodes = new List<MapNode>();
         RunState.CurrentNodeId = "";
         RunState.VisitedNodeIds = new HashSet<string>();
+    }
+
+    // Save v4 predates the skip streak. Its cardSkipStreak is absent, which has
+    // to load as 0 - a run saved before the feature existed has declined
+    // nothing, and its next reward belongs on the flat table it was always
+    // going to be drawn on. A value past the cap has to clamp for the reason
+    // RunSaveManager states: CardPool clamps the *draw* on its own, so what an
+    // unclamped load would produce is not a biased offer but a reward row
+    // reading "9 skipped" beside rung 3's odds.
+    private void TestSkipStreakToleratesOldAndOutOfRangeSaves()
+    {
+        ResetScratch();
+        WriteScratchRaw("""
+            { "saveVersion": 4, "runSeed": 11, "gold": 10, "playerMaxHp": 50, "playerCurrentHp": 50,
+              "actIndex": 0, "deckCardIds": ["strike"], "relicIds": [], "potions": [],
+              "mapNodes": [], "currentNodeId": "", "visitedNodeIds": [] }
+            """);
+
+        // Poisoned first. Without this, a load that never assigned the field at
+        // all would pass against whatever 0 happened to already be there - the
+        // same trap the concealed-flag test above documents.
+        RunState.CardSkipStreak = 3;
+
+        var seed = RunSaveManager.TryLoad(ScratchPath);
+        Check("v4_save_loads", seed == 11, $"seed={seed}");
+        Check("v4_save_without_skip_streak_loads_as_zero",
+            RunState.CardSkipStreak == 0, $"streak={RunState.CardSkipStreak}");
+
+        ResetScratch();
+        WriteScratchRaw("""
+            { "saveVersion": 5, "runSeed": 12, "gold": 10, "playerMaxHp": 50, "playerCurrentHp": 50,
+              "actIndex": 0, "cardSkipStreak": 99, "deckCardIds": ["strike"], "relicIds": [],
+              "potions": [], "mapNodes": [], "currentNodeId": "", "visitedNodeIds": [] }
+            """);
+
+        RunSaveManager.TryLoad(ScratchPath);
+        Check("out_of_range_skip_streak_clamps_to_the_cap",
+            RunState.CardSkipStreak == CardPool.MaxSkipStreak, $"streak={RunState.CardSkipStreak}");
+
+        RunState.CardSkipStreak = 0;
     }
 
     private void TestCorruptedFileFallsBackToNull()
