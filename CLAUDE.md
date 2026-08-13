@@ -822,6 +822,18 @@ things follow:
   instantiating the screens would miss them. It covers `_sprite`, `_playerSprite` and `_intentIcon`.
   It does **not** cover `CardView`'s 1.15x hover bump, which is a live instance of the same problem
   left open on purpose — see ROADMAP Phase 11, where it is half of "card inspect".
+- **`ReduceMotion` declines the hit clip's opening flash frame and touches nothing else.** The gate
+  was on `idle` first, which is wrong twice: the breathe is a 1px squash and was *ungated* for the
+  three phases the scale tween owned it, so freezing it made a player with the setting on see the
+  whole feature as sprites standing still — reported from a playthrough, not caught by 23 green
+  suites. Meanwhile the genuinely photosensitive thing, a frame that paints the whole creature `N8`,
+  was the one going ungated. `TestTheIdleClipActuallyAdvances` asserts both positions, because only
+  one of them was the bug and a test of the fix alone would not have said so.
+
+**Frames on disk and a driver that never advances them look identical to every static check**, which
+is why that test drives `_Process` directly rather than trusting the frame count. Two separate
+things have to be true — the frames exist *and* something ticks them — and every other assertion in
+`PixelSpecSmokeTest` only sees the first.
 
 `docs/PIXEL_ART_ROADMAP.md` is the medium's own backlog beside `docs/ART_SPEC.md`'s rule set. Two of
 its entries are places §6 describes chrome the code does not have; §6 now says so rather than

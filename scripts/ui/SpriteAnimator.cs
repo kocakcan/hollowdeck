@@ -158,27 +158,42 @@ public sealed partial class SpriteAnimator : Node
         Hold,
     }
 
+    // The clips whose frame 0 is a full-silhouette brightness flash, and the
+    // one place ReduceMotion touches this class.
+    //
+    // The gate was on `idle` first and that was backwards twice over. The idle
+    // breathe is a 1px squash held half a second - the gentlest motion in the
+    // game, and *ungated* before this file existed, since the scale tween it
+    // replaced never asked. Freezing it made a player with ReduceMotion on see
+    // no sprite animation at all, which is what it reads as: a bug. Meanwhile
+    // the hit clip opens by painting the whole creature N8 for one frame, which
+    // is the single most photosensitive thing the feature added, and it was the
+    // one going ungated.
+    //
+    // So the flash is *declined* - the clip starts on its recoil frame instead,
+    // keeping the hit legible - which is ScreenFade's own rule for this setting:
+    // decline the effect rather than soften it.
+    private static readonly HashSet<string> FlashOpeningClips = new() { "hit" };
+
     private void Play(string clip, EndBehavior onEnd, Action? onComplete = null)
     {
         _clip = clip;
-        _frame = 0;
+        _frame = SkipsFlashFrame(clip) ? 1 : 0;
         _elapsed = 0;
         _onEnd = onEnd;
         _onComplete = onComplete;
         ApplyFrame();
     }
 
+    private bool SkipsFlashFrame(string clip) =>
+        FlashOpeningClips.Contains(clip)
+        && (SettingsManager.Instance?.ReduceMotion ?? false)
+        && _clips.TryGetValue(clip, out var frames) && frames.Length > 1;
+
     public override void _Process(double delta)
     {
         if (!_clips.TryGetValue(_clip, out var frames)) return;
         if (_onEnd == EndBehavior.Hold && _frame >= frames.Length - 1) return;
-
-        // ReduceMotion holds the idle loop on its rest frame but leaves every
-        // other clip alone. Idle is decoration; hit, windup, death and escape
-        // are feedback about what just happened in the fight, and ScreenFade's
-        // rule is that ReduceMotion declines decorative motion rather than
-        // shortening the informative kind.
-        if (_clip == IdleClip && (SettingsManager.Instance?.ReduceMotion ?? false)) return;
 
         _elapsed += delta;
         double perFrame = FrameTime.TryGetValue(_clip, out double t) ? t : DefaultFrameTime;

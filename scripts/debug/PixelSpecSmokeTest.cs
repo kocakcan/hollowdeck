@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Godot;
 using Hollowdeck.Data;
+using Hollowdeck.Run;
 using Hollowdeck.UI;
 
 namespace Hollowdeck.Debug;
@@ -52,6 +53,7 @@ public partial class PixelSpecSmokeTest : Node
         TestArtgenRampMatchesPixelSpec();
         TestEveryCreatureHasItsFrames();
         TestNoTweenTransformsAPixelSprite();
+        TestTheIdleClipActuallyAdvances();
 
         GD.Print($"PixelSpecSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -515,6 +517,71 @@ public partial class PixelSpecSmokeTest : Node
                 $"assets/sprites/anim/{spriteId}/{clip}_*.png has {loaded.Length} frame(s), " +
                 $"expected {frames} - re-run 'artgen animate'");
         }
+    }
+
+    // Frames on disk and a driver that never advances them look identical to
+    // every other check in this file - and that is exactly how this shipped
+    // broken: the idle clip was gated on ReduceMotion, so a player with that
+    // setting on saw the whole feature as sprites standing still. Reported from
+    // a playthrough, which is the second time this project has learned that a
+    // green suite says nothing about what moves.
+    //
+    // Driven by calling _Process directly rather than by waiting frames: a
+    // smoke test asserts inside _Ready and cannot yield, and the state machine
+    // is what is under test, not Godot's main loop.
+    //
+    // ReduceMotion is asserted in *both* positions because only one of them is
+    // the bug. The setting must decline the hit clip's opening flash frame - the
+    // one genuinely photosensitive thing here - and must not touch the idle
+    // breathe, which is a 1px squash and was ungated for the three phases before
+    // this file existed.
+    private void TestTheIdleClipActuallyAdvances()
+    {
+        bool original = SettingsManager.Instance.ReduceMotion;
+        const string scratch = "user://settings_pixelspec_test.json";
+
+        foreach (bool reduceMotion in new[] { false, true })
+        {
+            SettingsManager.Instance.SetReduceMotion(reduceMotion, scratch);
+
+            var host = new TextureRect();
+            AddChild(host);
+            var animator = SpriteAnimator.Attach(host, "player", "idle", "windup", "hit");
+            if (animator is null)
+            {
+                Check($"idle_advances_reduce_motion_{reduceMotion}", false,
+                    "SpriteAnimator.Attach returned null - the player has no generated frames");
+                host.QueueFree();
+                continue;
+            }
+
+            var seen = new HashSet<string>();
+            for (int tick = 0; tick < 8; tick++)
+            {
+                seen.Add(host.Texture?.ResourcePath ?? "<null>");
+                animator._Process(0.5);
+            }
+
+            Check($"idle_advances_reduce_motion_{reduceMotion}", seen.Count > 1,
+                $"the idle clip held one frame ({string.Join(", ", seen)}) across 8 ticks with " +
+                $"ReduceMotion={reduceMotion} - a breathing loop that does not breathe reads as " +
+                "no animation at all");
+
+            // The flash frame is idle_0's sibling, so compare against the clip
+            // rather than a literal: with ReduceMotion on, playing `hit` must
+            // land on frame 1, not the full-silhouette N8 frame 0.
+            animator.Play("hit");
+            string expected = reduceMotion ? "hit_1" : "hit_0";
+            Check($"hit_opens_on_{expected}",
+                host.Texture?.ResourcePath.Contains(expected) ?? false,
+                $"ReduceMotion={reduceMotion} should open the hit clip on {expected}, got " +
+                $"{host.Texture?.ResourcePath ?? "<null>"}");
+
+            host.QueueFree();
+        }
+
+        SettingsManager.Instance.SetReduceMotion(original, scratch);
+        if (Godot.FileAccess.FileExists(scratch)) DirAccess.RemoveAbsolute(scratch);
     }
 
     // ART_SPEC section 9. The bug this exists for shipped and survived three
