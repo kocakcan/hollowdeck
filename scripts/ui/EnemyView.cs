@@ -53,7 +53,7 @@ public partial class EnemyView : Button
     private TextureRect _debuffIcon = null!;
     private HBoxContainer _statusRow = null!;
     private Dictionary<StatusType, int>? _lastStatuses;
-    private Tween? _idleTween;
+    private SpriteAnimator? _animator;
     private Tween? _intentPulseTween;
     private string? _lastMoveId;
     private HoverTooltip? _intentTooltip;
@@ -101,7 +101,7 @@ public partial class EnemyView : Button
         _debuffIcon = GetNode<TextureRect>("VBox/IntentRow/DebuffIcon");
         _statusRow = GetNode<HBoxContainer>("VBox/StatusRow");
         _sprite.Texture = ArtAssets.EnemySprite(Combatant.Definition.Id);
-        _sprite.PivotOffset = _sprite.Size / 2f;
+        _animator = SpriteAnimator.Attach(_sprite, Combatant.Definition.Id, SpriteAnimator.CreatureClips);
         _nameLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _hpLabel.ThemeTypeVariation = "CombatDisplayLabel";
         ChromeStyles.ApplyHpBarStyle(_hpBar, _ghostHpBar);
@@ -110,7 +110,6 @@ public partial class EnemyView : Button
         MouseExited += HideIntentTooltip;
         Instances.Add(this);
         Refresh();
-        StartIdleBob();
         StartIntentPulse();
     }
 
@@ -136,56 +135,26 @@ public partial class EnemyView : Button
         };
     }
 
-    // Subtle continuous "breathing" loop - scale/rotation only, since
-    // _sprite sits inside a VBoxContainer which manages its position/size
-    // (a Position tween here would just get fought and overridden every
-    // layout pass). Phase-offset per instance via the initial random delay
-    // so multiple enemies don't all bob in lockstep.
-    private void StartIdleBob()
-    {
-        _idleTween?.Kill();
-        _sprite.Scale = Vector2.One;
-        var tween = _sprite.CreateTween();
-        _idleTween = tween;
-        tween.TweenInterval(GD.Randf() * 1.0);
-        tween.SetLoops();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(_sprite, "scale", Vector2.One * 1.04f, 1.0);
-        tween.TweenProperty(_sprite, "scale", Vector2.One, 1.0);
-    }
-
-    // Quick punch-and-settle on the sprite when this enemy takes damage,
-    // layered alongside CombatScreen's existing modulate flash. Restarts the
-    // idle bob afterward since both drive the same Scale property and would
-    // otherwise fight each other.
-    public void PlayHitRecoil()
-    {
-        _idleTween?.Kill();
-        _sprite.Scale = Vector2.One;
-        var tween = _sprite.CreateTween();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.SetParallel(true);
-        tween.TweenProperty(_sprite, "scale", Vector2.One * 1.15f, 0.06);
-        tween.TweenProperty(_sprite, "rotation_degrees", 6f, 0.06);
-        tween.Chain();
-        tween.SetParallel(true);
-        tween.TweenProperty(_sprite, "scale", Vector2.One, 0.16).SetTrans(Tween.TransitionType.Back);
-        tween.TweenProperty(_sprite, "rotation_degrees", 0f, 0.16).SetTrans(Tween.TransitionType.Back);
-        tween.Chain().TweenCallback(Callable.From(StartIdleBob));
-    }
+    // The breathing loop, the hit recoil and the wind-up lean are all frame
+    // clips now (tools/artgen/src/anim.rs, played by SpriteAnimator).
+    //
+    // They were scale/rotation tweens - 1.04, 1.15 plus 6 degrees, 1.08 - and
+    // the comment that used to sit here explained the choice: _sprite is inside
+    // a VBoxContainer, which owns position and size, so Scale was "the one
+    // transform a container does not touch". The reasoning was sound and the
+    // result violated ART_SPEC section 2 on every frame it played, because a
+    // 32px source at scale 1.04 renders 5.2 device pixels per source pixel.
+    //
+    // A frame swap is not a transform, so the container objection never arises
+    // and the sprite is at an integer scale by construction. Nothing here
+    // writes _sprite.Scale or _sprite.RotationDegrees any more, and
+    // PixelSpecSmokeTest.TestNoTweenTransformsAPixelSprite fails the build if
+    // anything starts again.
+    public void PlayHitRecoil() => _animator?.Play("hit");
 
     // Brief telegraph lean while CombatManager's wind-up delay plays out,
     // so an attack reads as building up before it lands.
-    public void PlayWindUp()
-    {
-        _idleTween?.Kill();
-        _sprite.Scale = Vector2.One;
-        var tween = _sprite.CreateTween();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(_sprite, "scale", Vector2.One * 1.08f, 0.12);
-        tween.TweenProperty(_sprite, "scale", Vector2.One, 0.08);
-        tween.TweenCallback(Callable.From(StartIdleBob));
-    }
+    public void PlayWindUp() => _animator?.Play("windup");
 
     // Slow idle opacity breathing on the intent icon, same "still alive and
     // relevant" cue the sprite's idle bob gives the enemy itself.
@@ -204,31 +173,39 @@ public partial class EnemyView : Button
     // Pop when the telegraphed intent actually changes between refreshes
     // (e.g. after this enemy's turn resolves and it picks its next move),
     // instead of the icon/number silently swapping mid-idle-pulse.
+    //
+    // The pop was a 1.5x -> 1.0 Scale tween, and the intent icon is a 32x32
+    // pixel asset drawn at HudIconScale, so it was the same ART_SPEC section 2
+    // violation the sprite clips exist to end - on a smaller node and therefore
+    // easier to miss. Brightness carries the same "this just changed" beat
+    // without a geometric transform, and it is the emphasis channel ART_SPEC
+    // section 6 already reaches for when a blur is unavailable.
     private void PlayIntentChangeFlash()
     {
         _intentPulseTween?.Kill();
         _intentIcon.Modulate = Colors.White;
-        _intentIcon.PivotOffset = _intentIcon.Size / 2f;
-        _intentIcon.Scale = Vector2.One * 1.5f;
         var tween = _intentIcon.CreateTween();
-        tween.TweenProperty(_intentIcon, "scale", Vector2.One, 0.2).SetTrans(Tween.TransitionType.Back);
+        tween.TweenProperty(_intentIcon, "modulate", new Color(2f, 2f, 2f), 0.06);
+        tween.TweenProperty(_intentIcon, "modulate", Colors.White, 0.18);
         tween.TweenCallback(Callable.From(StartIntentPulse));
     }
 
-    // Whole-view fade/shrink/slump on death (not just the sprite) - unlike
-    // the hit/idle animations, the enemy is leaving the fight entirely, so
-    // animating the whole card (name/HP/status included) reads better than
-    // just the portrait reacting. Safe to animate Scale/Rotation/Modulate on
-    // this Button directly since only Position/Size are Container-managed.
+    // Death is two layers, and the split is the point. The *sprite* comes
+    // apart on its own frame clip; the rest of the card - name, HP bar, status
+    // row - fades, because the enemy is leaving the fight entirely and
+    // animating only the portrait would leave its furniture standing.
+    //
+    // The fade is all that is left of the old tween. It used to also shrink to
+    // 0.7 and rotate 10 degrees, which resampled the pixel sprite riding inside
+    // it; alpha is not a geometric transform, so it resamples nothing and is
+    // the one property a pixel asset may still be tweened on (ART_SPEC 9).
     public void PlayDeathTween(System.Action onComplete)
     {
         AudioManager.Instance?.PlaySfx("enemy_death");
+        _animator?.PlayTerminal("death");
         var tween = CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(this, "scale", Vector2.One * 0.7f, 0.35).SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(this, "rotation_degrees", 10f, 0.35).SetTrans(Tween.TransitionType.Sine);
         tween.TweenProperty(this, "modulate:a", 0f, 0.35).SetTrans(Tween.TransitionType.Sine);
-        tween.Chain().TweenCallback(Callable.From(onComplete));
+        tween.TweenCallback(Callable.From(onComplete));
     }
 
     // The other way out of a fight, and it has to look like a different event
@@ -239,21 +216,21 @@ public partial class EnemyView : Button
     // Same completion-callback shape as PlayDeathTween because CombatScreen
     // drives both from the same diff of Enemies against _enemyViews.
     //
-    // Animates scale from a right-edge pivot rather than position, and that is
-    // not a stylistic choice: this node is still a child of EnemyRow while the
-    // tween runs, and an HBoxContainer owns its children's position and size -
-    // it would overwrite a position tween on its next sort. Scale and pivot are
-    // the two transform properties a container does not touch, which is also
-    // why PlayDeathTween above only ever uses scale, rotation and modulate.
+    // The old version squeezed the whole view to (0.15, 0.85) from a right-edge
+    // pivot, and its comment explained why it could not simply move the thing:
+    // this node is a child of EnemyRow, an HBoxContainer owns its children's
+    // position, and a position tween would be overwritten on the next sort.
+    //
+    // The frame clip walks the creature out of its own 32x32 cell instead, so
+    // an escape finally *travels* rather than being crushed sideways - and it
+    // needs no transform at all, which is what makes it expressible inside a
+    // container in the first place.
     public void PlayEscapeTween(System.Action onComplete)
     {
-        PivotOffset = new Vector2(Size.X, Size.Y * 0.5f);
+        _animator?.PlayTerminal("escape");
         var tween = CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(this, "scale", new Vector2(0.15f, 0.85f), 0.35)
-            .SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.In);
         tween.TweenProperty(this, "modulate:a", 0f, 0.35).SetTrans(Tween.TransitionType.Sine);
-        tween.Chain().TweenCallback(Callable.From(onComplete));
+        tween.TweenCallback(Callable.From(onComplete));
     }
 
     public override void _ExitTree()

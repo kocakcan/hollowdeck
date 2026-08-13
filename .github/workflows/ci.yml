@@ -86,6 +86,19 @@ jobs:
             exit 1
           fi
 
+      # Same argument one asset class over. The sprite frames are *derived* from
+      # the sourced roster, so they drift two ways: edit a derivation in
+      # anim.rs, or re-clamp a source sprite, and the committed frames stop
+      # matching what produces them. Deriving is pure, so this must be a no-op.
+      - name: Derived sprite frames are up to date
+        run: |
+          cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- animate
+          if ! git diff --exit-code -- assets/sprites/anim; then
+            echo "::error::assets/sprites/anim differs from what tools/artgen derives." \
+                 "Run 'cargo run --release --manifest-path tools/artgen/Cargo.toml -- animate' and commit the result."
+            exit 1
+          fi
+
   # A separate job rather than more steps on `smoke`, because it needs ~1.1GB of
   # export templates that the test job must never pay for. In parallel it costs
   # no wall clock on a warm cache, and a red job named "Export" says what broke.

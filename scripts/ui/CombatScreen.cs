@@ -96,7 +96,7 @@ public partial class CombatScreen : Control
     private Texture2D? _energyOrbTexture;
     private Texture2D? _sparkTexture;
     private Vector2 _playerSpriteRestPos;
-    private Tween? _playerIdleTween;
+    private SpriteAnimator? _playerAnimator;
     private Tween? _screenShakeTween;
     private Vector2 _turnBannerRestPos;
     private Tween? _turnBannerTween;
@@ -211,6 +211,7 @@ public partial class CombatScreen : Control
         _playerSprite.Texture = ArtAssets.PlayerSprite();
         GetNode<TextureRect>("PlayerSprite/Shadow").Texture = BuildShadowTexture();
         _playerSpriteRestPos = _playerSprite.Position;
+        _playerAnimator = SpriteAnimator.Attach(_playerSprite, "player", SpriteAnimator.PlayerClips);
         StartPlayerIdleBob();
 
         ChromeStyles.ApplyHpBarStyle(_playerHpBar, _playerGhostHpBar);
@@ -306,37 +307,67 @@ public partial class CombatScreen : Control
         }
     }
 
-    // Continuous gentle bob - Position is safe here since PlayerSprite is a
-    // direct child of the CombatScreen root, not Container-managed.
+    // The player's breathing is a frame clip now (SpriteAnimator), not a
+    // Position tween.
+    //
+    // The old one slid the sprite 6px and back on a Sine curve, and Position
+    // *was* safe here in the layout sense - PlayerSprite is a direct child of
+    // the CombatScreen root, not Container-managed, which is why this screen
+    // and EnemyView ended up animating the same medium two different ways. It
+    // was not safe in the pixel sense: the sprite renders at PixelSpec.
+    // SpriteScale, so 6 canvas px is 1.2 source pixels and every intermediate
+    // value of that tween put the art on a fractional offset. A pixel sprite
+    // that drifts off its own grid shimmers - saint11's "Subpixel" tutorial is
+    // this exact failure.
     private void StartPlayerIdleBob()
     {
-        _playerIdleTween?.Kill();
         _playerSprite.Position = _playerSpriteRestPos;
-        var tween = _playerSprite.CreateTween();
-        _playerIdleTween = tween;
-        tween.SetLoops();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(_playerSprite, "position", _playerSpriteRestPos + new Vector2(0, -6), 1.3);
-        tween.TweenProperty(_playerSprite, "position", _playerSpriteRestPos, 1.3);
+        _playerAnimator?.PlayIdle();
     }
 
     // Shared driver for any one-off PlayerSprite Position beat (hit-shake,
-    // attack lunge) - always kills the idle bob first (both drive Position)
-    // and restarts it once the beat settles back to rest.
+    // attack lunge) and the single funnel every such beat goes through, so the
+    // snap below cannot be bypassed by a new call site.
+    //
+    // A lunge genuinely crosses the screen toward a target, so unlike the idle
+    // bob it cannot become a frame clip - the travel is the point. What it can
+    // do is land only on offsets that keep the art pixel-aligned, which is what
+    // SnapToPixelGrid buys.
     private void PlayPlayerPositionBeat(List<Vector2> waypoints, float stepDuration)
     {
-        _playerIdleTween?.Kill();
         var tween = _playerSprite.CreateTween();
         foreach (var wp in waypoints)
         {
-            tween.TweenProperty(_playerSprite, "position", wp, stepDuration);
+            tween.TweenProperty(_playerSprite, "position", SnapToPixelGrid(wp), stepDuration);
         }
         tween.TweenProperty(_playerSprite, "position", _playerSpriteRestPos, stepDuration);
         tween.TweenCallback(Callable.From(StartPlayerIdleBob));
     }
 
+    // Round a destination to a whole source pixel, measured from the sprite's
+    // rest position rather than from canvas zero: the offset is what the eye
+    // reads against the backdrop, and PlayerSprite's rest position is not
+    // itself a multiple of SpriteScale.
+    //
+    // This only pins the tween's *endpoints*. Godot still interpolates between
+    // them, so a lunge passes through fractional offsets while it travels -
+    // which is the accepted cost of having travel at all, and is invisible at
+    // speed in a way a 2.6-second idle loop sitting on one is not.
+    private Vector2 SnapToPixelGrid(Vector2 position)
+    {
+        var offset = position - _playerSpriteRestPos;
+        return _playerSpriteRestPos + new Vector2(
+            Mathf.Round(offset.X / PixelSpec.SpriteScale) * PixelSpec.SpriteScale,
+            Mathf.Round(offset.Y / PixelSpec.SpriteScale) * PixelSpec.SpriteScale);
+    }
+
+    // The shake carries the displacement, the clip carries the flash and the
+    // recoil pose. Both, because a shake alone reads as the camera moving and
+    // a flash alone reads as a tint - the two together are what saint11's
+    // "Impact" card puts side by side.
     private void PlayPlayerHitShake()
     {
+        _playerAnimator?.Play("hit");
         var rng = new RandomNumberGenerator();
         var waypoints = new List<Vector2>();
         for (int i = 0; i < 4; i++)
@@ -348,6 +379,7 @@ public partial class CombatScreen : Control
 
     private void PlayPlayerLungeToward(Vector2 targetGlobalPos)
     {
+        _playerAnimator?.Play("windup");
         var direction = (targetGlobalPos - (_playerSprite.GlobalPosition + _playerSprite.Size / 2f)).Normalized();
         PlayPlayerPositionBeat(new List<Vector2> { _playerSpriteRestPos + direction * 26f }, 0.09f);
     }
@@ -865,12 +897,18 @@ public partial class CombatScreen : Control
         };
         _energyRow.AddChild(orb);
 
+        // Was a Scale tween from zero with a Back overshoot, on a 16x16 pixel
+        // gem drawn at 4x - the same ART_SPEC section 9 violation the sprite
+        // clips exist to end, on the smallest node in the HUD. The orb is
+        // *added* to the row on a refresh, so its arrival is already the event;
+        // what the pulse adds is emphasis, and brightness carries that without
+        // resampling the gem.
         if (pulse && current > 0)
         {
-            orb.Scale = Vector2.Zero;
+            orb.Modulate = new Color(2.2f, 2.2f, 2.2f);
             orb.CreateTween()
-                .TweenProperty(orb, "scale", Vector2.One, 0.22)
-                .SetTrans(Tween.TransitionType.Back);
+                .TweenProperty(orb, "modulate", Colors.White, 0.22)
+                .SetTrans(Tween.TransitionType.Sine);
         }
     }
 
