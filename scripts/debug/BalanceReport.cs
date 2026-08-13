@@ -30,6 +30,7 @@ public partial class BalanceReport : Node
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         ActDatabase.LoadAll();
+        AscensionDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         BlessingDatabase.LoadAll();
@@ -62,6 +63,7 @@ public partial class BalanceReport : Node
         PrintScoreReachability(reach);
         PrintBlessings();
         PrintUpgradeDeltas();
+        PrintAscensionLadder(throughput);
 
         GD.Print("");
         GetTree().Quit(0);
@@ -196,7 +198,7 @@ public partial class BalanceReport : Node
         // turn deals 0 - so a turn-1 baseline hides exactly the enemies this
         // section exists to find.
         var ramping = EnemyDatabase.All
-            .Select(BalanceModel.Profile)
+            .Select(d => BalanceModel.Profile(d))
             .Where(p => p.FlatDpt > 0 && p.DptAtTurn5 > p.FlatDpt * 1.15)
             .OrderByDescending(p => p.DptAtTurn5 / Math.Max(p.FlatDpt, 0.01))
             .ToList();
@@ -477,6 +479,74 @@ public partial class BalanceReport : Node
         GD.Print("  A gamble is priced as the mean over its alternatives, which is what it rolls.");
         GD.Print("  'cards' is what the player is offered (a draw up, a removal down); 'forced' is a");
         GD.Print("  card named by the author and put in the deck, which is how a Curse is authored.");
+    }
+
+    // ------------------------------------------------------------- ascension
+
+    // Two halves, and the first one is the one this project keeps learning it
+    // needs. Both Phase 8 balance incidents and the Phase 9 node-weight one hid
+    // the same way: a data number moved and only its consequence was visible.
+    // A twenty-row ladder is twenty such numbers, so the modifiers are printed
+    // as modifiers before anything derived from them is.
+    //
+    // The second half is the derived one, and it is deliberately not all
+    // twenty-one rungs of all eleven tables above - that is unreadable and it
+    // is also slow. What it prints is the one measure that answers the question
+    // the ladder actually raises: how much of the player's health an average
+    // act-I fight takes, rung by rung. Sampled tables follow at the two ends.
+    private void PrintAscensionLadder(double throughput)
+    {
+        int max = AscensionDatabase.MaxLevel;
+
+        Header("THE ASCENSION LADDER - twenty rungs, and what each one is made of");
+        GD.Print("  rung  what it adds                   enemy    dmg   boss    HP   heal   shop"
+                 + "  elite potion");
+
+        for (int level = 1; level <= max; level++)
+        {
+            var rung = AscensionDatabase.At(level);
+            var e = AscensionDatabase.Effective(level);
+            GD.Print($"  {level,4}  {rung.Label,-30}"
+                     + $"{e.EnemyHpPercent,6}%{e.EnemyDamagePercent,6}%{e.BossHpBonusPercent,6}%"
+                     + $"{Signed(e.StartingMaxHpDelta),6}{e.ClearHeal(100),6}%{e.ShopPricePercent,6}%"
+                     + $"{Signed(e.EliteWeightDelta),7}{Signed(-e.PotionDropPercentDelta),7}");
+        }
+
+        GD.Print("");
+        GD.Print("  Columns are cumulative, not per-rung: rung N is every rung up to it. 'enemy',");
+        GD.Print("  'dmg', 'shop' are percentages of the authored number; 'boss' is extra HP on top");
+        GD.Print("  of 'enemy'; 'heal' is what clearing an act restores; 'elite' is weight moved out");
+        GD.Print("  of Combat into Elite, so the node table's total never changes.");
+
+        GD.Print("");
+        GD.Print("  rung   act I fight   your HP   pressure      x   costliest act I    imposed");
+
+        double baseline = 0;
+        for (int level = 0; level <= max; level++)
+        {
+            var asc = AscensionDatabase.Effective(level);
+            var act1 = BalanceModel.Profile(ActDatabase.At(0), asc);
+            int hp = asc.StartingMaxHp(RunState.StartingMaxHp);
+            double mean = act1.MeanNormalCost;
+            double worst = act1.CostliestNormal?.Cost ?? 0;
+            double pressure = mean / Math.Max(hp, 1);
+            if (level == 0) baseline = pressure;
+
+            GD.Print($"  {level,4}{mean,14:F0}{hp,10}{pressure,11:F2}"
+                     + $"{pressure / Math.Max(baseline, 0.0001),7:F2}{worst,18:F0}"
+                     + $"{asc.StartingCurseIds.Count,11}");
+        }
+
+        GD.Print("");
+        GD.Print("  'act I fight' is what an average act-I normal encounter throws at you at the");
+        GD.Print($"  reference throughput of {throughput:F1} - damage dealt, before the player blocks any of it,");
+        GD.Print("  so it is a pressure number and not a death count. 'pressure' divides it by the");
+        GD.Print("  rung's own starting HP, which is the pair of knobs that decide whether act I is");
+        GD.Print("  playable at all, and 'x' is that against rung 0.");
+        GD.Print("");
+        GD.Print("  It is an *absolute* measure on purpose. The elite and boss ratio bands above");
+        GD.Print("  divide by the mean normal cost, which a rung moves too - so those bands are very");
+        GD.Print("  nearly rung-invariant and are no evidence at all that the ladder does anything.");
     }
 
     // Blank rather than "0" for an axis a blessing does not touch: at seven

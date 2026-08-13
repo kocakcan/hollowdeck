@@ -58,6 +58,9 @@ public partial class RunSetupScreen : Control
 
     private LineEdit _seedField = null!;
     private Button _rerollButton = null!;
+    private Control _ascensionBox = null!;
+    private CheckButton _ascensionToggle = null!;
+    private Label _ascensionLabel = null!;
     private GridContainer _offerGrid = null!;
     private Label _promptLabel = null!;
     private Label _resultLabel = null!;
@@ -140,6 +143,7 @@ public partial class RunSetupScreen : Control
         _rerollButton.Pressed += () => AudioManager.Instance?.PlaySfx("ui_click");
         _rerollButton.Pressed += () => ApplySeed(new Random().Next());
 
+        SetUpAscensionToggle();
         RefreshOffers();
 
         // No onCancel. Like an event, this is a decision with no way back: the
@@ -217,18 +221,30 @@ public partial class RunSetupScreen : Control
 
     // The whole run, rebuilt. BeginRun re-Inits every stream and re-runs
     // InitNewRun, so the map behind this screen changes with the offers on it.
-    private void ApplySeed(int seed)
+    //
+    // The rung is passed on every call rather than defaulted from RunState,
+    // which would read the field BeginRun is about to overwrite. Callers that
+    // are only changing the seed carry the current rung forward explicitly.
+    private void ApplySeed(int seed) => ApplySeed(seed, RunState.AscensionLevel);
+
+    private void ApplySeed(int seed, int ascension)
     {
         if (_claimed) return;
 
-        RunManager.Instance.BeginRun(seed);
+        RunManager.Instance.BeginRun(seed, ascension);
         _seedField.Text = RunManager.Instance.RunSeed.ToString();
+        RefreshAscensionLabel();
         RefreshOffers();
         ScreenChrome.RefreshRunStatus(this);
         _keyboardNav?.Regrab();
     }
 
-    private void SetSeedControlsInPlay(bool inPlay)
+    // Renamed from SetSeedControlsInPlay when the ascension toggle joined it.
+    // The toggle belongs here rather than beside it for exactly the reason the
+    // seed field does: flipping it calls BeginRun, BeginRun calls InitNewRun,
+    // and InitNewRun resets Deck/Relics/HP - so a rung changed after a blessing
+    // has resolved erases the blessing silently.
+    private void SetRunControlsInPlay(bool inPlay)
     {
         // Both halves, together. FocusModeEnum.None is the only one of the two
         // that excludes a control from Tab and arrow navigation *and* releases
@@ -238,6 +254,112 @@ public partial class RunSetupScreen : Control
         _seedField.FocusMode = inPlay ? FocusModeEnum.All : FocusModeEnum.None;
         _rerollButton.Disabled = !inPlay;
         _rerollButton.FocusMode = inPlay ? FocusModeEnum.All : FocusModeEnum.None;
+        _ascensionToggle.Disabled = !inPlay;
+        _ascensionToggle.FocusMode = inPlay ? FocusModeEnum.All : FocusModeEnum.None;
+    }
+
+    // -- the ascension half -----------------------------------------------
+
+    // Hidden outright below limit 1, rather than shown disabled. A player who
+    // has not finished a run has no ladder to see, and a greyed control that
+    // has never once been usable is noise rather than a goal - the unlock
+    // screen is where a locked thing belongs. It also keeps this screen's
+    // layout, and the four runsetup screenshot fixtures, exactly what they were
+    // for a new save.
+    private void SetUpAscensionToggle()
+    {
+        _ascensionBox = GetNode<Control>("CenterContainer/VBoxContainer/AscensionBox");
+        _ascensionToggle = GetNode<CheckButton>(
+            "CenterContainer/VBoxContainer/AscensionBox/AscensionToggle");
+        _ascensionLabel = GetNode<Label>(
+            "CenterContainer/VBoxContainer/AscensionBox/AscensionLabel");
+
+        // Body, not Small. Small is 8px - the bottom of ART_SPEC's ladder, and
+        // what the ENTER APPLIES chip beside the seed field uses. It is a size
+        // for a two-word hint, and at a shot it turned this line into an
+        // unreadable grey rule 200 characters long. This is the only place the
+        // player is told what the rung actually does, so it is body text and it
+        // wraps.
+        _ascensionLabel.AddThemeFontSizeOverride("font_size", UiTheme.Fonts.Body);
+        _ascensionLabel.AddThemeColorOverride("font_color", PixelSpec.Ramp.N6);
+
+        int limit = MetaProgressionManager.Instance?.AscensionLimit ?? 0;
+        _ascensionBox.Visible = limit > 0;
+        if (limit <= 0) return;
+
+        _ascensionToggle.Text = $"ASCENSION {limit}";
+        // CheckButton rather than CheckBox: the theme styles the first and has no
+        // entry at all for the second, and an unstyled control inherits Godot's
+        // stock look - the mixed-media seam the pixel-art commitment exists to
+        // close, which is exactly how the seed field's LineEdit arrived one phase
+        // ago. The two Settings toggles are the same control.
+        _ascensionToggle.AddThemeColorOverride("font_color", UiTheme.Palette.AccentGold);
+        _ascensionToggle.ButtonPressed = RunState.AscensionLevel > 0;
+        _ascensionToggle.Toggled += OnAscensionToggled;
+
+        RefreshAscensionLabel();
+    }
+
+    private void OnAscensionToggled(bool on)
+    {
+        AudioManager.Instance?.PlaySfx("ui_click");
+
+        // The same rebuild Reroll does, on the same seed. It has to be a
+        // rebuild rather than a field assignment: the rung decides the starting
+        // max HP, the cards imposed on the opening deck and how often the map
+        // rolls an Elite, and two of those three are already built by the time
+        // this screen is on screen.
+        ApplySeed(RunManager.Instance.RunSeed,
+            on ? MetaProgressionManager.Instance?.AscensionLimit ?? 0 : 0);
+    }
+
+    private void RefreshAscensionLabel() =>
+        _ascensionLabel.Text = RunState.AscensionLevel > 0
+            ? Summarise(RunState.Ascension)
+            : "Off. Win a run to raise the ladder; switch it on to climb it.";
+
+    // Derived from the resolved modifiers rather than assembled out of the
+    // rungs' authored labels, and the difference is the one this project keeps
+    // writing down: prose that restates a number drifts from it. Every figure
+    // here is read from the same AscensionModifiers the fight, the shop and the
+    // map generator read, so a retuned ladder cannot leave this line describing
+    // the old one.
+    //
+    // The rungs' own labels are still what BalanceReport prints and what the
+    // toggle names on the way up - they say which knob a rung turned, which is
+    // the half a cumulative summary cannot show.
+    private static string Summarise(AscensionModifiers asc)
+    {
+        var parts = new List<string>();
+
+        if (asc.EnemyHpPercent != 100 || asc.EnemyDamagePercent != 100)
+        {
+            var enemy = new List<string>();
+            if (asc.EnemyHpPercent != 100) enemy.Add($"+{asc.EnemyHpPercent - 100}% health");
+            if (asc.EnemyDamagePercent != 100) enemy.Add($"+{asc.EnemyDamagePercent - 100}% damage");
+            parts.Add("Enemies " + string.Join(", ", enemy));
+        }
+
+        if (asc.BossHpBonusPercent != 0) parts.Add($"Bosses +{asc.BossHpBonusPercent}% more health");
+        if (asc.EliteWeightDelta != 0) parts.Add("Elites are more common");
+        if (asc.StartingMaxHpDelta != 0)
+        {
+            parts.Add($"You begin at {asc.StartingMaxHp(RunState.StartingMaxHp)} HP");
+        }
+
+        if (asc.StartingCurseIds.Count > 0)
+        {
+            var names = asc.StartingCurseIds
+                .Select(id => CardDatabase.All.FirstOrDefault(c => c.Id == id)?.Name)
+                .Where(n => n is not null);
+            parts.Add("Your deck carries " + string.Join(" and ", names));
+        }
+
+        if (asc.ClearHealPercentDelta != 0) parts.Add($"Act clears heal {asc.ClearHeal(100)}%");
+        if (asc.ShopPricePercent != 100) parts.Add($"Shops charge +{asc.ShopPricePercent - 100}%");
+        if (asc.PotionDropPercentDelta != 0) parts.Add("Potions drop less often");
+
+        return parts.Count == 0 ? "No modifiers." : string.Join("  -  ", parts);
     }
 
     // -- the blessing half ------------------------------------------------
@@ -293,6 +415,17 @@ public partial class RunSetupScreen : Control
         // test over everything focusable on screen - here that includes the
         // seed field and Reroll sitting directly above the row.
         CardPicker.WireGridNavigation(_offerGrid, _offerTiles, _beginButton);
+
+        // WireGridNavigation gives a Top neighbour only to rows past the first,
+        // so without this the ascension toggle is reachable by Tab and by
+        // nothing else - the offers are where focus lands, and Up off them goes
+        // nowhere. LibraryScreen.LinkCategoryButton is the same fix for the same
+        // gap, and this survives the re-wire above for the same reason it does.
+        if (_ascensionBox.Visible && _offerTiles.Count > 0)
+        {
+            _offerTiles[0].FocusNeighborTop = _offerTiles[0].GetPathTo(_ascensionToggle);
+            _ascensionToggle.FocusNeighborBottom = _ascensionToggle.GetPathTo(_offerTiles[0]);
+        }
     }
 
     private void OnBlessingChosen(BlessingDefinition blessing)
@@ -302,9 +435,10 @@ public partial class RunSetupScreen : Control
 
         AudioManager.Instance?.PlaySfx("reward_pickup");
 
-        // Before anything resolves: from here on, re-seeding would call
-        // InitNewRun and throw away whatever this blessing is about to grant.
-        SetSeedControlsInPlay(false);
+        // Before anything resolves: from here on, re-seeding or changing the
+        // rung would call InitNewRun and throw away whatever this blessing is
+        // about to grant.
+        SetRunControlsInPlay(false);
 
         foreach (var child in _offerGrid.GetChildren())
         {

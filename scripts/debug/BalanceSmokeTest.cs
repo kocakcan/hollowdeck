@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
@@ -37,6 +38,7 @@ public partial class BalanceSmokeTest : Node
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         ActDatabase.LoadAll();
+        AscensionDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         BlessingDatabase.LoadAll();
@@ -54,6 +56,7 @@ public partial class BalanceSmokeTest : Node
         TestSkipStreakIsWorthTheCardsItCosts();
         TestBlessingsStayInTheirBand();
         TestUpgradeGrantsAreWhatTheDocsClaim();
+        TestTheAscensionLadderIsAClimb();
 
         GD.Print($"BalanceSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -127,29 +130,49 @@ public partial class BalanceSmokeTest : Node
 
     // The whole point of three acts. Both halves have to rise: HP alone makes
     // a longer fight, damage alone makes a swingier one.
+    //
+    // Driven at three rungs rather than only at 0. The ladder scales enemy HP
+    // and damage by a percentage, which is order-preserving in the reals and
+    // *not* in integers - every one of these numbers is a mean over authored
+    // ints that the rung rounds one at a time, so two acts a rounding error
+    // apart can cross. Sampled at both ends and the middle rather than all 21:
+    // each rung is a full re-walk of every encounter in the game, and this
+    // suite shares a 90s watchdog with twelve other tests.
     private void TestActCurveRises()
     {
-        var acts = BalanceModel.AllActs();
-
-        for (int i = 1; i < acts.Count; i++)
+        foreach (int level in SampledRungs)
         {
-            var prev = acts[i - 1];
-            var act = acts[i];
+            var acts = BalanceModel.AllActs(AscensionDatabase.Effective(level));
+            string at = level == 0 ? "" : $"_at_ascension_{level}";
 
-            Check($"act{i + 1}_normal_hp_above_act{i}",
-                act.MeanNormalHp > prev.MeanNormalHp,
-                $"{act.MeanNormalHp:F0} vs {prev.MeanNormalHp:F0}");
-            Check($"act{i + 1}_normal_dpt_above_act{i}",
-                act.MeanNormalDpt > prev.MeanNormalDpt,
-                $"{act.MeanNormalDpt:F1} vs {prev.MeanNormalDpt:F1}");
-            Check($"act{i + 1}_elite_hp_above_act{i}",
-                act.MeanEliteHp > prev.MeanEliteHp,
-                $"{act.MeanEliteHp:F0} vs {prev.MeanEliteHp:F0}");
-            Check($"act{i + 1}_elite_dpt_above_act{i}",
-                act.MeanEliteDpt > prev.MeanEliteDpt,
-                $"{act.MeanEliteDpt:F1} vs {prev.MeanEliteDpt:F1}");
+            for (int i = 1; i < acts.Count; i++)
+            {
+                var prev = acts[i - 1];
+                var act = acts[i];
+
+                Check($"act{i + 1}_normal_hp_above_act{i}{at}",
+                    act.MeanNormalHp > prev.MeanNormalHp,
+                    $"{act.MeanNormalHp:F0} vs {prev.MeanNormalHp:F0}");
+                Check($"act{i + 1}_normal_dpt_above_act{i}{at}",
+                    act.MeanNormalDpt > prev.MeanNormalDpt,
+                    $"{act.MeanNormalDpt:F1} vs {prev.MeanNormalDpt:F1}");
+                Check($"act{i + 1}_elite_hp_above_act{i}{at}",
+                    act.MeanEliteHp > prev.MeanEliteHp,
+                    $"{act.MeanEliteHp:F0} vs {prev.MeanEliteHp:F0}");
+                Check($"act{i + 1}_elite_dpt_above_act{i}{at}",
+                    act.MeanEliteDpt > prev.MeanEliteDpt,
+                    $"{act.MeanEliteDpt:F1} vs {prev.MeanEliteDpt:F1}");
+            }
         }
     }
+
+    // Rung 0, the middle, and the top. Held as a property rather than a literal
+    // array at each site so the top rung follows the content file if the ladder
+    // is ever lengthened - a sampled sweep whose top is a hardcoded 20 would
+    // silently stop covering the hardest rung, which is the only one anyone
+    // would actually worry about.
+    private static int[] SampledRungs =>
+        new[] { 0, AscensionDatabase.MaxLevel / 2, AscensionDatabase.MaxLevel };
 
     // An enrage phase that does not hit harder than the phase before it is a
     // content bug wearing a mechanic's name: the player watches the boss drop
@@ -159,7 +182,7 @@ public partial class BalanceSmokeTest : Node
     private void TestEnrageIsAnEscalation()
     {
         var enraging = EnemyDatabase.All
-            .Select(BalanceModel.Profile)
+            .Select(d => BalanceModel.Profile(d))
             .Where(p => p.HasEnrage)
             .ToList();
 
@@ -604,6 +627,104 @@ public partial class BalanceSmokeTest : Node
         Check($"{cardId}_grants_{status}_{baseAmount}", spec.Amount == baseAmount, $"got {spec.Amount}");
         Check($"{cardId}_upgraded_grants_{status}_{upgradedAmount}",
             upgraded.Amount == upgradedAmount, $"got {upgraded.Amount}");
+    }
+
+    // The ladder's curve half. AscensionSmokeTest owns the data half - that the
+    // rows are authored, contiguous, and fold - and this owns the only question
+    // the numbers actually raise: does each rung make the game harder, and is
+    // the top one still a game.
+    //
+    // Measured on act I's mean normal encounter cost against the rung's own
+    // starting max HP, and that pairing is the point. Either half alone is
+    // gameable: a rung could raise enemy HP and hand back starting HP and look
+    // flat on one axis while being flat on neither.
+    private void TestTheAscensionLadderIsAClimb()
+    {
+        int max = AscensionDatabase.MaxLevel;
+        Check("the_ladder_has_rungs", max > 0, "ascension.json is empty");
+        if (max == 0) return;
+
+        var pressure = new List<double>();
+        for (int level = 0; level <= max; level++)
+        {
+            var asc = AscensionDatabase.Effective(level);
+            var act1 = BalanceModel.Profile(ActDatabase.At(0), asc);
+            pressure.Add(act1.MeanNormalCost / Math.Max(asc.StartingMaxHp(RunState.StartingMaxHp), 1));
+        }
+
+        // Non-strict, and deliberately so: six of the nine knobs - shop prices,
+        // potion rate, elite frequency, boss HP, the act-clear heal, an imposed
+        // card - are invisible to an act-I normal encounter, so the eleven rungs
+        // that turn only those are flat here and are still doing something.
+        // What this refuses is a rung that makes the game *easier*, which is the
+        // only direction that is a bug rather than a knob this measure cannot
+        // see.
+        var downhill = new List<string>();
+        for (int level = 1; level <= max; level++)
+        {
+            if (pressure[level] < pressure[level - 1] - 0.001) downhill.Add(level.ToString());
+        }
+
+        Check("no_rung_is_easier_than_the_one_below", downhill.Count == 0,
+            $"downhill at rungs: {Join(downhill)}");
+
+        // And the other end of that: a ladder where every rung is invisible to
+        // this measure would pass the check above trivially. Something has to
+        // actually climb.
+        Check("the_top_rung_is_meaningfully_harder", pressure[max] > pressure[0] * 1.25,
+            $"rung {max} is {pressure[max] / pressure[0]:F2}x rung 0 - the ladder is decoration");
+
+        // The roadmap's own proof obligation: no rung may make act I unwinnable
+        // at starter throughput. EncounterCost is damage *thrown*, before the
+        // player blocks any of it, so a fight costing more than the player's
+        // whole HP bar is normal and is not the failure - Defend exists. What
+        // is unplayable is an average opening fight throwing multiples of it,
+        // where no amount of Block in a ten-card deck closes the gap.
+        Check("act_1_stays_playable_at_the_top_rung", pressure[max] < 2.0,
+            $"an average act I fight throws {pressure[max]:F2}x the player's starting HP at rung {max}");
+
+        // The rule BossCostLow does double duty for, re-checked at the top rung.
+        // A Combat node that costs what a Boss node promises is the Phase 8
+        // incident, and an ascension rung is a new way to reach it: it scales
+        // the costliest normal and the mean it is measured against by different
+        // amounts, because rounding lands differently on different enemies.
+        var top = BalanceModel.Profile(ActDatabase.At(0), AscensionDatabase.Effective(max));
+        var costliest = top.CostliestNormal;
+        Check("no_act_1_normal_costs_boss_money_at_the_top_rung",
+            costliest is null || top.CostRatio(costliest) < BalanceModel.BossCostLow,
+            $"{costliest?.Label} is {(costliest is null ? 0 : top.CostRatio(costliest)):F2}x the act mean");
+
+        // The one knob whose failure is silent rather than merely bad. Potions
+        // are already the scarcest resource in the game, and TestPotionDropYield
+        // above bands the rung-0 yield at one drop a run precisely because below
+        // that the belt is empty. The ladder is allowed to make them scarcer; it
+        // is not allowed to switch them off.
+        double drops = BalanceModel.SampleRuns(Seeds, AscensionDatabase.Effective(max))["potionpct"] / 100.0;
+        Check("potions_still_drop_at_the_top_rung", drops >= 0.5,
+            $"{drops:F2} expected drops a run at rung {max}");
+
+        // Elites are moved weight, not added weight, so the map has to still
+        // contain the other five node types in something like their old
+        // proportions. Measured rather than reasoned about, because
+        // MapGenerator's own comment records that an unchanged weight is not an
+        // unchanged share and that nothing in the repo caught it last time.
+        var flat = BalanceModel.SampleRuns(Seeds);
+        var hard = BalanceModel.SampleRuns(Seeds, AscensionDatabase.Effective(max));
+        Check("the_top_rung_actually_offers_more_elites", hard["elite"] > flat["elite"],
+            $"{hard["elite"]:F2} against {flat["elite"]:F2} a run");
+        Check("the_top_rung_does_not_empty_the_utility_rooms",
+            hard["shop"] >= flat["shop"] * 0.9 && hard["rest"] >= flat["rest"] * 0.9
+            && hard["treasure"] >= flat["treasure"] * 0.9 && hard["event"] >= flat["event"] * 0.9,
+            $"shop {hard["shop"]:F2}/{flat["shop"]:F2}, rest {hard["rest"]:F2}/{flat["rest"]:F2}, "
+            + $"treasure {hard["treasure"]:F2}/{flat["treasure"]:F2}, event {hard["event"]:F2}/{flat["event"]:F2}");
+
+        // A rung that priced a card out of every purse would take the shop off
+        // the map rather than making it expensive, and the reachability sweep
+        // above is what would otherwise notice - at rung 0 only.
+        var reach = BalanceModel.Reachable(Seeds, asc: AscensionDatabase.Effective(max));
+        Check("a_shop_is_still_worth_visiting_at_the_top_rung",
+            reach.DeckSize.Best > reach.DeckSizeNoPurchases.Best,
+            $"best deck {reach.DeckSize.Best} against {reach.DeckSizeNoPurchases.Best} on rewards alone");
     }
 
     private static string Join(IEnumerable<string> items)

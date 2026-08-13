@@ -64,29 +64,39 @@ public static class BalanceModel
     // price one *phase* rather than one enemy. Profile's steady state answers
     // "what does this enemy do in a fight", which for a sleeper is its awake
     // list - so comparing its two phases needs a way to ask about a list.
-    public static double MeanMoveDamage(IReadOnlyList<EnemyMove> moves) =>
-        moves.Count == 0 ? 0.0 : Mean(moves.Select(m => (double)MoveDamage(m)));
+    public static double MeanMoveDamage(IReadOnlyList<EnemyMove> moves, AscensionModifiers? asc = null) =>
+        moves.Count == 0 ? 0.0 : Mean(moves.Select(m => (double)MoveDamage(m, asc)));
 
-    public static EnemyProfile Profile(EnemyDefinition def)
+    public static EnemyProfile Profile(EnemyDefinition def, AscensionModifiers? asc = null)
     {
-        var enrage = MeanMoveDamage(def.EnrageMoves);
+        var rung = asc ?? AscensionModifiers.None;
+        var enrage = MeanMoveDamage(def.EnrageMoves, rung);
         return new EnemyProfile(
-            def.Id, def.Name, def.MaxHp, def.AiType,
-            FlatDpt: FlatDpt(def),
-            DptAtTurn1: DptAtTurn(def, 1),
-            DptAtTurn5: DptAtTurn(def, RampTurns),
+            def.Id, def.Name, rung.EnemyHp(def.MaxHp, ActDatabase.IsBoss(def.Id)), def.AiType,
+            FlatDpt: FlatDpt(def, rung),
+            DptAtTurn1: DptAtTurn(def, 1, rung),
+            DptAtTurn5: DptAtTurn(def, RampTurns, rung),
             def.EnrageHpPercent,
             enrage);
     }
 
-    public static EnemyProfile Profile(string id) => Profile(EnemyDatabase.Get(id));
+    public static EnemyProfile Profile(string id, AscensionModifiers? asc = null) =>
+        Profile(EnemyDatabase.Get(id), asc);
 
     // Damage a single move deals, summed over its deal_damage specs rather
     // than read off intent.DisplayAmount - the telegraph carries damage *per
     // hit*, so a move authored as three 4s displays 4 and deals 12. Same
     // relationship Phase4ContentSmokeTest pins from the other direction.
-    private static int MoveDamage(EnemyMove move) =>
-        move.Effects.Where(e => e.Action == "deal_damage").Sum(e => e.Amount);
+    //
+    // The ascension scale is applied *per spec*, not to the summed total,
+    // because DamageMath.ComputeOutgoing applies it per resolving deal_damage
+    // in the game. On a three-hit move the two round differently, and a model
+    // that rounded once would price a fight the player never has.
+    private static int MoveDamage(EnemyMove move, AscensionModifiers? asc = null)
+    {
+        var rung = asc ?? AscensionModifiers.None;
+        return move.Effects.Where(e => e.Action == "deal_damage").Sum(e => rung.EnemyDamage(e.Amount));
+    }
 
     private static int MoveHits(EnemyMove move) =>
         move.Effects.Count(e => e.Action == "deal_damage");
@@ -209,8 +219,8 @@ public static class BalanceModel
     public static IReadOnlyList<(EnemyMove Move, double P)> MoveDistribution(EnemyDefinition def) =>
         SteadyState(def);
 
-    public static double FlatDpt(EnemyDefinition def) =>
-        SteadyState(def).Sum(s => s.P * MoveDamage(s.Move));
+    public static double FlatDpt(EnemyDefinition def, AscensionModifiers? asc = null) =>
+        SteadyState(def).Sum(s => s.P * MoveDamage(s.Move, asc));
 
     // Expected damage on turn t, carrying the Strength this enemy has granted
     // itself on turns 1..t-1. Strength is added per hit (DamageMath applies it
@@ -221,7 +231,7 @@ public static class BalanceModel
     // 2 the steady-state distribution takes over. That is a simplification for
     // sequential enemies with long openers, and it is stated rather than
     // hidden - the flat number above is the one to compare across enemies.
-    public static double DptAtTurn(EnemyDefinition def, int turn)
+    public static double DptAtTurn(EnemyDefinition def, int turn, AscensionModifiers? asc = null)
     {
         if (def.Moves.Count == 0) return 0;
 
@@ -242,7 +252,7 @@ public static class BalanceModel
                 ? new[] { (Move: def.Moves[0], P: 1.0) }.ToList()
                 : SteadyState(def).ToList();
 
-            damage = dist.Sum(s => s.P * (MoveDamage(s.Move) + MoveHits(s.Move) * strength));
+            damage = dist.Sum(s => s.P * (MoveDamage(s.Move, asc) + MoveHits(s.Move) * strength));
             strength += dist.Sum(s => s.P * SelfStatusGain(s.Move, "Strength"));
             ritual += dist.Sum(s => s.P * SelfStatusGain(s.Move, "Ritual"));
         }
@@ -278,9 +288,12 @@ public static class BalanceModel
     // provably inert: Plating 3, 4 and 5 on the same enemy all produced the
     // identical cost. Draining HP inside the loop and stopping when the group is
     // dead is what makes self-granted Block cost the player turns.
-    public static double EncounterCost(IReadOnlyList<string> ids, double throughput)
+    public static double EncounterCost(IReadOnlyList<string> ids, double throughput,
+        AscensionModifiers? asc = null)
     {
         if (ids.Count == 0 || throughput <= 0) return 0;
+
+        var rung = asc ?? AscensionModifiers.None;
 
         // A list rather than the parallel arrays this used to be, because since
         // Phase 8 the roster is not fixed for the length of the fight: a
@@ -288,7 +301,7 @@ public static class BalanceModel
         // ids.Count up front cannot represent either, and a summoner priced as
         // though it fought alone is the same class of error the pre-Phase-8
         // Metallicize omission was.
-        var fight = ids.Select(id => new WalkEnemy(EnemyDatabase.Get(id), joinedOnTurn: 0)).ToList();
+        var fight = ids.Select(id => new WalkEnemy(EnemyDatabase.Get(id), joinedOnTurn: 0, rung)).ToList();
 
         // Player-side state the enemies themselves create.
         double vulnerable = 0, poison = 0, total = 0;
@@ -381,7 +394,7 @@ public static class BalanceModel
                 // thing to do to this method, measured on its own.
                 if (e.Hp <= 0)
                 {
-                    total += ResolveOnDeath(e, fight, turn, ref poison, ref vulnerable,
+                    total += ResolveOnDeath(e, fight, turn, rung, ref poison, ref vulnerable,
                         out int arrivals);
 
                     // A death-summon acts on the round it lands; a move-summon
@@ -398,8 +411,15 @@ public static class BalanceModel
                     actingThisTurn += arrivals;
                 }
 
+                // Against e.MaxHp, which is the *scaled* pool, not
+                // e.Def.MaxHp. EnrageHpPercent is a percentage of the enemy's
+                // own maximum, so an ascension HP multiplier applied to one
+                // side of this comparison and not the other would silently
+                // move the phase flip of every enrage in the game - earlier
+                // for a scaled-up enemy, which is the opposite of what the
+                // rung is doing everywhere else.
                 if (!e.Enraged && e.Def.EnrageHpPercent > 0 && e.Def.EnrageMoves.Count > 0
-                    && e.Hp * 100 <= e.Def.MaxHp * e.Def.EnrageHpPercent)
+                    && e.Hp * 100 <= e.MaxHp * e.Def.EnrageHpPercent)
                 {
                     e.Enraged = true;
                 }
@@ -416,7 +436,7 @@ public static class BalanceModel
                 // Nothing dormant may grant Block (Phase4ContentSmokeTest), so
                 // in practice this only bites if that rule is ever relaxed.
                 if (!e.Enraged && e.Def.AiType == "wake_on_damage"
-                    && e.Def.EnrageMoves.Count > 0 && e.Hp < e.Def.MaxHp)
+                    && e.Def.EnrageMoves.Count > 0 && e.Hp < e.MaxHp)
                 {
                     e.Enraged = true;
                 }
@@ -429,7 +449,7 @@ public static class BalanceModel
                 // turn 4 is on move 1 of its list, not move 4.
                 foreach (var (move, p) in Cadence(e.Def, turn - e.JoinedOnTurn, e.Enraged))
                 {
-                    double raw = MoveDamage(move) + MoveHits(move) * e.Strength;
+                    double raw = MoveDamage(move, rung) + MoveHits(move) * e.Strength;
                     if (vulnerable > 0) raw *= DamageMath.VulnerableMultiplier;
                     total += p * raw;
 
@@ -462,7 +482,7 @@ public static class BalanceModel
                     while (e.PendingSummons[id] >= 1)
                     {
                         e.PendingSummons[id] -= 1;
-                        TrySummon(fight, EnemyDatabase.Find(id), joinedOnTurn: turn);
+                        TrySummon(fight, EnemyDatabase.Find(id), joinedOnTurn: turn, rung);
                     }
                 }
             }
@@ -477,15 +497,21 @@ public static class BalanceModel
     // the loop mutates entries in place and appends to the list while doing it.
     private sealed class WalkEnemy
     {
-        public WalkEnemy(EnemyDefinition def, int joinedOnTurn)
+        public WalkEnemy(EnemyDefinition def, int joinedOnTurn, AscensionModifiers asc)
         {
             Def = def;
-            Hp = def.MaxHp;
+            MaxHp = asc.EnemyHp(def.MaxHp, ActDatabase.IsBoss(def.Id));
+            Hp = MaxHp;
             JoinedOnTurn = joinedOnTurn;
             EscapesOnOwnTurn = EscapeTurn(def);
         }
 
         public readonly EnemyDefinition Def;
+
+        // The ascension-scaled pool this enemy starts from. Held rather than
+        // recomputed at the enrage check, so the threshold and the starting HP
+        // can only ever be two readings of one number.
+        public readonly int MaxHp;
         public double Hp;
         // Metallicize and Plating both pay out Block every turn and both
         // accumulate the way Strength does - what matters is the stack held
@@ -520,8 +546,8 @@ public static class BalanceModel
     // `arrivals` is how many enemies it brought in, so the caller can let them
     // act this round - see the widening of actingThisTurn at the call site.
     private static double ResolveOnDeath(
-        WalkEnemy dying, List<WalkEnemy> fight, int turn, ref double poison, ref double vulnerable,
-        out int arrivals)
+        WalkEnemy dying, List<WalkEnemy> fight, int turn, AscensionModifiers asc,
+        ref double poison, ref double vulnerable, out int arrivals)
     {
         arrivals = 0;
         if (dying.OnDeathFired) return 0;
@@ -533,6 +559,13 @@ public static class BalanceModel
             switch (spec.Action)
             {
                 case "deal_damage":
+                    damage += asc.EnemyDamage(spec.Amount);
+                    break;
+                // Not scaled, and the asymmetry is deliberate: lose_hp is
+                // unblockable self-inflicted-style damage authored as a flat
+                // toll, and DealDamageEffect is the only resolver the ascension
+                // multiplier sits behind. Scaling it here would price a number
+                // the game does not move.
                 case "lose_hp":
                     damage += spec.Amount;
                     break;
@@ -549,7 +582,7 @@ public static class BalanceModel
                         // and so opens on the following round instead.
                         if (TrySummon(fight,
                                 spec.EnemyId is { Length: > 0 } id ? EnemyDatabase.Find(id) : null,
-                                turn - 1))
+                                turn - 1, asc))
                         {
                             arrivals++;
                         }
@@ -564,11 +597,12 @@ public static class BalanceModel
     // Refused past the same cap the game refuses it past, read off
     // CombatManager rather than restated - an analyser modelling five enemies
     // the screen will only ever show four of is pricing a fight nobody can have.
-    private static bool TrySummon(List<WalkEnemy> fight, EnemyDefinition? def, int joinedOnTurn)
+    private static bool TrySummon(List<WalkEnemy> fight, EnemyDefinition? def, int joinedOnTurn,
+        AscensionModifiers asc)
     {
         if (def is null) return false;
         if (fight.Count(e => e.Present) >= CombatManager.MaxEnemies) return false;
-        fight.Add(new WalkEnemy(def, joinedOnTurn));
+        fight.Add(new WalkEnemy(def, joinedOnTurn, asc));
         return true;
     }
 
@@ -700,8 +734,9 @@ public static class BalanceModel
             : $"{string.Join(" + ", Ids)} (+{string.Join(" +", Summoned)})";
     }
 
-    public static EncounterProfile Encounter(IEnumerable<string> ids)
+    public static EncounterProfile Encounter(IEnumerable<string> ids, AscensionModifiers? asc = null)
     {
+        var rung = asc ?? AscensionModifiers.None;
         var list = ids.ToList();
         var defs = list.Select(EnemyDatabase.Get).ToList();
         var summoned = SummonedIds(defs);
@@ -709,9 +744,9 @@ public static class BalanceModel
         return new EncounterProfile(
             list,
             summoned,
-            all.Sum(d => d.MaxHp),
-            all.Sum(FlatDpt),
-            EncounterCost(list, ReferenceThroughput));
+            all.Sum(d => rung.EnemyHp(d.MaxHp, ActDatabase.IsBoss(d.Id))),
+            all.Sum(d => FlatDpt(d, rung)),
+            EncounterCost(list, ReferenceThroughput, rung));
     }
 
     // What a group can bring in, capped at the same live roster limit the fight
@@ -779,14 +814,15 @@ public static class BalanceModel
             MeanNormalCost <= 0 ? 0 : e.Cost / MeanNormalCost;
     }
 
-    public static ActProfile Profile(ActDefinition act) => new(
+    public static ActProfile Profile(ActDefinition act, AscensionModifiers? asc = null) => new(
         act,
-        act.NormalEncounters.Select(Encounter).ToList(),
-        act.EliteEncounters.Select(Encounter).ToList(),
-        act.BossIds.Select(Profile).ToList(),
-        act.BossIds.Select(b => Encounter(new[] { b })).ToList());
+        act.NormalEncounters.Select(e => Encounter(e, asc)).ToList(),
+        act.EliteEncounters.Select(e => Encounter(e, asc)).ToList(),
+        act.BossIds.Select(b => Profile(b, asc)).ToList(),
+        act.BossIds.Select(b => Encounter(new[] { b }, asc)).ToList());
 
-    public static List<ActProfile> AllActs() => ActDatabase.All.Select(Profile).ToList();
+    public static List<ActProfile> AllActs(AscensionModifiers? asc = null) =>
+        ActDatabase.All.Select(a => Profile(a, asc)).ToList();
 
     // The player's side of the same curve, so the two can be read against each
     // other: max HP at the start of each act, from acts.json's clear bonuses
@@ -924,8 +960,9 @@ public static class BalanceModel
     // single Map stream, drawn act after act), walks a uniform-random path
     // through each, and averages over `seeds` runs. The maxima come from a DP
     // over the same graphs, in the same pass.
-    public static RunPaths SampleRuns(int seeds = 500)
+    public static RunPaths SampleRuns(int seeds = 500, AscensionModifiers? asc = null)
     {
+        var rung = asc ?? AscensionModifiers.None;
         var sums = new Dictionary<string, double>
         {
             ["combat"] = 0, ["elite"] = 0, ["boss"] = 0, ["rest"] = 0,
@@ -944,9 +981,9 @@ public static class BalanceModel
 
             foreach (var act in ActDatabase.All)
             {
-                var nodes = MapGenerator.Generate(rng, act);
+                var nodes = MapGenerator.Generate(rng, act, rung);
 
-                var c = Walk(nodes, act, rng);
+                var c = Walk(nodes, act, rng, rung);
                 sums["combat"] += c.Combat;
                 sums["elite"] += c.Elite;
                 sums["boss"] += c.Boss;
@@ -968,7 +1005,7 @@ public static class BalanceModel
                     runMax.Gold + MaxAlong(nodes, n => NodeGold(n, act)),
                     runMax.Fights + MaxAlong(nodes, n =>
                         n.Type is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss ? 1 : 0),
-                    runMax.PotionPercent + MaxAlong(nodes, n => NodePotionPercent(n, act)));
+                    runMax.PotionPercent + MaxAlong(nodes, n => NodePotionPercent(n, act, rung)));
             }
 
             max = new PathMaxima(
@@ -982,7 +1019,8 @@ public static class BalanceModel
         return new RunPaths(seeds, sums.ToDictionary(kv => kv.Key, kv => kv.Value / seeds), max);
     }
 
-    private static PathCounts Walk(IReadOnlyList<MapNode> nodes, ActDefinition act, Random rng)
+    private static PathCounts Walk(IReadOnlyList<MapNode> nodes, ActDefinition act, Random rng,
+        AscensionModifiers asc)
     {
         var byId = nodes.ToDictionary(n => n.Id);
         var floorZero = nodes.Where(n => n.Floor == 0).ToList();
@@ -991,7 +1029,7 @@ public static class BalanceModel
 
         while (true)
         {
-            counts += Count(current, act);
+            counts += Count(current, act, asc);
             if (current.NextNodeIds.Count == 0) break;
             current = byId[current.NextNodeIds[rng.Next(current.NextNodeIds.Count)]];
         }
@@ -999,7 +1037,7 @@ public static class BalanceModel
         return counts;
     }
 
-    private static PathCounts Count(MapNode n, ActDefinition act) => new(
+    private static PathCounts Count(MapNode n, ActDefinition act, AscensionModifiers asc) => new(
         n.Type == MapNodeType.Combat ? 1 : 0,
         n.Type == MapNodeType.Elite ? 1 : 0,
         n.Type == MapNodeType.Boss ? 1 : 0,
@@ -1008,7 +1046,7 @@ public static class BalanceModel
         n.Type == MapNodeType.Treasure ? 1 : 0,
         n.Type == MapNodeType.Event ? 1 : 0,
         NodeGold(n, act),
-        NodePotionPercent(n, act));
+        NodePotionPercent(n, act, asc));
 
     // Mirrors MapScreen's three award sites. Boss gold is 0 in the final act
     // by design (nothing left to spend it on), which is data, not a bug.
@@ -1025,12 +1063,16 @@ public static class BalanceModel
     // game rather than about this file. A boss is in the default arm on purpose
     // - it already guarantees a relic and an act clear, and BalanceSmokeTest
     // pins that rather than leaving it to a reader to trust a `_ =>`.
-    public static int NodePotionPercent(MapNode n, ActDefinition act) => n.Type switch
+    public static int NodePotionPercent(MapNode n, ActDefinition act, AscensionModifiers? asc = null)
     {
-        MapNodeType.Combat => act.PotionDropPercent,
-        MapNodeType.Elite => act.ElitePotionDropPercent,
-        _ => 0,
-    };
+        var rung = asc ?? AscensionModifiers.None;
+        return n.Type switch
+        {
+            MapNodeType.Combat => rung.PotionPercent(act.PotionDropPercent),
+            MapNodeType.Elite => rung.PotionPercent(act.ElitePotionDropPercent),
+            _ => 0,
+        };
+    }
 
     // Best total of `value` over any floor-0-to-boss path. The graph is a
     // layered DAG, so processing floors back to front is all the ordering the
@@ -1092,8 +1134,12 @@ public static class BalanceModel
         Metric Shops,
         Metric Elites);
 
-    // Mirrors ShopScreen's prices and stock sizes.
-    public const int ShopCardPrice = 50;
+    // Read off ShopScreen rather than copied. This was `= 50` under a "mirrors
+    // ShopScreen's prices" comment with nothing asserting the mirror - the same
+    // hazard the flat ShopRelicPrice = 150 two fields down turned out to be, and
+    // it survived the pass that fixed that one because a card price had not
+    // moved yet. An ascension rung moves it, so it stops being a copy.
+    public static int ShopCardPrice => ShopScreen.CardPrice;
     public const int ShopCardsInStock = 4;
     public const int ShopRelicsInStock = 2;
 
@@ -1108,12 +1154,14 @@ public static class BalanceModel
     // number the analyser computes from the same function the shop charges
     // from cannot drift from it at all, which is strictly better than a test
     // that notices afterwards.
-    public static double ExpectedShopRelicPrice()
+    public static double ExpectedShopRelicPrice(AscensionModifiers? asc = null)
     {
+        var rung = asc ?? AscensionModifiers.None;
         var tiers = RelicPool.TiersFor(RelicSite.Shop);
         double weight = tiers.Sum(t => (double)RelicPool.WeightOf(t));
-        if (weight <= 0) return ShopScreen.CommonRelicPrice;
-        return tiers.Sum(t => RelicPool.WeightOf(t) * (double)ShopScreen.RelicPriceFor(t)) / weight;
+        if (weight <= 0) return rung.ShopPrice(ShopScreen.CommonRelicPrice);
+        return tiers.Sum(t => RelicPool.WeightOf(t) * (double)rung.ShopPrice(ShopScreen.RelicPriceFor(t)))
+            / weight;
     }
 
     /// One rung of the card-reward skip ladder: the three tier shares a reward
@@ -1159,8 +1207,9 @@ public static class BalanceModel
     }
 
     public static Reachability Reachable(int seeds = 500, int startingGold = RunState.StartingGold,
-        int startingRelics = 1, int startingDeckSize = 10)
+        int startingRelics = 1, int startingDeckSize = 10, AscensionModifiers? asc = null)
     {
+        var rung = asc ?? AscensionModifiers.None;
         var gold = new List<int>();
         var relics = new List<int>();
         var deck = new List<int>();
@@ -1180,10 +1229,10 @@ public static class BalanceModel
 
             foreach (var act in ActDatabase.All)
             {
-                var nodes = MapGenerator.Generate(rng, act);
+                var nodes = MapGenerator.Generate(rng, act, rung);
 
-                cardRun = BestForward(nodes, act, cardRun, CardsAt);
-                relicRun = BestForward(nodes, act, relicRun, RelicsAt);
+                cardRun = BestForward(nodes, act, cardRun, (n, gold) => CardsAt(n, gold, rung));
+                relicRun = BestForward(nodes, act, relicRun, (n, gold) => RelicsAt(n, gold, rung));
 
                 seedGold += MaxAlong(nodes, n => NodeGold(n, act));
                 seedEvents += MaxAlong(nodes, n => n.Type == MapNodeType.Event ? 1 : 0);
@@ -1223,17 +1272,18 @@ public static class BalanceModel
     // size as one who took all four. This model has no rarity axis for a deck
     // at all, so there is nothing here for the streak to move; what it buys is
     // reported on its own terms by SkipStreakOdds instead.
-    private static (int Gained, int Spent) CardsAt(MapNode n, int gold)
+    private static (int Gained, int Spent) CardsAt(MapNode n, int gold, AscensionModifiers asc)
     {
         if (n.Type is MapNodeType.Combat or MapNodeType.Elite or MapNodeType.Boss) return (1, 0);
         if (n.Type != MapNodeType.Shop) return (0, 0);
-        int bought = Math.Min(ShopCardsInStock, gold / ShopCardPrice);
-        return (bought, bought * ShopCardPrice);
+        int price = asc.ShopPrice(ShopCardPrice);
+        int bought = Math.Min(ShopCardsInStock, gold / price);
+        return (bought, bought * price);
     }
 
     // The guaranteed relic on every Elite and Boss reward, one per Treasure
     // node, plus shop stock.
-    private static (int Gained, int Spent) RelicsAt(MapNode n, int gold)
+    private static (int Gained, int Spent) RelicsAt(MapNode n, int gold, AscensionModifiers asc)
     {
         if (n.Type is MapNodeType.Elite or MapNodeType.Boss or MapNodeType.Treasure) return (1, 0);
         if (n.Type != MapNodeType.Shop) return (0, 0);
@@ -1241,7 +1291,7 @@ public static class BalanceModel
         // shop rolls is not something a route can choose. Rounded up, so a
         // purse that can only afford the cheap end is not credited with a
         // relic it would half the time fail to buy.
-        int price = (int)Math.Ceiling(ExpectedShopRelicPrice());
+        int price = (int)Math.Ceiling(ExpectedShopRelicPrice(asc));
         int bought = Math.Min(ShopRelicsInStock, gold / price);
         return (bought, bought * price);
     }

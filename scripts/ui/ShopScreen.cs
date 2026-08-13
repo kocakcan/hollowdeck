@@ -23,8 +23,36 @@ namespace Hollowdeck.UI;
 // things are all for sale" read at a glance.
 public partial class ShopScreen : Control
 {
-    private const int CardPrice = 50;
+    // Public and read by BalanceModel rather than mirrored there, for the same
+    // reason CommonRelicPrice below is. It was `private const` with a `= 50`
+    // copy in BalanceModel under a "mirrors ShopScreen's prices" comment, and
+    // that copy survived the pass that closed the identical relic-price hole
+    // only because no card price had moved yet. An ascension rung moves it.
+    public const int CardPrice = 50;
     private const int PotionPrice = 40;
+
+    // Every price on this screen goes through here, and the ascension rung's
+    // shop multiplier is applied in exactly this one place.
+    //
+    // The reason it is a funnel rather than a multiply at each site: each of the
+    // four prices is read three times - once for the button's label, once for
+    // the affordability gate, and once to deduct the gold - and a multiplier
+    // that reached the deduction alone would make the tile charge something
+    // other than what it prints. That is the same class of bug as a drifted
+    // intent telegraph, which this project treats as the canonical bad one.
+    //
+    // The functions above deliberately return the *base* price. BalanceModel
+    // applies its own rung to their output when it prices a hypothetical shop
+    // at a rung the player is not currently on, so a scale folded into them
+    // would be applied twice there.
+    public static int PriceFor(int basePrice) => RunState.Ascension.ShopPrice(basePrice);
+
+    // What this visit actually charges. Named rather than calling PriceFor at
+    // each of the twelve read sites, so a site that forgot the funnel reads
+    // wrong at a glance instead of compiling into a tile that lies.
+    private static int CardCost => PriceFor(CardPrice);
+    private static int PotionCost => PriceFor(PotionPrice);
+    private static int RemovalCost => PriceFor(RemovalPrice);
 
     // A relic was a flat 150 for eight phases, which is what ROADMAP's relic
     // row meant by "a boss grants from the same pool 150 gold buys from": one
@@ -138,7 +166,7 @@ public partial class ShopScreen : Control
         _pickerList = GetNode<GridContainer>("PickerCenterContainer/PickerVBox/ScrollContainer/PickerList");
         _pickerCancelButton = GetNode<Button>("PickerCenterContainer/PickerVBox/PickerCancelButton");
         ChromeStyles.ApplyEmphasisButtonStyle(_removeCardButton);
-        _removeCardButton.Text = $"Remove a Card ({RemovalPrice}g)";
+        _removeCardButton.Text = $"Remove a Card ({RemovalCost}g)";
         _removeCardButton.Pressed += OnRemoveCardPressed;
         _pickerCancelButton.Pressed += ClosePicker;
 
@@ -167,7 +195,7 @@ public partial class ShopScreen : Control
         // tier, so the sub-label came first and RelicPriceFor followed it.
         foreach (var relic in RelicPool.Sample(RelicSite.Shop, 2, rng))
         {
-            AddOfferTile(relic.Name, $"Relic - {relic.Tier}", relic.Description, RelicPriceFor(relic.Tier),
+            AddOfferTile(relic.Name, $"Relic - {relic.Tier}", relic.Description, PriceFor(RelicPriceFor(relic.Tier)),
                 () => RunState.Relics.Add(new RelicInstance(relic)), ArtAssets.RelicIcon(relic.Id));
         }
 
@@ -180,7 +208,7 @@ public partial class ShopScreen : Control
         {
             AddOfferTile(potion.Name, "Potion",
                 EffectDescriptionFormatter.Describe(potion.Effects, new DescribeContext(TargetType: potion.Target)),
-                PotionPrice, () =>
+                PotionCost, () =>
             {
                 if (RunState.Potions.Count >= RunState.MaxPotionSlots) return false;
                 RunState.Potions.Add(new PotionInstance(potion));
@@ -193,7 +221,7 @@ public partial class ShopScreen : Control
         // through AddOfferTile's handler: that deducts gold and marks the
         // offer sold the moment it is pressed, and cancelling out of the
         // picker must not charge for a card that never left the deck.
-        _offerButtons.Add((_removeCardButton, RemovalPrice));
+        _offerButtons.Add((_removeCardButton, RemovalCost));
 
         // Attached before RefreshOffers so its first Regrab happens with the
         // affordable/unaffordable state already applied - starting focus on a
@@ -221,7 +249,7 @@ public partial class ShopScreen : Control
 
     private void OnRemoveCardPressed()
     {
-        if (RunState.Gold < RemovalPrice) return;
+        if (RunState.Gold < RemovalCost) return;
         AudioManager.Instance?.PlaySfx("ui_click");
 
         // Selectable() carries the one-card floor: an empty deck draws nothing
@@ -250,7 +278,7 @@ public partial class ShopScreen : Control
         // free. Both this and MarkSold have to happen before ClosePicker's
         // Regrab, or focus is handed back to a button that is about to change.
         _removal.Apply(deckIndex);
-        RunState.Gold -= RemovalPrice;
+        RunState.Gold -= RemovalCost;
         MarkSold(_removeCardButton);
         _removeCardButton.Text = "Removed";
         ClosePicker();
@@ -283,16 +311,16 @@ public partial class ShopScreen : Control
         view.Interactive = false;
         view.SetCardInstance(new CardInstance(card));
 
-        var buyButton = new Button { Text = $"Buy ({CardPrice}g)" };
+        var buyButton = new Button { Text = $"Buy ({CardCost}g)" };
         ChromeStyles.ApplyEmphasisButtonStyle(buyButton);
         column.AddChild(buyButton);
-        _offerButtons.Add((buyButton, CardPrice));
+        _offerButtons.Add((buyButton, CardCost));
         buyButton.Pressed += () =>
         {
-            if (RunState.Gold < CardPrice) return;
+            if (RunState.Gold < CardCost) return;
             AudioManager.Instance?.PlaySfx("reward_pickup");
             RunState.Deck.Add(card);
-            RunState.Gold -= CardPrice;
+            RunState.Gold -= CardCost;
             MarkSold(buyButton);
             RefreshOffers();
         };

@@ -27,6 +27,8 @@ public partial class MapSmokeTest : Node
 
         ActDatabase.LoadAll();
 
+        AscensionDatabase.LoadAll();
+
         TestSingleSeedShape();
         TestFloorWidthsAreInBand();
         TestManySeedsStayConnected();

@@ -12,7 +12,7 @@ networking, desktop only (Windows/Mac/Linux).
 The core loop is playable end-to-end — new run, a start-of-run blessing and seed, map, combat,
 events, shop, rest, treasure, rewards, bosses, run-end scoring, unlocks, and mid-run save/resume.
 Current content is three acts: **101 cards (97 offerable, 4 unplayable Curses and Status cards),
-33 relics, 12 potions, 36 enemies (6 of them bosses), 15 events, 10 blessings**. Each act has its
+33 relics, 12 potions, 36 enemies (6 of them bosses), 15 events, 10 blessings, 20 ascension rungs**. Each act has its
 own enemy pools and a two-boss pool the run seed picks from. See [ROADMAP.md](ROADMAP.md) for
 what's still open.
 
@@ -74,7 +74,7 @@ scripts/
   data/       Definition classes and the JSON databases that load them, EffectSpec
   ui/         Screen controllers, CardView, EnemyView, theming, layout helpers
   audio/      AudioSynth / AudioCues / AudioMusic — everything is synthesized at runtime
-  debug/      22 smoke-test scenes + the screenshot harness
+  debug/      23 smoke-test scenes + the screenshot harness
 scenes/       13 screens + reusable CardView/EnemyView/PotionView/FloatingText
   debug/      smoke-test and screenshot scenes
 data/         acts / cards / relics / potions / enemies / events / blessings / tips — all JSON,

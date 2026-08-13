@@ -4,8 +4,8 @@
 
 The run is complete and playable end to end: three acts of branching map, telegraphed-intent combat,
 relics, potions, events, a shop, mid-run save/resume, a score-driven unlock track, 13 screens on one
-pixel-art spec, 22 smoke suites, CI, and packaged exports for three platforms. Content stands at 101
-cards (97 offerable), 36 enemies, 33 relics, 12 potions, 15 events, 10 blessings.
+pixel-art spec, 23 smoke suites, CI, and packaged exports for three platforms. Content stands at 101
+cards (97 offerable), 36 enemies, 33 relics, 12 potions, 15 events, 10 blessings, 20 ascension rungs.
 
 **The gating problem is no longer presentation, and it is no longer content volume. It is
 mechanical vocabulary.** The previous roadmap correctly identified visual coherence as the ceiling
@@ -15,11 +15,14 @@ and the content had saturated it — which is why the game read as a competent d
 than as this genre.
 
 **Phase 7 closed the card half of that, and Phase 8 has since closed both of its own — the status
-roster and the enemy behaviours.** The six struck rows below are done; the live ones are what the
-rest of Phase 10 owns. **Phase 9 is closed**, and all seven of its items landed: the `?` node,
+roster and the enemy behaviours.** Every row in the diagnosis table below is now struck. **Phase 9 is
+closed**, and all seven of its items landed: the `?` node,
 the potion pass, relic tiers — which closes the last row of the diagnosis table — the boss-relic
 choice those tiers made worth having, the start-of-run screen, the card-reward skip streak, and the
 map's width, which was the judgment call the phase held open longest and turned out to be arithmetic.
+**Phase 10 is closed too** — the twenty-rung ascension ladder, which needed no new mechanical
+vocabulary at all, because closing the four diagnosis rows above it is exactly what gave it eight
+knobs to turn. What is open is Phase 11.
 
 ### The diagnosis
 
@@ -803,33 +806,103 @@ makes Rares the norm, and the offer odds monotone — all asserted against the *
 report computing them differently from the draw fails rather than shipping a table nobody can act
 on).
 
-## Phase 10 — Ascension
+## Phase 10 — Ascension — **shipped**
 
 Twenty rungs of stacking modifiers: the reason a finished run is worth repeating, and the only thing
 in this document aimed squarely at replayability rather than at a single run.
 
-- **Authored as data** — `data/ascension/ascension.json` with an
-  `AscensionDefinition`/`AscensionDatabase` pair mirroring `ActDefinition`/`ActDatabase`. Twenty
-  rungs must not become twenty C# classes; same argument that made relics data rows and Powers
-  ordinary cards.
-- **The modifier vocabulary is constrained to what already has a knob**, deliberately: enemy HP and
-  damage multipliers, starting HP, act-clear heal percent, shop price multiplier, elite frequency in
-  `MapGenerator`'s weights, boss HP, potion drop rate (Phase 9), and starting the run with a Curse in
-  the deck (Phase 7). A rung wanting anything outside that list is asking for new plumbing, and
-  should be recognised as such rather than smuggled in as content.
-- **`BalanceModel` and `BalanceSmokeTest` take an ascension level.** Without it every curve assertion
-  in the repo covers only rung 0 and the ladder ships unmeasured — exactly the failure the balance
-  tooling was built to end.
-- Meta save v2 → v3 for the highest rung reached, and `RunScore` gains an ascension multiplier so the
-  ladder and the unlock track pull in the same direction rather than competing for the same run.
+The ladder is earned rather than chosen. `MetaProgressionManager.AscensionLimit` rises only on a
+**win at the current limit**, and `RunSetupScreen` offers one toggle — off, or your limit with every
+rung below it stacked — hidden entirely until that limit is above 0. A stepper was the obvious
+alternative and is a difficulty menu; a toggle makes each rung a thing you beat rather than a thing
+you pick.
+
+- ~~**Authored as data**, with a constrained modifier vocabulary, a rung-aware `BalanceModel`, meta
+  save v2 → v3 and an ascension category in `RunScore`.~~ **Shipped**, all four bullets as one
+  branch, and the forecast was right about every structural call: `AscensionDefinition`/
+  `AscensionDatabase` mirror `ActDefinition`/`ActDatabase`, the eight knobs are exactly the ones that
+  already existed, and no rung needed anything outside them. Content: 20 rungs, meta save v2 → v3,
+  run save v5 → v6, one new suite (22 → 23), and no new effect action, RNG stream, `hd_*` action or
+  icon.
+
+  Seven things the forecast did not contain, in ascending order of how much they cost:
+
+  - **The forecast named the four bullets and not the property that decides whether any of them
+    worked: rung 0 must be identity.** `AscensionModifiers.None` and a defaulted parameter on every
+    `BalanceModel` entry point are what make that structural rather than hoped for, and the landing
+    check is the same one every phase since Phase 8 has used — all 200 lines of existing balance
+    tables byte-identical, with the ascension section the only new content. Without it a ladder that
+    quietly moved the rung-0 curve would have invalidated every band, threshold and encounter cost the
+    last four phases measured, and nothing would have said so.
+  - **The rows are per-rung *deltas* and the fold is a sum, which is what makes a forgotten key
+    inert.** Authored as cumulative totals, a row that omitted a field would read as "this rung sets
+    enemy HP back to 100%". Authored as multipliers rather than percent-deltas, an omitted field
+    would default to 0 and zero the whole ladder. Both are silent; the delta form is the one where
+    absent means "this rung does not touch that knob".
+  - **A +5% damage rung is not a rung.** Enemy damage is authored in small integers (5–15), and
+    round-half-up on +5% moves almost none of them — measured, rungs 1 and 2 of the first draft left
+    act I's mean encounter cost *identical* to rung 0. Damage steps are +10%; HP steps are +4%,
+    because HP is the far more sensitive lever (a single +4% moves the mean cost ~7%, since a tankier
+    group is a longer fight that absorbs more turns). The two knobs are nothing like equally
+    sensitive and the ladder cannot step them equally.
+  - **The elite-frequency rung has to *move* weight out of Combat, not add it to Elite**, which is the
+    Phase 9 `?`-node lesson arriving as a caller rather than as an edit: an unchanged denominator is
+    not an unchanged share, and adding would have resilenced Shop/Treasure/Rest/Event, four types the
+    rung is not about. It also only applies on floors ≥ 2, where Elite is actually in the table.
+  - **The elite and boss cost *bands* are nearly rung-invariant by construction, and are therefore no
+    evidence the ladder does anything.** They divide by `MeanNormalCost`, which an enemy-HP rung moves
+    too — the moved-denominator trap, in its fifth form, this time as a check that cannot fail rather
+    than one that failed. The assertion that means something is absolute: act I's mean normal cost
+    against the rung's own starting max HP, which climbs 0.87 → 1.54 across the ladder.
+  - **`RunScore` wanted a row, not a multiplier**, which the forecast's own word ("multiplier") would
+    have got wrong. The run-end screen renders the breakdown as a column above a Total; a multiplier
+    applied after that column makes the printed rows stop adding up to the printed total, which is the
+    same class of thing as a drifted telegraph and is avoidable for free. As a row worth 5% of the
+    rest per rung it is still a multiplier, and rung 0 drops out of the existing zero-row rule so the
+    old exact-total test never moved.
+  - **`Migrate()` was a single `>=` gate, which is only correct while there is one hop.** A v1 file
+    reaching v3 would have run the shard fold and stamped itself v2. Split into a `< n` chain, whose
+    v3 step converts nothing — it exists so the *next* bump does not inherit the bug.
+
+  Two smaller things worth carrying. The screenshot harness restores the meta save only in a
+  `finally` at the end of a session, so the new `runsetupascension` fixture — which seeds itself by
+  writing a save that has climbed the whole ladder — leaked into every screen shot after it, turning
+  plain `runsetup`'s absent row into "ASCENSION 20". That restore moved into `ResetRunState`, beside
+  the fade cover and `RewardContext`, which is the third instance of that same leak and the first to
+  reach disk. And the summary line under the toggle was authored at `UiTheme.Fonts.Small` — 8px, the
+  bottom of the ART_SPEC ladder and the size the two-word ENTER APPLIES chip uses — which rendered
+  the only place the player is told what a rung does as an unreadable 200-character rule. Only a
+  screenshot shows that.
 
 **One character, not four.** A second class is 60+ cards, a starter deck, new sprites and a full
 rebalance of everything above — risk 6, and a different project. The ladder is where replayability
 comes from here.
 
-*Proven by:* `BalanceSmokeTest` parameterised across rungs — the curve must still rise act over act at
-every rung, and no rung may make act I unwinnable at starter throughput — plus
-`MetaProgressionSmokeTest` for v2 → v3 and `ActSmokeTest` for per-rung map weights.
+*Proven by:* a new `AscensionSmokeTest` (22 → 23 suites) — the ladder authored at an exact count with
+contiguous levels and ASCII labels, rung 0 identity in its *methods* as well as its fields, every rung
+measurably changing the fold (driven off `Effective` rather than the row, so a field added to the
+definition and forgotten in the fold fails), the fold summing rather than overwriting, the ladder only
+ever taking, clamping at both ends, every imposed card real *and unplayable*, and the rounding,
+floors and weight-conservation rules. Plus `EffectSmokeTest` (the combat engine actually reading the
+rung — enemy HP scaled at `EnemyFactory`, a boss leaning harder than a normal, enemy damage scaled
+through `DamageMath` and the player's deliberately not, and a scaled hit landing scaled end to end;
+this is the check every other green assertion in the branch is compatible with being false),
+`BalanceSmokeTest` (`TestActCurveRises` driven at three rungs, no rung easier than the one below, the
+top rung meaningfully harder, act I still playable there, no act-I normal costing boss money at the
+top rung, potions still dropping, elites actually more common while the utility rooms survive, and a
+shop still worth visiting), `MetaProgressionSmokeTest` (v2 → v3 with and without a prior win, v1
+reaching v3 in one pass, both idempotent, and the limit rising only on a win *at* the limit — not on a
+loss, not on a win below it, and never past the content file), `RunSaveSmokeTest` (a mid-ladder rung
+round-tripping, a v5 save loading as 0 against a poisoned field, and an out-of-range value clamping),
+`ScreenSmokeTest` (the row hidden until the ladder is unlocked, the toggle rebuilding the run rather
+than recording it — asserted through the starting HP and the imposed cards, which is what a
+field-assignment-only toggle would leave unmoved — the summary reporting the live modifiers rather
+than a literal, its font rung, the row clearing the run-status block at its tallest, and the claim
+locking the toggle both as UI and as a fact about the run) and `KeyboardSmokeTest` (the toggle not
+stealing initial focus, reachable by Up from the offers and back down again, and leaving the focus
+chain on a claim).
+
+**Phase 10 is closed.**
 
 ## Phase 11 — Legibility and feel
 
@@ -901,8 +974,9 @@ Deferred by choice, not dropped. Ordered by whether it blocks a player.
 - ~~**Phase 7 before Phase 9's `?` node.**~~ Satisfied, and spent: `add_card` shipped first, so the
   `?` node landed into a vocabulary where an unknown room can cost something other than HP.
 - **Phase 8 and Phase 11 can run in parallel** — one is the combat model, the other is UI widgets.
-- **Phase 10 after 8 and 9** (7 is done). A ladder of modifiers stacked on a thin mechanic set only multiplies
-  numbers; the rungs are only interesting once there is something for them to change.
+- ~~**Phase 10 after 8 and 9**~~ Satisfied, and it was the right order: the ladder's eight knobs are
+  eight things earlier phases built, and it needed no new mechanical vocabulary at all. A ladder
+  stacked on a thin mechanic set would only have multiplied numbers.
 - **Every count in this file is measured, not remembered**, and each phase updates `CLAUDE.md`'s
   "Current state" counts and its Verification table as it lands. Those counts are written as the
   single source of truth, so they have to stay one.

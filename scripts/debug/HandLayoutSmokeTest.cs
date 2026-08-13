@@ -22,6 +22,7 @@ public partial class HandLayoutSmokeTest : Node
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         ActDatabase.LoadAll();
+        AscensionDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 

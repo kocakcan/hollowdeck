@@ -1,0 +1,22 @@
+[
+  { "level": 1,  "label": "Enemies deal more damage.",       "enemyDamagePercent": 10 },
+  { "level": 2,  "label": "Elites appear more often.",       "eliteWeightDelta": 3 },
+  { "level": 3,  "label": "Enemies have more health.",       "enemyHpPercent": 4 },
+  { "level": 4,  "label": "Shops charge more.",              "shopPricePercent": 15 },
+  { "level": 5,  "label": "You begin with a Wound.",         "startingCurseIds": ["wound"] },
+  { "level": 6,  "label": "Clearing an act heals less.",     "clearHealPercentDelta": 25 },
+  { "level": 7,  "label": "Enemies deal more damage.",       "enemyDamagePercent": 10 },
+  { "level": 8,  "label": "Bosses have more health.",        "bossHpPercent": 10 },
+  { "level": 9,  "label": "Potions drop less often.",        "potionDropPercentDelta": 8 },
+  { "level": 10, "label": "Enemies have more health.",       "enemyHpPercent": 4 },
+  { "level": 11, "label": "Elites appear more often.",       "eliteWeightDelta": 3 },
+  { "level": 12, "label": "You begin frailer.",              "startingMaxHpDelta": -5 },
+  { "level": 13, "label": "Enemies deal more damage.",       "enemyDamagePercent": 10 },
+  { "level": 14, "label": "Shops charge more.",              "shopPricePercent": 15 },
+  { "level": 15, "label": "Clearing an act heals less.",     "clearHealPercentDelta": 25 },
+  { "level": 16, "label": "Enemies have more health.",       "enemyHpPercent": 4 },
+  { "level": 17, "label": "You begin with a Pain.",          "startingCurseIds": ["pain"] },
+  { "level": 18, "label": "Bosses have more health.",        "bossHpPercent": 10 },
+  { "level": 19, "label": "Potions drop less often.",        "potionDropPercentDelta": 7 },
+  { "level": 20, "label": "The hollow gives nothing back.",  "enemyHpPercent": 4, "enemyDamagePercent": 10 }
+]

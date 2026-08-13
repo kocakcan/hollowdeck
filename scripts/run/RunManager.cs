@@ -72,6 +72,7 @@ public partial class RunManager : Node
         PotionDatabase.LoadAll();
         EventDatabase.LoadAll();
         ActDatabase.LoadAll();
+        AscensionDatabase.LoadAll();
         TipDatabase.LoadAll();
         BlessingDatabase.LoadAll();
     }
@@ -107,12 +108,23 @@ public partial class RunManager : Node
     // Deck/Relics/HP, so re-seeding *after* a blessing has resolved silently
     // erases it. RunSetupScreen closes that by taking the seed controls out of
     // play the moment a blessing is claimed.
-    public void BeginRun(int seed)
+    //
+    // The ascension rung arrives the same way and for the same reason. It is
+    // *not* preserved across the rebuild - it is assigned from the argument
+    // every time, because InitNewRun reads it (starting max HP, the imposed
+    // cards) and MapGenerator reads it (elite frequency). A level held on
+    // RunState and left alone here would make a re-seed at rung 12 rebuild the
+    // map at rung 12 and the deck at whatever the field last happened to hold.
+    // Same argument as the seed: a run is a pure function of (seed, rung) only
+    // if changing either rebuilds from both.
+    public void BeginRun(int seed, int ascension = 0)
     {
         RunSeed = seed;
         RngStreams.Init(RunSeed);
+        RunState.AscensionLevel = ascension;
         RunState.InitNewRun();
-        GD.Print($"Run seed: {RunSeed}");
+        GD.Print($"Run seed: {RunSeed}"
+                 + (ascension > 0 ? $", ascension {ascension}" : ""));
     }
 
     // The single entry point into a run. Goes to RunSetup rather than Map -

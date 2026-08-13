@@ -419,6 +419,68 @@ the player is offered (a draw up, a *removal* down — a smaller deck is the gai
 `Imposed` is a card named by the author, which is how a Curse is authored. One signed column would
 print a Pain and two real cards as the same thing.
 
+**The ascension ladder is twenty rungs of stacking modifiers, and rung 0 is identity.** That last
+clause is the load-bearing one and the thing the whole feature is checked against: every table in
+`tools/balance-report.sh` came back byte-identical when it landed, and it has to keep doing so.
+`AscensionDefinition` rows in `data/ascension/ascension.json` hold *that rung's own delta*;
+`AscensionDatabase.Effective(level)` folds 1..level into an `AscensionModifiers`, cached at load
+because it is read per enemy and per point of damage. `RunState.AscensionLevel` says which rung is in
+play and `RunState.Ascension` resolves it.
+
+**`AscensionModifiers` is the single place a modifier becomes a number**, and that is why it owns
+methods (`EnemyHp`, `EnemyDamage`, `ShopPrice`, `PotionPercent`, `ClearHeal`, `StartingMaxHp`,
+`EliteWeight`/`CombatWeight`) rather than being a bag of ints. Six of the eight knobs have two
+readers — the game and `BalanceModel` — and this project has twice shipped a mirror between those
+two that nothing asserted. The ladder starts on the right side of that.
+
+The modifier vocabulary is **deliberately closed**: every field names a knob that existed before the
+ladder did. A rung wanting anything else is new plumbing, not content.
+
+Six things about it are expensive to rediscover:
+
+- **The level is assigned by `RunManager.BeginRun(seed, ascension)`, before `InitNewRun`, and is not
+  preserved across the rebuild.** `InitNewRun` reads it for the starting max HP and the imposed
+  cards; `MapGenerator` reads it for the elite weight. `RunSetupScreen` calls `BeginRun` again on
+  every reroll, every typed seed and every flip of the toggle, so a run is a pure function of
+  (seed, rung) only because changing either rebuilds from both. Same ordering trap the seed and the
+  blessing claim already turn on — and the toggle leaves play on a claim for the identical reason.
+- **Enemy damage is scaled in `DamageMath.ComputeOutgoing`, before Strength, gated on
+  `source is EnemyCombatant`.** That function is the one thing both `DealDamageEffect` and
+  `EnemyView.LiveAttackAmount` call, so the telegraph and the hit scale together for free; scaling at
+  resolution alone would make every enemy in the game telegraph a lie. Before Strength so a rung
+  raises the authored move rather than compounding with the fight's accumulated buffs. The
+  player-source gate is not optional — a ladder that scaled the player's cards would hand back what
+  every other knob takes. Thorns is untouched: `DealDamageEffect` subtracts it directly so it cannot
+  re-enter the effect system.
+- **Enemy HP is scaled in `EnemyFactory.Create`, the only place an `EnemyCombatant`'s HP is set** —
+  normals, elites, bosses and mid-fight summons in one edit. `isBoss` comes from
+  `ActDatabase.IsBoss`, derived from `ActDefinition.BossIds`, because that list is already the one
+  place the game decides what a boss is. In `BalanceModel`'s walk the enrage threshold must be
+  checked against the *scaled* `WalkEnemy.MaxHp`; scaling one side of that comparison and not the
+  other silently moves every phase flip in the game.
+- **The elite rung moves weight from Combat into Elite, it does not add to Elite.** `MapGenerator`'s
+  own comment records what an added weight cost last time — the `?` node grew the table 110 → 119 and
+  Elite quietly lost 6.8% of its frequency. Moving holds the table total and the
+  fights-versus-utility-rooms split constant. Only on floors ≥ 2, where Elite is actually in the
+  table; below that the slot is a Combat and subtracting would shrink the table instead.
+- **Shop prices go through one funnel, `ShopScreen.PriceFor`.** Each of the four prices is read three
+  times — label, affordability gate, gold deduction — so a multiplier reaching the deduction alone
+  makes the tile charge something other than what it prints. `RelicPriceFor` and `CardPrice` return
+  the **base**, because `BalanceModel` applies its own rung to their output when pricing a shop at a
+  rung the player is not on; folding the scale into them would double-apply there.
+- **`RunScore` gains a bonus *row*, not a multiplier** (`AscensionBonusPercent`, 5% of the rest per
+  rung, appended last). The run-end screen renders rows above a Total, and a multiplier applied after
+  that column makes the printed rows stop adding up to the printed total — the same class of thing as
+  a drifted telegraph. Rung 0 scores 0 and the existing drop-zero-rows rule removes it, which is what
+  keeps the breakdown byte-for-byte what it was.
+
+The ladder is earned rather than chosen: `MetaProgressionManager.AscensionLimit` (meta save v3) rises
+only on a **Win at the current limit**, and `RunSetupScreen` offers a single toggle — off, or your
+limit with every rung below it stacked — hidden entirely until the limit is above 0. `Migrate()` is a
+version *chain* now rather than a single `>=` gate, because with two hops a v1 file has to run both
+steps in order and land on the current version. Run save is v6 for `RunState.AscensionLevel`, clamped
+on load like `ActIndex` and `CardSkipStreak`, and for the same reason: the number arrives from a file.
+
 **Acts:** a run is three acts, authored in `data/acts/acts.json` (`ActDefinition`/`ActDatabase`).
 `RunState.ActIndex` says which one is in play; `RunState.MapNodes` only ever holds the *current*
 act's graph. Killing a non-final act's boss goes RewardScreen-then-Map like any other fight, with
@@ -742,8 +804,9 @@ primitive, unplayable card types, X-cost — and now the *status* half — `Arti
 shipped, as has the `?` node that opened Phase 9 and the potion pass that followed it — rarity,
 per-act combat drops, and the reward screen those drops forced — plus relic tiers and the
 boss-relic choice those tiers made worth having, the start-of-run screen: blessings and typed
-seed entry, the card-reward skip streak, and the map's width at 3–5. **That closes Phase 9**; what's
-open is an ascension ladder. Don't treat this section as a to-do list.
+seed entry, the card-reward skip streak, and the map's width at 3–5. **That closes Phase 9**, and the
+twenty-rung ascension ladder closes Phase 10 with it. What's open is Phase 11's legibility and feel
+work. Don't treat this section as a to-do list.
 
 One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap
 is next read:
@@ -830,7 +893,14 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   **3–5 wide with floor 0 pinned at 3**, and `MaxNodesPerFloor` is **coupled to `MapScreen`'s
   layout** in a way neither file suggests on its own — see the map-width rule in Architecture.
   Length is per-act data (`FloorCount`); width is one constant shared by every act
-- `scripts/data/ActDefinition.cs` + `ActDatabase.cs` — the three acts and what varies per act
+- `scripts/data/ActDefinition.cs` + `ActDatabase.cs` — the three acts and what varies per act. Also
+  owns `IsBoss`, derived from every act's `BossIds` rather than authored on `EnemyDefinition`, so
+  "is this a boss" has one answer
+- `scripts/data/AscensionDefinition.cs` + `AscensionDatabase.cs` + `AscensionModifiers.cs` — the
+  twenty-rung ladder. The rows are per-rung deltas, `Effective(level)` is the cumulative fold, and
+  `AscensionModifiers` is the one place a modifier becomes a number (the `ExpectedShopRelicPrice`
+  argument, applied to eight knobs at once). `AscensionModifiers.None` is identity and every existing
+  `BalanceModel` call site defaults to it
 - `data/*/*.json` — the content layer; the schema is the data-vs-code split everything depends on
 - `scripts/data/DataFile.cs` — the one place a content JSON is read off `res://`. The null guard
   here is what turns a mis-packed build from a bare `NullReferenceException` into a named error;
@@ -905,7 +975,7 @@ There is no test framework. Each `scenes/debug/*SmokeTest.tscn` asserts in `_Rea
 failure.
 
 ```bash
-tools/run-smoke-tests.sh                 # all 22; builds first, nonzero exit on any failure
+tools/run-smoke-tests.sh                 # all 23; builds first, nonzero exit on any failure
 tools/run-smoke-tests.sh MapSmokeTest    # a subset
 ```
 

@@ -29,6 +29,7 @@ public partial class MetaProgressionSmokeTest : Node
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         ActDatabase.LoadAll();
+        AscensionDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
@@ -39,6 +40,8 @@ public partial class MetaProgressionSmokeTest : Node
         TestStaleUnlockedRelicIdTolerance();
         TestProgressGatesContentEndToEnd();
         TestShardMigrationFromV1();
+        TestAscensionLimitMigrationToV3();
+        TestTheAscensionLimitOnlyRisesOnAWin();
         TestRunScoreArithmetic();
         TestMetaProgressionScreenLoads();
         TestShopExcludesLockedContent();
@@ -89,7 +92,7 @@ public partial class MetaProgressionSmokeTest : Node
         ResetScratch();
         var meta = MetaProgressionManager.Instance;
 
-        meta.AddRunResult(FirstEntry.Threshold, 12345, "Win", ScratchPath);
+        meta.AddRunResult(FirstEntry.Threshold, 12345, "Win", path: ScratchPath);
 
         meta.LoadFrom(ScratchPath); // reload from disk, discard in-memory state
         Check("round_trip_progress", meta.TotalProgress == FirstEntry.Threshold, $"progress={meta.TotalProgress}");
@@ -167,10 +170,10 @@ public partial class MetaProgressionSmokeTest : Node
             !meta.UnlockedCards().Any(c => c.Id == FirstCardEntry().Id),
             "a locked card appeared in UnlockedCards()");
 
-        meta.AddRunResult(FirstEntry.Threshold - 1, 1, "Lose", ScratchPath);
+        meta.AddRunResult(FirstEntry.Threshold - 1, 1, "Lose", path: ScratchPath);
         Check("still_locked_one_point_short", !IsEntryUnlocked(FirstEntry), "expected still locked");
 
-        var unlocked = meta.AddRunResult(1, 2, "Lose", ScratchPath);
+        var unlocked = meta.AddRunResult(1, 2, "Lose", path: ScratchPath);
         Check("unlocks_on_crossing_threshold", IsEntryUnlocked(FirstEntry), "expected unlocked");
         Check("crossing_reports_newly_unlocked",
             unlocked.Count == 1 && unlocked[0] == FirstEntry, $"reported={unlocked.Count}");
@@ -180,7 +183,7 @@ public partial class MetaProgressionSmokeTest : Node
         Check("next_entry_still_locked", !IsEntryUnlocked(SecondEntry), "expected still locked");
 
         // Already-announced entries must not be reported a second time.
-        var again = meta.AddRunResult(0, 3, "Lose", ScratchPath);
+        var again = meta.AddRunResult(0, 3, "Lose", path: ScratchPath);
         Check("unlock_announced_only_once", again.Count == 0, $"re-reported={again.Count}");
     }
 
@@ -219,8 +222,109 @@ public partial class MetaProgressionSmokeTest : Node
 
         // Retroactive unlocks are pre-announced, so a returning player isn't
         // shown a wall of "NEW!" on their next run-end screen.
-        var announced = meta.AddRunResult(0, 4, "Lose", ScratchPath);
+        var announced = meta.AddRunResult(0, 4, "Lose", path: ScratchPath);
         Check("migration_pre_seeds_announcements", announced.Count == 0, $"announced={announced.Count}");
+    }
+
+    // v2 -> v3, the ascension limit. The step converts nothing, which is
+    // exactly why it is worth a test: an absent field and a field the migration
+    // forgot look identical from the outside, and both read as 0.
+    //
+    // The interesting half is the v1 file, because Migrate stopped being a
+    // single gate and became a chain when this landed. A v1 save has to run
+    // *both* steps in one pass and come out stamped at the current version, and
+    // the shape it replaced would have run the shard fold, written v2, and left
+    // the file one version short with nothing complaining.
+    private void TestAscensionLimitMigrationToV3()
+    {
+        var meta = MetaProgressionManager.Instance;
+
+        ResetScratch();
+        WriteScratchRaw("""
+            { "saveVersion": 2, "totalProgress": 400, "runsCompleted": 3,
+              "recentSeeds": [ { "seed": 5, "outcome": "Lose", "score": 120,
+                                 "timestampUtc": "2026-07-26T07:20:16Z" } ] }
+            """);
+        meta.LoadFrom(ScratchPath);
+        Check("v2_without_a_win_starts_the_ladder_locked", meta.AscensionLimit == 0,
+            $"limit={meta.AscensionLimit}");
+        Check("v2_migration_keeps_progress", meta.TotalProgress == 400, $"progress={meta.TotalProgress}");
+
+        // A player who has already finished the game has, by definition, won at
+        // rung 0 - so the migration owes them rung 1 rather than making them
+        // beat it again to unlock what they have already done.
+        ResetScratch();
+        WriteScratchRaw("""
+            { "saveVersion": 2, "totalProgress": 400,
+              "recentSeeds": [ { "seed": 5, "outcome": "Win", "score": 300,
+                                 "timestampUtc": "2026-07-26T07:20:16Z" } ] }
+            """);
+        meta.LoadFrom(ScratchPath);
+        Check("v2_with_a_win_unlocks_the_first_rung", meta.AscensionLimit == 1,
+            $"limit={meta.AscensionLimit}");
+
+        meta.LoadFrom(ScratchPath);
+        Check("v3_migration_is_idempotent", meta.AscensionLimit == 1, $"limit={meta.AscensionLimit}");
+
+        // The chain, driven from the bottom. Both steps in one pass.
+        ResetScratch();
+        WriteScratchRaw("""
+            { "saveVersion": 1, "shards": 170, "unlockedRelicIds": [],
+              "recentSeeds": [ { "seed": 99, "outcome": "Win", "timestampUtc": "2026-07-26T07:20:16Z" } ] }
+            """);
+        meta.LoadFrom(ScratchPath);
+        Check("v1_reaches_v3_in_one_pass",
+            meta.TotalProgress == 170 && meta.AscensionLimit == 1,
+            $"progress={meta.TotalProgress}, limit={meta.AscensionLimit}");
+        meta.LoadFrom(ScratchPath);
+        Check("v1_to_v3_is_idempotent", meta.TotalProgress == 170 && meta.AscensionLimit == 1,
+            $"progress={meta.TotalProgress}, limit={meta.AscensionLimit}");
+    }
+
+    // What the ladder is: winning at your limit raises it, and nothing else
+    // does. Three cases, and the two that must *not* move it are the content of
+    // the test - a limit that crept up on losses would make the whole thing a
+    // difficulty menu with extra steps.
+    private void TestTheAscensionLimitOnlyRisesOnAWin()
+    {
+        var meta = MetaProgressionManager.Instance;
+
+        ResetScratch();
+        meta.LoadFrom(ScratchPath);
+        Check("a_fresh_save_has_the_ladder_locked", meta.AscensionLimit == 0, $"limit={meta.AscensionLimit}");
+
+        meta.AddRunResult(200, 1, "Lose", 0, path: ScratchPath);
+        Check("a_loss_does_not_raise_the_limit", meta.AscensionLimit == 0, $"limit={meta.AscensionLimit}");
+
+        meta.AddRunResult(200, 2, "Win", 0, path: ScratchPath);
+        Check("a_win_at_the_limit_raises_it", meta.AscensionLimit == 1, $"limit={meta.AscensionLimit}");
+
+        // Winning with the toggle off once the ladder has been climbed. The
+        // player has already proved rung 1; rung 0 proves nothing new.
+        meta.AddRunResult(200, 3, "Win", 0, path: ScratchPath);
+        Check("a_win_below_the_limit_does_not_raise_it", meta.AscensionLimit == 1,
+            $"limit={meta.AscensionLimit}");
+
+        meta.AddRunResult(200, 4, "Win", 1, path: ScratchPath);
+        Check("a_win_at_the_new_limit_raises_it_again", meta.AscensionLimit == 2,
+            $"limit={meta.AscensionLimit}");
+
+        // The rung goes into the seed log beside the score, which is the only
+        // place a finished run's difficulty is recorded at all.
+        Check("the_seed_log_records_the_rung", meta.RecentSeeds[0].Ascension == 1,
+            $"logged {meta.RecentSeeds[0].Ascension}");
+
+        // At the top of the ladder a win is still a win; it has nothing left to
+        // unlock, and must not index past the content file.
+        meta.AddRunResult(200, 5, "Win", AscensionDatabase.MaxLevel, path: ScratchPath);
+        Check("the_limit_stops_at_the_top_of_the_ladder",
+            meta.AscensionLimit == AscensionDatabase.MaxLevel,
+            $"limit={meta.AscensionLimit} against a ladder of {AscensionDatabase.MaxLevel}");
+
+        // Round-trip: the limit is persisted, not merely held.
+        meta.LoadFrom(ScratchPath);
+        Check("the_limit_survives_a_reload", meta.AscensionLimit == AscensionDatabase.MaxLevel,
+            $"limit={meta.AscensionLimit}");
     }
 
     private void TestRunScoreArithmetic()
@@ -254,6 +358,34 @@ public partial class MetaProgressionSmokeTest : Node
             breakdown.Count(e => e.Label is "Money Money" or "Raining Money" or "I Like Gold") == 1,
             "more than one gold tier awarded");
 
+        // The ascension row. Rung 0 must leave every number above untouched -
+        // that is what the 519 one line up is now also asserting - and a real
+        // rung must add exactly its percentage of the rest, listed rather than
+        // folded into the total, so the printed column still sums to the
+        // printed Total. A multiplier applied to Total() instead would pass a
+        // check on the total alone and fail this one.
+        Check("run_score_rung_zero_adds_no_row",
+            breakdown.All(e => !e.Label.StartsWith("Ascension")), "a rung-0 run listed an Ascension row");
+
+        var climbed = RunScore.Evaluate(stats, deck, gold: 250, relicCount: 2, ascension: 6);
+        var ascRow = climbed.FirstOrDefault(e => e.Label == "Ascension 6");
+        int expected = 519 * RunScore.AscensionBonusPercent * 6 / 100;
+        Check("run_score_ascension_row_is_a_share_of_the_rest",
+            ascRow is not null && ascRow.Points == expected,
+            $"got {ascRow?.Points.ToString() ?? "no row"}, expected {expected}");
+        Check("run_score_rows_still_sum_to_the_total",
+            RunScore.Total(climbed) == climbed.Sum(e => e.Points),
+            "the printed rows no longer add up to the printed total");
+        Check("run_score_ascension_is_the_last_row",
+            climbed[^1].Label == "Ascension 6", $"last row is {climbed[^1].Label}");
+
+        // A run that scored nothing gets nothing for the rung. Otherwise the
+        // ladder would pay for reaching the run-end screen, which is a thing a
+        // player does by dying on floor 1.
+        var nothing = RunScore.Evaluate(new RunStats(), new List<CardDefinition>(), 0, 0, ascension: 20);
+        Check("run_score_ascension_pays_nothing_on_a_zero_run", RunScore.Total(nothing) == 0,
+            $"total={RunScore.Total(nothing)}");
+
         // Starter duplicates must not deny Highlander, real duplicates must.
         var dupeDeck = new List<CardDefinition> { CardDatabase.Get("cleave"), CardDatabase.Get("cleave") };
         var dupeBreakdown = RunScore.Evaluate(new RunStats(), dupeDeck, gold: 0, relicCount: 0);
@@ -284,7 +416,7 @@ public partial class MetaProgressionSmokeTest : Node
     private void TestMetaProgressionScreenLoads()
     {
         ResetScratch();
-        MetaProgressionManager.Instance.AddRunResult(99, 7, "Lose", ScratchPath);
+        MetaProgressionManager.Instance.AddRunResult(99, 7, "Lose", path: ScratchPath);
 
         var packed = GD.Load<PackedScene>("res://scenes/MetaProgressionScreen.tscn");
         var instance = packed.Instantiate();

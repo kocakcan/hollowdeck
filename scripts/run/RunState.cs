@@ -72,6 +72,26 @@ public static class RunState
     // for.
     public static int CardSkipStreak;
 
+    // Which rung of the ascension ladder this run is being played on. 0 is the
+    // ladder switched off, which is what every run before Phase 10 was and what
+    // an older save loads as.
+    //
+    // Assigned by RunManager.BeginRun *before* InitNewRun, never inside it:
+    // InitNewRun reads it for the starting HP and the imposed cards, and
+    // RunSetupScreen calls BeginRun again on every reroll and every typed seed.
+    // A level set inside the rebuild would be a level the rebuild could not
+    // preserve - the same ordering trap the seed and the blessing claim already
+    // turn on, one field over.
+    public static int AscensionLevel;
+
+    // The rung's modifiers, folded. Read from the combat loop (EnemyFactory and
+    // DamageMath), the shop, the map generator and RunState itself, which is
+    // why it is one derived property rather than each site indexing the
+    // database: a site that read At(level) instead of Effective(level) would
+    // apply one rung's delta rather than the whole ladder, and would look
+    // entirely correct doing it.
+    public static AscensionModifiers Ascension => AscensionDatabase.Effective(AscensionLevel);
+
     public static ActDefinition CurrentAct => ActDatabase.At(ActIndex);
 
     public static bool IsFinalAct => ActIndex >= ActDatabase.Count - 1;
@@ -87,8 +107,8 @@ public static class RunState
     public static void InitNewRun()
     {
         Gold = StartingGold;
-        PlayerMaxHp = StartingMaxHp;
-        PlayerCurrentHp = StartingMaxHp;
+        PlayerMaxHp = Ascension.StartingMaxHp(StartingMaxHp);
+        PlayerCurrentHp = PlayerMaxHp;
         Deck = StartingDeck();
         // Every run starts with one guaranteed relic (Second Wind: heal 6 HP
         // on winning a fight) rather than an empty relic bar - Shop/
@@ -99,7 +119,7 @@ public static class RunState
 
         ActIndex = 0;
         CardSkipStreak = 0;
-        MapNodes = MapGenerator.Generate(RngStreams.Map, CurrentAct);
+        MapNodes = MapGenerator.Generate(RngStreams.Map, CurrentAct, Ascension);
         CurrentNodeId = "";
         VisitedNodeIds = new HashSet<string>();
         Stats = new RunStats();
@@ -125,7 +145,7 @@ public static class RunState
         Stats.FloorsInPreviousActs += cleared.FloorCount;
 
         ActIndex++;
-        MapNodes = MapGenerator.Generate(RngStreams.Map, CurrentAct);
+        MapNodes = MapGenerator.Generate(RngStreams.Map, CurrentAct, Ascension);
         CurrentNodeId = "";
         VisitedNodeIds = new HashSet<string>();
 
@@ -133,7 +153,7 @@ public static class RunState
         // clearing an act raises the ceiling and heals part of the damage. Both
         // amounts come from the cleared act's data - see ActDefinition.
         PlayerMaxHp += cleared.ClearMaxHpBonus;
-        int heal = cleared.ClearHealPercent * PlayerMaxHp / 100;
+        int heal = Ascension.ClearHeal(cleared.ClearHealPercent) * PlayerMaxHp / 100;
         int before = PlayerCurrentHp;
         PlayerCurrentHp = Math.Min(PlayerMaxHp, PlayerCurrentHp + heal);
 
@@ -165,6 +185,22 @@ public static class RunState
             var def = CardDatabase.Get(id);
             for (int i = 0; i < count; i++) deck.Add(def);
         }
+
+        // What the ascension ladder imposes, appended rather than substituted:
+        // the ten starters are what the whole curve is measured against, so a
+        // rung takes deck *slots* and leaves the throughput they were tuned
+        // around alone. Every id here is a Status or a Curse
+        // (AscensionSmokeTest), so what it costs is draws, which is the one
+        // resource this genre has no way to buy back cheaply.
+        //
+        // Resolved through Find rather than Get so a rung naming a card a later
+        // build removed thins the opening deck instead of killing the run at
+        // the first map.
+        foreach (var id in Ascension.StartingCurseIds)
+        {
+            if (CardDatabase.All.FirstOrDefault(c => c.Id == id) is { } curse) deck.Add(curse);
+        }
+
         return deck;
     }
 }

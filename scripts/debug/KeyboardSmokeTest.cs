@@ -55,6 +55,7 @@ public partial class KeyboardSmokeTest : Node
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         ActDatabase.LoadAll();
+        AscensionDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         TipDatabase.LoadAll();
@@ -67,6 +68,7 @@ public partial class KeyboardSmokeTest : Node
         await TestRewardListFocus(tree);
         await TestEventPickerTakesFocus(tree);
         await TestRunSetupFocus(tree);
+        await TestRunSetupAscensionFocus(tree);
         TestPileKeysCannotReachAFocusedTextField();
         await TestRestPickerGridNavigation(tree);
         await TestCombatKeyboard(tree);
@@ -547,6 +549,80 @@ public partial class KeyboardSmokeTest : Node
 
         Check("runsetup_picker_focuses_one_of_its_cards", false,
             "no seed in 1..60 offered a picker blessing - the pool may have lost them");
+    }
+
+    // The ascension toggle's focus wiring, which has two halves that pull in
+    // opposite directions: it must be *reachable* from the offers, and it must
+    // not be what the screen opens on.
+    //
+    // The second half is the on-load sweep's own rule one row down. That table
+    // asserts a blessing tile takes focus rather than the seed field, because a
+    // keyboard player landing in a text box has to know to leave it. A toggle
+    // is not a text box, but landing on it means the first arrow press changes
+    // the difficulty of the run instead of moving between blessings.
+    private async Task TestRunSetupAscensionFocus(SceneTree tree)
+    {
+        using var saveGuard = RunSaveGuard.Protect();
+
+        WriteAscensionLimit(AscensionDatabase.MaxLevel);
+        RunManager.Instance.BeginRun(4242);
+
+        var instance = GD.Load<PackedScene>("res://scenes/RunSetupScreen.tscn").Instantiate();
+        AddChild(instance);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        var grid = instance.GetNode<GridContainer>("CenterContainer/VBoxContainer/OfferGrid");
+        var toggle = instance.GetNode<CheckButton>(
+            "CenterContainer/VBoxContainer/AscensionBox/AscensionToggle");
+        var firstTile = grid.GetChild<Control>(0);
+
+        var focused = GetViewport().GuiGetFocusOwner();
+        Check("runsetup_ascension_toggle_does_not_steal_initial_focus",
+            focused is not null && focused != toggle && focused.GetParent() == grid,
+            $"focus landed on '{focused?.Name}' ({focused?.GetType().Name})");
+
+        // WireGridNavigation gives a Top neighbour only to rows past the first,
+        // so without an explicit link the toggle is Tab-only - and Up off the
+        // offers, which is where focus starts, goes nowhere at all.
+        Check("runsetup_up_from_the_offers_reaches_the_ascension_toggle",
+            firstTile.FocusNeighborTop is { IsEmpty: false } path
+            && firstTile.GetNode<Control>(path) == toggle,
+            $"top neighbour is '{firstTile.FocusNeighborTop}'");
+        Check("runsetup_down_from_the_ascension_toggle_returns_to_the_offers",
+            toggle.FocusNeighborBottom is { IsEmpty: false } back
+            && toggle.GetNode<Control>(back) == firstTile,
+            $"bottom neighbour is '{toggle.FocusNeighborBottom}'");
+
+        // And the claim takes it out of the chain the way it takes the seed
+        // field out, for the identical reason: from here on, rebuilding the run
+        // would erase the blessing.
+        grid.GetChild<ActivatablePanel>(0)._GuiInput(
+            new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        Check("runsetup_claiming_takes_the_ascension_toggle_out_of_the_focus_chain",
+            toggle.FocusMode == Control.FocusModeEnum.None && toggle.Disabled,
+            $"focusMode={toggle.FocusMode}, disabled={toggle.Disabled}");
+
+        instance.QueueFree();
+        await ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        RunState.AscensionLevel = 0;
+    }
+
+    // Safe only because every caller holds a RunSaveGuard, which snapshots and
+    // restores meta_progression.json. The manager caches in memory too, hence
+    // the reload.
+    private static void WriteAscensionLimit(int limit)
+    {
+        using (var file = FileAccess.Open("user://meta_progression.json", FileAccess.ModeFlags.Write))
+        {
+            file.StoreString($$"""
+                { "saveVersion": 3, "totalProgress": 5000, "ascensionLimit": {{limit}}, "recentSeeds": [] }
+                """);
+        }
+        MetaProgressionManager.Instance.LoadFrom("user://meta_progression.json");
     }
 
     // D, Q, W and E open the four pile views, and RunSetupScreen puts a text

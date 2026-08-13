@@ -67,6 +67,12 @@ public partial class MetaProgressionManager : Node
     public int RunsCompleted => _data.RunsCompleted;
     public IReadOnlyList<SeedLogEntry> RecentSeeds => _data.RecentSeeds;
 
+    // The highest rung RunSetupScreen may switch on. Clamped against the
+    // content file on the way out rather than on the way in, so a save from a
+    // build with a longer ladder degrades to the top of this one instead of
+    // offering a rung AscensionDatabase cannot resolve.
+    public int AscensionLimit => Math.Min(_data.AscensionLimit, AscensionDatabase.MaxLevel);
+
     public override void _Ready()
     {
         Instance = this;
@@ -106,17 +112,38 @@ public partial class MetaProgressionManager : Node
     // comparison would not if the player quit on the run-end screen.
     // path defaults to the real save; tests pass a scratch path explicitly
     // so they can never write into the developer's/player's actual save.
-    public List<UnlockEntry> AddRunResult(int score, int seed, string outcome, string? path = null)
+    //
+    // The rung arrives as an argument rather than being read off RunState,
+    // which would be one line shorter and would break the property this whole
+    // suite of tests rests on: this type is a pure function of what it is
+    // handed plus what is on disk, which is why it can be driven against a
+    // scratch file with no run in progress at all.
+    public List<UnlockEntry> AddRunResult(int score, int seed, string outcome, int ascension = 0,
+        string? path = null)
     {
         _data.TotalProgress += score;
         _data.BestRunScore = Math.Max(_data.BestRunScore, score);
         _data.RunsCompleted++;
+
+        // The ladder advances on a win at the limit, and on nothing else. Not
+        // on a loss, and not on a win *below* the limit - the second is what
+        // makes `>=` rather than `==` the wrong comparison to reach for if the
+        // player has climbed past this rung already, and it is why the max is
+        // taken rather than incremented blind.
+        //
+        // Capped at the content file: at the top of the ladder a win is still a
+        // win, it just has nothing left to unlock.
+        if (outcome == "Win" && ascension >= _data.AscensionLimit)
+        {
+            _data.AscensionLimit = Math.Min(ascension + 1, AscensionDatabase.MaxLevel);
+        }
 
         _data.RecentSeeds.Insert(0, new SeedLogEntry
         {
             Seed = seed,
             Outcome = outcome,
             Score = score,
+            Ascension = ascension,
             TimestampUtc = DateTime.UtcNow.ToString("o"),
         });
         if (_data.RecentSeeds.Count > MaxRecentSeeds)
@@ -165,23 +192,44 @@ public partial class MetaProgressionManager : Node
     // was already spent on relic purchases, because those relics stay
     // unlocked for free via UnlockedRelicIds. Returns true if anything
     // changed and the file should be rewritten.
+    // v2 -> v3 adds the ascension limit and converts nothing: a save written
+    // before the ladder existed did not have a rung unlocked, and 0 is what it
+    // deserializes to. The step is written out anyway, and the single `>=` gate
+    // this used to be became a chain of `< n` steps to hold it, because a gate
+    // is only correct while there is exactly one hop. With two, a v1 file
+    // reaching v3 has to run the shard fold *and* every later step in order,
+    // and the version it lands on must be the current one rather than the one
+    // the first step happened to write.
     private bool Migrate()
     {
-        if (_data.SaveVersion >= MetaSaveData.CurrentVersion) return false;
+        int from = _data.SaveVersion;
+        if (from >= MetaSaveData.CurrentVersion) return false;
 
-        _data.TotalProgress += _data.Shards;
-        _data.Shards = 0;
+        if (from < 2)
+        {
+            _data.TotalProgress += _data.Shards;
+            _data.Shards = 0;
 
-        // Anything already past its threshold at migration time is treated
-        // as already announced, so a returning player isn't handed a wall of
-        // "NEW!" for content the conversion just granted retroactively.
-        _data.SeenUnlockIds = UnlockTrack
-            .Where(e => _data.TotalProgress >= e.Threshold)
-            .Select(e => e.Id)
-            .ToList();
+            // Anything already past its threshold at migration time is treated
+            // as already announced, so a returning player isn't handed a wall of
+            // "NEW!" for content the conversion just granted retroactively.
+            _data.SeenUnlockIds = UnlockTrack
+                .Where(e => _data.TotalProgress >= e.Threshold)
+                .Select(e => e.Id)
+                .ToList();
+        }
+
+        if (from < 3)
+        {
+            // Nothing to convert. A v2 player has won runs but never at a rung,
+            // so their limit is 1 - rung 1 is unlocked for anyone who has
+            // finished the game, which is exactly what winning at rung 0 means.
+            if (_data.RecentSeeds.Any(s => s.Outcome == "Win")) _data.AscensionLimit = 1;
+        }
 
         _data.SaveVersion = MetaSaveData.CurrentVersion;
-        GD.Print($"MetaProgressionManager: migrated save v1 -> v2 ({_data.TotalProgress} progress).");
+        GD.Print($"MetaProgressionManager: migrated save v{from} -> v{MetaSaveData.CurrentVersion} "
+                 + $"({_data.TotalProgress} progress, ascension limit {_data.AscensionLimit}).");
         return true;
     }
 

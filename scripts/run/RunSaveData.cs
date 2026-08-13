@@ -32,7 +32,20 @@ public class RunSaveData
     // which is once again exactly right: a run saved before the streak existed
     // has skipped nothing, and its next reward should be drawn on the flat
     // table it always was. No migration code needed.
-    public int SaveVersion { get; set; } = 5;
+    //
+    // v6 added AscensionLevel - which rung of the ladder the run is being
+    // played on. A v5 save carries no `ascensionLevel` key and deserializes it
+    // as 0, which is once again exactly right: every run saved before the
+    // ladder existed was played with it switched off. No migration code needed.
+    //
+    // Worth knowing about what this field does *not* do: the rung's effects are
+    // not persisted, they are recomputed. Enemy HP comes off EnemyFactory at
+    // the start of each fight and the map was already generated at the rung it
+    // was generated on, so resuming a rung-12 run needs only the number back.
+    // What is already in the save - the deck with its imposed Curses, the max
+    // HP the rung lowered - is state the rung produced once and does not
+    // reproduce.
+    public int SaveVersion { get; set; } = 6;
     public int RunSeed { get; set; }
     public int Gold { get; set; }
     public int PlayerMaxHp { get; set; }
@@ -42,6 +55,7 @@ public class RunSaveData
     public List<PotionSaveEntry> Potions { get; set; } = new();
     public int ActIndex { get; set; }
     public int CardSkipStreak { get; set; }
+    public int AscensionLevel { get; set; }
     public List<MapNode> MapNodes { get; set; } = new();
     public string CurrentNodeId { get; set; } = "";
     public List<string> VisitedNodeIds { get; set; } = new();

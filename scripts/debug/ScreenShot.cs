@@ -212,6 +212,14 @@ public partial class ScreenShot : Node
         // the click - same shape as restupgrade and eventpicker above.
         ["runsetuppicker"] = new("res://scenes/RunSetupScreen.tscn",
             SeedRunSetupPicker, OpenRunSetupPicker),
+        // The ascension row at its worst case, which is the top rung: every
+        // knob turned, so the derived summary line is the longest it can ever
+        // be, and the row is pushing the three tiles down toward the offers.
+        // Plain `runsetup` above is the same screen with the row absent
+        // entirely (a save that has never won), which is the other end - and
+        // the one every existing fixture was shot at.
+        ["runsetupascension"] = new("res://scenes/RunSetupScreen.tscn",
+            SeedRunSetupAtTheTopRung),
     };
 
     public override async void _Ready()
@@ -219,6 +227,7 @@ public partial class ScreenShot : Node
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         ActDatabase.LoadAll();
+        AscensionDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         EventDatabase.LoadAll();
@@ -310,6 +319,19 @@ public partial class ScreenShot : Node
         // and turn its one-relic row into a picker.
         RewardContext.RelicChoices = new List<RelicDefinition>();
 
+        // Third instance of the same leak, and the first one that reaches disk.
+        // The MetaProgressionManager autoload outlives a shot like the two
+        // statics above, and `runsetupascension` seeds itself by *writing* a
+        // meta save with the whole ladder climbed - so without this every
+        // fixture shot after it renders against a save that has won twenty
+        // times. Measured: it turned plain `runsetup`'s absent ascension row
+        // into "ASCENSION 20".
+        //
+        // Restoring from the session backup rather than to a fixed default,
+        // because "what the player actually had" is the baseline every other
+        // fixture has always been shot against.
+        RestoreMetaSaveFromBackup();
+
         RunState.Gold = 129;
         RunState.PlayerMaxHp = 50;
         RunState.PlayerCurrentHp = 34;
@@ -342,6 +364,30 @@ public partial class ScreenShot : Node
     // and it is the same call the real MainMenu makes, so nothing here is a
     // test-only path.
     private static void SeedRunSetup() => RunManager.Instance.BeginRun(FixtureSeed);
+
+    // Writes a meta save that has climbed the whole ladder, then begins a run
+    // on the top rung so the toggle comes up already on.
+    //
+    // Writing the real save is safe here and only here: this harness copies
+    // meta_progression.json aside before any fixture runs and restores it in a
+    // finally, which is the same protection that lets `runend` bank a run
+    // result. Do not lift this into a smoke test - there it would eat the
+    // developer's unlocks, which is a bug this project has already shipped once.
+    private static void SeedRunSetupAtTheTopRung()
+    {
+        int top = AscensionDatabase.MaxLevel;
+        using (var file = FileAccess.Open(
+                   "user://meta_progression.json", FileAccess.ModeFlags.Write))
+        {
+            file.StoreString($$"""
+                { "saveVersion": 3, "totalProgress": 4000, "runsCompleted": 40,
+                  "bestRunScore": 900, "ascensionLimit": {{top}}, "recentSeeds": [] }
+                """);
+        }
+
+        MetaProgressionManager.Instance.LoadFrom("user://meta_progression.json");
+        RunManager.Instance.BeginRun(FixtureSeed, top);
+    }
 
     private static void SeedRunSetupPicker() => BeginFirstSeedOffering(HasPicker: true);
 
@@ -982,6 +1028,22 @@ public partial class ScreenShot : Node
     }
 
     private static string BackupPath(string path) => path + ".shotbak";
+
+    // Puts the meta save back to what the session started with and re-reads it,
+    // so a fixture that wrote one cannot bleed into the next screen. Both
+    // halves are needed: the manager holds its data in memory, so restoring the
+    // file without the reload changes nothing this frame, and reloading without
+    // restoring re-reads the fixture's own file.
+    private static void RestoreMetaSaveFromBackup()
+    {
+        const string path = "user://meta_progression.json";
+        var backup = BackupPath(path);
+
+        if (FileAccess.FileExists(backup)) Copy(backup, path);
+        else if (FileAccess.FileExists(path)) DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(path));
+
+        MetaProgressionManager.Instance.LoadFrom(path);
+    }
 
     private static void BackupSaves()
     {

@@ -1512,7 +1512,14 @@ public partial class CombatScreen : Control
         if (CombatContext.IsBoss) return null;
 
         var act = RunState.CurrentAct;
-        int percent = CombatContext.IsElite ? act.ElitePotionDropPercent : act.PotionDropPercent;
+        int authored = CombatContext.IsElite ? act.ElitePotionDropPercent : act.PotionDropPercent;
+
+        // The ascension rung is applied here and mirrored in
+        // BalanceModel.NodePotionPercent, which this method's own comment
+        // already says has to keep mirroring it. Both go through
+        // AscensionModifiers.PotionPercent rather than each subtracting, so the
+        // mirror is one function rather than two subtractions that agree today.
+        int percent = RunState.Ascension.PotionPercent(authored);
         if (RngStreams.Drops.Next(100) >= percent) return null;
 
         return PotionPool.SampleOne(PotionDatabase.All, RngStreams.Drops);
