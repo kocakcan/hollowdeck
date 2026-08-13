@@ -48,6 +48,25 @@ public sealed partial class SpriteAnimator : Node
     private const string IdleClip = "idle";
     private const double DefaultFrameTime = 0.1;
 
+    // The clip sets, named here rather than typed out at each Attach call.
+    //
+    // They were string literals at the two call sites, which made the clip names
+    // a *third* copy of a table that already exists twice - anim.rs writes it
+    // and PixelSpecSmokeTest restates it across the Rust/C# seam. A typo in that
+    // third copy is completely silent: Attach never loads the clip, PlayTerminal
+    // takes its missing-clip branch, the escaping enemy fades in place instead
+    // of walking out, all 438 frames are still on disk and all 23 suites stay
+    // green. That is the CardUpgrade.ShouldScale shape one asset class over.
+    //
+    // Two copies is the irreducible minimum, because nothing imports across a
+    // language boundary. TestEveryCreatureHasItsFrames pins those two together,
+    // and these constants are what stop there being a third.
+    public static readonly string[] CreatureClips = { IdleClip, "windup", "hit", "death", "escape" };
+
+    // No death or escape: a player death is RunEndScreen, and the player never
+    // flees a fight. Authoring them would put two clips on disk nothing plays.
+    public static readonly string[] PlayerClips = { IdleClip, "windup", "hit" };
+
     private TextureRect _target = null!;
     private readonly Dictionary<string, Texture2D[]> _clips = new();
 
@@ -55,6 +74,7 @@ public sealed partial class SpriteAnimator : Node
     private int _frame;
     private double _elapsed;
     private EndBehavior _onEnd = EndBehavior.Loop;
+    private bool _held;
     private Action? _onComplete;
 
     /// <summary>
@@ -113,7 +133,11 @@ public sealed partial class SpriteAnimator : Node
     }
 
     /// <summary>The idle loop, which is where every one-shot clip lands.</summary>
-    public void PlayIdle() => Play(IdleClip, EndBehavior.Loop);
+    public void PlayIdle()
+    {
+        if (IsTerminal) return;
+        Play(IdleClip, EndBehavior.Loop);
+    }
 
     /// <summary>
     /// Plays <paramref name="clip"/> once and returns to idle, the shape every
@@ -123,6 +147,7 @@ public sealed partial class SpriteAnimator : Node
     /// </summary>
     public void Play(string clip, Action? onComplete = null)
     {
+        if (IsTerminal) return;
         if (!_clips.ContainsKey(clip))
         {
             PlayIdle();
@@ -131,6 +156,23 @@ public sealed partial class SpriteAnimator : Node
         }
         Play(clip, EndBehavior.ReturnToIdle, onComplete);
     }
+
+    // A terminal clip is terminal, and that has to be enforced here rather than
+    // left to call-site timing.
+    //
+    // PlayTerminal's whole contract is that a dead enemy does not go back to
+    // breathing, but nothing made Hold sticky: any Play("hit") landing inside
+    // the 0.35s death fade would overwrite the clip and, one frame time later,
+    // drop the corpse onto the idle loop. The old code could not hit this
+    // because the death tween drove the *view's* Scale while the recoil drove
+    // the sprite's, so they were different channels; frame clips make them one.
+    //
+    // The obvious route is already closed - ResolveDeathsAndSettle strips the
+    // enemy from Enemies before CombatantsChanged fires, so no reaction is
+    // popped for it - but PlayHitReaction defers by HitStopSeconds on a big hit,
+    // and "no reachable 60ms window" is a property of two call sites rather than
+    // an invariant. This makes it one.
+    private bool IsTerminal => _onEnd == EndBehavior.Hold;
 
     /// <summary>
     /// Plays a clip the creature does not come back from - death, escape - and
@@ -181,6 +223,7 @@ public sealed partial class SpriteAnimator : Node
         _frame = SkipsFlashFrame(clip) ? 1 : 0;
         _elapsed = 0;
         _onEnd = onEnd;
+        _held = false;
         _onComplete = onComplete;
         ApplyFrame();
     }
@@ -193,7 +236,15 @@ public sealed partial class SpriteAnimator : Node
     public override void _Process(double delta)
     {
         if (!_clips.TryGetValue(_clip, out var frames)) return;
-        if (_onEnd == EndBehavior.Hold && _frame >= frames.Length - 1) return;
+
+        // Stop on a flag set *after* the terminal arm has run, not on the frame
+        // index. Guarding on `_frame >= frames.Length - 1` returned on exactly
+        // the value the increment below had to pass through, so the arm that
+        // fires onComplete was unreachable and PlayTerminal's callback silently
+        // never ran. Nothing passes one today, which is what made it latent
+        // rather than broken - and what would have made it a puzzle for whoever
+        // first moved EnemyView's removal onto the clip.
+        if (_held) return;
 
         _elapsed += delta;
         double perFrame = FrameTime.TryGetValue(_clip, out double t) ? t : DefaultFrameTime;
@@ -225,11 +276,15 @@ public sealed partial class SpriteAnimator : Node
 
             default:
             {
-                // The last frame is already applied; the guard at the top of
-                // _Process is what stops this being re-decided every tick.
+                // Hold: the last frame is already applied, so step back onto it
+                // and latch. _held is what stops this being re-decided every
+                // tick, and it is set here rather than inferred from _frame so
+                // that this arm runs exactly once - which is what makes the
+                // callback reachable at all.
+                _frame = frames.Length - 1;
+                _held = true;
                 var finished = _onComplete;
                 _onComplete = null;
-                _frame = frames.Length - 1;
                 finished?.Invoke();
                 return;
             }

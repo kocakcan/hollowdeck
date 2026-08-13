@@ -30,7 +30,15 @@ non-integer scale is a bug, not a judgement call", for three phases, with 23 gre
 the only assertion looked at the *static* `CustomMinimumSize`.
 
 `ART_SPEC.md` §9 now states the rule and `PixelSpecSmokeTest.TestNoTweenTransformsAPixelSprite`
-enforces it.
+enforces it — by *type*, over every `TextureRect`-typed identifier in `scripts/ui` plus `this` in a
+view wrapping one. The first version of that guard was a hand-written list of three field names, and
+it was green over two live violations while claiming full coverage in three documents; the review
+that caught it is the reason the scan is type-driven.
+
+**Two named exceptions remain, and they are the rest of this item:** `CardView.cs` (the 1.15x hover
+bump and the play/exhaust pops) and `FloatingText.cs` (damage numbers punching in from 2.2x, which
+is §7's design-em rule rather than §2's). Both carry a real affordance that needs replacing rather
+than deleting — the first is half of ROADMAP Phase 11's "card inspect".
 
 ---
 

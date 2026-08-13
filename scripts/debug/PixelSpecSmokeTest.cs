@@ -485,6 +485,24 @@ public partial class PixelSpecSmokeTest : Node
         EnemyDatabase.LoadAll();
         var expected = new HashSet<string> { "player" };
 
+        // The clip *names* the game asks for, against the table this file
+        // restates from anim.rs. Two copies is the floor - nothing imports
+        // across the Rust/C# seam - so this is what holds them level, and
+        // SpriteAnimator's own constants are what stop the call sites being a
+        // third. A name only the animator knows loads nothing and throws
+        // nothing.
+        Check("creature_clip_names_match",
+            SpriteAnimator.CreatureClips.OrderBy(c => c)
+                .SequenceEqual(EnemyClips.Select(c => c.Clip).OrderBy(c => c)),
+            $"SpriteAnimator.CreatureClips [{string.Join(", ", SpriteAnimator.CreatureClips)}] does " +
+            $"not match anim.rs's ENEMY_CLIPS [{string.Join(", ", EnemyClips.Select(c => c.Clip))}]");
+
+        Check("player_clip_names_match",
+            SpriteAnimator.PlayerClips.OrderBy(c => c)
+                .SequenceEqual(PlayerClips.Select(c => c.Clip).OrderBy(c => c)),
+            $"SpriteAnimator.PlayerClips [{string.Join(", ", SpriteAnimator.PlayerClips)}] does " +
+            $"not match anim.rs's PLAYER_CLIPS [{string.Join(", ", PlayerClips.Select(c => c.Clip))}]");
+
         foreach (var enemy in EnemyDatabase.All)
         {
             expected.Add(enemy.Id);
@@ -582,6 +600,57 @@ public partial class PixelSpecSmokeTest : Node
 
         SettingsManager.Instance.SetReduceMotion(original, scratch);
         if (Godot.FileAccess.FileExists(scratch)) DirAccess.RemoveAbsolute(scratch);
+
+        TestATerminalClipIsTerminal();
+    }
+
+    // Two properties of PlayTerminal that its own doc comment asserts and the
+    // state machine did not.
+    //
+    // The callback: reaching the arm that fires it needs the frame counter to
+    // pass frames.Length, and the "stop ticking" guard used to return on exactly
+    // the value below it - so the arm was unreachable and the callback silently
+    // never ran. Latent, because nothing passes one today; a trap, because the
+    // *other* path through PlayTerminal (unknown clip) does fire it, so the two
+    // disagree. The concrete cost is whoever later moves EnemyView's removal
+    // onto the clip to stop freeing the view mid-dissolve: the view is never
+    // removed and RefreshEnemies's diff never settles.
+    //
+    // The stickiness: nothing stopped a later Play("hit") overwriting a death
+    // clip and dropping the corpse back onto the breathing loop one frame time
+    // later. The old code was immune by accident - the death tween drove the
+    // view's Scale and the recoil drove the sprite's, two channels - and frame
+    // clips collapse them into one.
+    private void TestATerminalClipIsTerminal()
+    {
+        var host = new TextureRect();
+        AddChild(host);
+        var animator = SpriteAnimator.Attach(host, "player", SpriteAnimator.PlayerClips);
+        if (animator is null)
+        {
+            Check("terminal_clip_setup", false, "SpriteAnimator.Attach returned null for the player");
+            host.QueueFree();
+            return;
+        }
+
+        bool fired = false;
+        animator.PlayTerminal("windup", () => fired = true);
+        for (int tick = 0; tick < 8; tick++) animator._Process(0.5);
+
+        Check("terminal_clip_fires_its_callback", fired,
+            "PlayTerminal's onComplete never ran - the arm that invokes it is unreachable when " +
+            "the hold guard returns on the frame index instead of a latch");
+
+        string held = host.Texture?.ResourcePath ?? "<null>";
+        animator.Play("hit");
+        for (int tick = 0; tick < 4; tick++) animator._Process(0.5);
+
+        Check("terminal_clip_cannot_be_interrupted",
+            (host.Texture?.ResourcePath ?? "<null>") == held,
+            $"a Play() during a terminal clip moved the sprite off {held} to " +
+            $"{host.Texture?.ResourcePath ?? "<null>"} - a dead enemy must not return to idle");
+
+        host.QueueFree();
     }
 
     // ART_SPEC section 9. The bug this exists for shipped and survived three
@@ -613,32 +682,84 @@ public partial class PixelSpecSmokeTest : Node
             $"{findings.Count} site(s) found");
     }
 
-    // The node identifiers that hold a pixel creature sprite. Named rather than
-    // discovered, because the thing being forbidden is a *property tween on a
-    // specific node*, and no runtime reflection can see one that has not fired
-    // yet.
-    private static readonly string[] PixelSpriteFields = { "_sprite", "_playerSprite", "_intentIcon" };
+    // Which identifiers hold a pixel texture is *discovered per file* from
+    // their declarations, not hand-listed.
+    //
+    // It was hand-listed - `_sprite`, `_playerSprite`, `_intentIcon` - and that
+    // version was narrower than three documents claimed it was. Two of the five
+    // violations the frame-animation change removed were tweens on `this`
+    // rather than on the sprite (EnemyView's death and escape squeezed the whole
+    // view), so restoring either would have gone straight past it. And it was
+    // green over two *live* ones the whole time: StatusRow's 0.4-to-1.0 pop on a
+    // 32x32 status icon, and CombatScreen's zero-to-one pop on the 16x16 energy
+    // gem. Both are now fixed; neither would have been found by a list that only
+    // knew the names someone had already thought of.
+    //
+    // A `TextureRect` is what holds a pixel texture in this codebase, so the
+    // type is the honest predicate. `this` is added for views that *wrap* one,
+    // because scaling the container resamples the child just the same.
+    private static readonly Regex PixelHolderDeclaration = new(
+        @"\bTextureRect\s*\??\s+(?<name>\w+)\b|\bvar\s+(?<name>\w+)\s*=\s*new\s+TextureRect\b|\b(?<name>\w+)\s*=\s*GetNode<TextureRect>");
+
+    // Files where `this` is a Control wrapping a pixel asset.
+    private static readonly HashSet<string> ViewsWrappingAPixelSprite = new() { "EnemyView.cs" };
+
+    // Deferred, not permitted - each needs a replacement affordance rather than
+    // a deletion, and each is tracked in ROADMAP Phase 11. Listed by file so
+    // that adding a *new* violation elsewhere still fails, and so that the
+    // exceptions are countable rather than invisible.
+    //
+    //   CardView.cs     - the 1.15x hover bump and the play/exhaust pops. The
+    //                     card is a Panel of text, but it carries _artIcon at
+    //                     CardArtScale 3 and 16px bitmap type, both of which
+    //                     resample with it. CardView's own FocusHaloSize comment
+    //                     already records killing a 1.08x tween for exactly this
+    //                     on the upgrade grid; the hover channel needs the same
+    //                     treatment, which is what "card inspect" is.
+    //   FloatingText.cs - damage numbers punch in from 2.2x. Bitmap glyphs off
+    //                     their design em (ART_SPEC section 7), not a texture,
+    //                     so it is the same family through a different door.
+    private static readonly HashSet<string> DeferredTransformExceptions = new()
+    {
+        "CardView.cs", "FloatingText.cs",
+    };
 
     private static IEnumerable<(string Path, int Line, string Detail)> ScanSourceForSpriteTransforms()
     {
         // Both the tween form and the direct assignment, since setting
         // _sprite.Scale outright is the same violation held still.
-        var targets = string.Join("|", PixelSpriteFields);
-        var tweened = new Regex(
-            $"""TweenProperty\((?<node>{targets}), "(?<prop>scale|rotation|rotation_degrees)"|(?<node>{targets})\.(?<prop>Scale|RotationDegrees|Rotation) *=""");
+        var transform = new Regex(
+            """TweenProperty\(\s*(?<node>\w+|this)\s*, "(?<prop>scale|rotation|rotation_degrees|skew)"|(?<![\w.])(?<node>\w+|this)\.(?<prop>Scale|RotationDegrees|Rotation|Skew)\s*=""");
 
         foreach (string path in FilesUnder("res://scripts/ui", ".cs"))
         {
-            using var file = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
-            if (file is null) continue;
-            int line = 0;
-            while (!file.EofReached())
+            string fileName = path.GetFile();
+            if (DeferredTransformExceptions.Contains(fileName)) continue;
+
+            using var reader = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (reader is null) continue;
+            var lines = new List<string>();
+            while (!reader.EofReached()) lines.Add(reader.GetLine());
+
+            var holders = new HashSet<string>();
+            foreach (string text in lines)
             {
-                line++;
-                string text = file.GetLine();
-                var match = tweened.Match(text);
-                if (!match.Success) continue;
-                yield return (path, line, $"{match.Groups["node"].Value}.{match.Groups["prop"].Value}");
+                foreach (Match declaration in PixelHolderDeclaration.Matches(text))
+                {
+                    holders.Add(declaration.Groups["name"].Value);
+                }
+            }
+            if (ViewsWrappingAPixelSprite.Contains(fileName)) holders.Add("this");
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (lines[i].TrimStart().StartsWith("//")) continue;
+                foreach (Match match in transform.Matches(lines[i]))
+                {
+                    string node = match.Groups["node"].Value;
+                    if (!holders.Contains(node)) continue;
+                    yield return (path, i + 1, $"{node}.{match.Groups["prop"].Value}");
+                }
             }
         }
     }

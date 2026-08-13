@@ -819,9 +819,19 @@ things follow:
   enemy can finally travel instead of being squeezed sideways.
 - **`PixelSpecSmokeTest.TestNoTweenTransformsAPixelSprite` is a source scan**, like the font-size
   sweep beside it and for the same reason: these tweens are all behind combat events, so
-  instantiating the screens would miss them. It covers `_sprite`, `_playerSprite` and `_intentIcon`.
-  It does **not** cover `CardView`'s 1.15x hover bump, which is a live instance of the same problem
-  left open on purpose — see ROADMAP Phase 11, where it is half of "card inspect".
+  instantiating the screens would miss them. **It discovers its targets by type rather than by
+  name** — every identifier declared `TextureRect` in a file, plus `this` in a view that wraps one.
+  A hand-listed version (`_sprite`, `_playerSprite`, `_intentIcon`) shipped first and was narrower
+  than this file claimed: two of the five violations the change removed were tweens on `this`
+  (`EnemyView`'s death and escape squeezed the whole view), so restoring either walked straight past
+  it, and it was green over two *live* ones — `StatusRow`'s 0.4→1.0 status-icon pop and
+  `CombatScreen`'s 0→1 energy-gem pop, both since replaced with brightness. A list only knows the
+  names someone already thought of.
+  **Two files are named exceptions rather than clean**: `CardView` (the 1.15x hover bump and the
+  play/exhaust pops — the card is a Panel, but `_artIcon` at `CardArtScale` 3 and 16px bitmap type
+  resample with it) and `FloatingText` (damage numbers punching in from 2.2x, which is §7's
+  design-em rule through a different door). Both need a replacement affordance rather than a
+  deletion; both are ROADMAP Phase 11, where the first is half of "card inspect".
 - **`ReduceMotion` declines the hit clip's opening flash frame and touches nothing else.** The gate
   was on `idle` first, which is wrong twice: the breathe is a 1px squash and was *ungated* for the
   three phases the scale tween owned it, so freezing it made a player with the setting on see the

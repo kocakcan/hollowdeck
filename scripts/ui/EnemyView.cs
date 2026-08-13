@@ -101,8 +101,7 @@ public partial class EnemyView : Button
         _debuffIcon = GetNode<TextureRect>("VBox/IntentRow/DebuffIcon");
         _statusRow = GetNode<HBoxContainer>("VBox/StatusRow");
         _sprite.Texture = ArtAssets.EnemySprite(Combatant.Definition.Id);
-        _animator = SpriteAnimator.Attach(_sprite, Combatant.Definition.Id,
-            "idle", "windup", "hit", "death", "escape");
+        _animator = SpriteAnimator.Attach(_sprite, Combatant.Definition.Id, SpriteAnimator.CreatureClips);
         _nameLabel.ThemeTypeVariation = "CombatDisplayLabel";
         _hpLabel.ThemeTypeVariation = "CombatDisplayLabel";
         ChromeStyles.ApplyHpBarStyle(_hpBar, _ghostHpBar);

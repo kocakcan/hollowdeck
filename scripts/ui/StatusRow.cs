@@ -70,15 +70,22 @@ public static class StatusRow
         }
     }
 
+    // The pop used to scale from 0.4 to 1.0 with a Back overshoot, which swept
+    // a 32x32 generated icon through every fractional scale between - and past
+    // 1.0 on the way out. ART_SPEC section 9: a pixel asset animates by frame
+    // swap or by alpha, never by transform.
+    //
+    // Nothing was lost by deleting it. The colour flash below was already
+    // carrying this beat and is the legal channel; the scale was a second
+    // signal for the same event, on the axis that happens to be illegal. It
+    // starts brighter now so the flash alone reads as firmly as the pair did.
     private static void PlayApplyPop(TextureRect iconRect, bool isDebuff)
     {
-        iconRect.Scale = Vector2.One * 0.4f;
         var flashColor = isDebuff ? UiTheme.Palette.StatusDebuff : UiTheme.Palette.StatusBuff;
         var original = iconRect.Modulate;
-        iconRect.Modulate = flashColor;
+        iconRect.Modulate = flashColor * 1.6f;
         var tween = iconRect.CreateTween();
-        tween.SetParallel(true);
-        tween.TweenProperty(iconRect, "scale", Vector2.One, 0.25).SetTrans(Tween.TransitionType.Back);
+        tween.TweenProperty(iconRect, "modulate", flashColor, 0.1).SetTrans(Tween.TransitionType.Sine);
         tween.TweenProperty(iconRect, "modulate", original, 0.3).SetTrans(Tween.TransitionType.Sine);
     }
 

@@ -919,8 +919,10 @@ the upgrade grid for exactly this: "a fractional scale over pixel art, so the 32
 precisely what `PixelSpec` exists to forbid." The halo replaced it there. The *hover* bump at
 `CardView.cs:568` still scales the whole card by 1.15 and was left alone by the animation pass,
 because a hover affordance needs a replacement rather than a deletion — which is what card inspect
-is. `PixelSpecSmokeTest`'s transform guard therefore covers the creature sprites and the intent icon,
-not `CardView`; widening it is the second half of this item.
+is. `PixelSpecSmokeTest`'s transform guard is type-driven and would flag it, so `CardView.cs` is an
+explicit named exception in that scan — as is `FloatingText.cs`, whose damage numbers punch in from
+2.2x and hit ART_SPEC §7's design-em rule rather than §2's scale rule. Emptying that exception list
+is the second half of this item; both entries need a replacement affordance, not a deletion.
 
 - **Card inspect.** Cards are 176x240 with a 16px body face and hover does a 1.15x bump; the genre's
   hold-to-inspect is the highest-value UI item left. It has to work from the keyboard too, since

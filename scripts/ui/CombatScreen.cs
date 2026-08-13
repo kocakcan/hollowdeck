@@ -211,9 +211,7 @@ public partial class CombatScreen : Control
         _playerSprite.Texture = ArtAssets.PlayerSprite();
         GetNode<TextureRect>("PlayerSprite/Shadow").Texture = BuildShadowTexture();
         _playerSpriteRestPos = _playerSprite.Position;
-        // No death or escape clip: a player death is RunEndScreen, and the
-        // player never flees a fight.
-        _playerAnimator = SpriteAnimator.Attach(_playerSprite, "player", "idle", "windup", "hit");
+        _playerAnimator = SpriteAnimator.Attach(_playerSprite, "player", SpriteAnimator.PlayerClips);
         StartPlayerIdleBob();
 
         ChromeStyles.ApplyHpBarStyle(_playerHpBar, _playerGhostHpBar);
@@ -899,12 +897,18 @@ public partial class CombatScreen : Control
         };
         _energyRow.AddChild(orb);
 
+        // Was a Scale tween from zero with a Back overshoot, on a 16x16 pixel
+        // gem drawn at 4x - the same ART_SPEC section 9 violation the sprite
+        // clips exist to end, on the smallest node in the HUD. The orb is
+        // *added* to the row on a refresh, so its arrival is already the event;
+        // what the pulse adds is emphasis, and brightness carries that without
+        // resampling the gem.
         if (pulse && current > 0)
         {
-            orb.Scale = Vector2.Zero;
+            orb.Modulate = new Color(2.2f, 2.2f, 2.2f);
             orb.CreateTween()
-                .TweenProperty(orb, "scale", Vector2.One, 0.22)
-                .SetTrans(Tween.TransitionType.Back);
+                .TweenProperty(orb, "modulate", Colors.White, 0.22)
+                .SetTrans(Tween.TransitionType.Sine);
         }
     }
 
