@@ -820,7 +820,7 @@ you pick.
 - ~~**Authored as data**, with a constrained modifier vocabulary, a rung-aware `BalanceModel`, meta
   save v2 → v3 and an ascension category in `RunScore`.~~ **Shipped**, all four bullets as one
   branch, and the forecast was right about every structural call: `AscensionDefinition`/
-  `AscensionDatabase` mirror `ActDefinition`/`ActDatabase`, the eight knobs are exactly the ones that
+  `AscensionDatabase` mirror `ActDefinition`/`ActDatabase`, the nine knobs are exactly the ones that
   already existed, and no rung needed anything outside them. Content: 20 rungs, meta save v2 → v3,
   run save v5 → v6, one new suite (22 → 23), and no new effect action, RNG stream, `hd_*` action or
   icon.
@@ -974,7 +974,7 @@ Deferred by choice, not dropped. Ordered by whether it blocks a player.
 - ~~**Phase 7 before Phase 9's `?` node.**~~ Satisfied, and spent: `add_card` shipped first, so the
   `?` node landed into a vocabulary where an unknown room can cost something other than HP.
 - **Phase 8 and Phase 11 can run in parallel** — one is the combat model, the other is UI widgets.
-- ~~**Phase 10 after 8 and 9**~~ Satisfied, and it was the right order: the ladder's eight knobs are
+- ~~**Phase 10 after 8 and 9**~~ Satisfied, and it was the right order: the ladder's nine knobs are
   eight things earlier phases built, and it needed no new mechanical vocabulary at all. A ladder
   stacked on a thin mechanic set would only have multiplied numbers.
 - **Every count in this file is measured, not remembered**, and each phase updates `CLAUDE.md`'s

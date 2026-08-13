@@ -429,7 +429,7 @@ play and `RunState.Ascension` resolves it.
 
 **`AscensionModifiers` is the single place a modifier becomes a number**, and that is why it owns
 methods (`EnemyHp`, `EnemyDamage`, `ShopPrice`, `PotionPercent`, `ClearHeal`, `StartingMaxHp`,
-`EliteWeight`/`CombatWeight`) rather than being a bag of ints. Six of the eight knobs have two
+`EliteWeight`/`CombatWeight`) rather than being a bag of ints. Six of the nine knobs have two
 readers — the game and `BalanceModel` — and this project has twice shipped a mirror between those
 two that nothing asserted. The ladder starts on the right side of that.
 
@@ -899,7 +899,7 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
 - `scripts/data/AscensionDefinition.cs` + `AscensionDatabase.cs` + `AscensionModifiers.cs` — the
   twenty-rung ladder. The rows are per-rung deltas, `Effective(level)` is the cumulative fold, and
   `AscensionModifiers` is the one place a modifier becomes a number (the `ExpectedShopRelicPrice`
-  argument, applied to eight knobs at once). `AscensionModifiers.None` is identity and every existing
+  argument, applied to nine knobs at once). `AscensionModifiers.None` is identity and every existing
   `BalanceModel` call site defaults to it
 - `data/*/*.json` — the content layer; the schema is the data-vs-code split everything depends on
 - `scripts/data/DataFile.cs` — the one place a content JSON is read off `res://`. The null guard

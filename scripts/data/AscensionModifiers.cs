@@ -8,7 +8,7 @@ namespace Hollowdeck.Data;
 //
 // This type is the single place a modifier is turned into a number, and that is
 // the whole reason it exists rather than the deltas being read directly at each
-// site. Six of the eight knobs have two readers - the game and BalanceModel -
+// site. Six of the nine knobs have two readers - the game and BalanceModel -
 // and this project has twice shipped a mirror between those two that nothing
 // asserted (BalanceModel's flat ShopRelicPrice = 150 under a "mirrors
 // ShopScreen" comment, and PlayerMaxHpByAct's private copy of 50). Both were
