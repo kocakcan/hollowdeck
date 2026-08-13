@@ -18,6 +18,7 @@
 //! from the working directory, so it runs the same from `tools/artgen/` and
 //! from the repo root.
 
+mod anim;
 mod canvas;
 mod clamp;
 mod icons;
@@ -47,6 +48,7 @@ fn main() -> ExitCode {
 
     match positional.first().copied() {
         Some("generate") => generate(&assets, positional.get(1).copied(), dry_run),
+        Some("animate") => run_animate(&assets, dry_run),
         Some("clamp") => run_clamp(&root, &assets, &positional[1..], dry_run),
         Some("validate") => run_validate(&assets),
         Some(other) => {
@@ -67,6 +69,7 @@ fn usage() {
 
   generate [category]   write generated icons into assets/icons/
                         category: cards relics potions map status intents
+  animate               derive sprite animation frames into assets/sprites/anim/
   clamp [paths...]      snap PNGs onto the shared ramp (default: all of assets/)
   validate              enforce ART_SPEC §1/§3/§5/§8; nonzero exit on failure"
     );
@@ -112,6 +115,23 @@ fn generate(assets: &Path, category: Option<&str>, dry_run: bool) -> ExitCode {
         if dry_run { " (dry run)" } else { " written" }
     );
     ExitCode::SUCCESS
+}
+
+fn run_animate(assets: &Path, dry_run: bool) -> ExitCode {
+    let report = anim::run(assets, dry_run);
+    for failure in &report.failures {
+        eprintln!("error: {failure}");
+    }
+    println!(
+        "animate: {} frame(s){}",
+        report.written,
+        if dry_run { " (dry run)" } else { " written" }
+    );
+    if report.failures.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 fn run_clamp(root: &Path, assets: &Path, paths: &[&str], dry_run: bool) -> ExitCode {

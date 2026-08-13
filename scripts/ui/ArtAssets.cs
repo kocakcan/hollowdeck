@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 using Hollowdeck.Combat;
 using Hollowdeck.Data;
@@ -22,6 +23,27 @@ public static class ArtAssets
     public static Texture2D? PotionIcon(string potionId) => Load($"res://assets/icons/potions/{potionId}.png");
     public static Texture2D? EnemySprite(string enemyId) => Load($"res://assets/sprites/enemies/{enemyId}.png");
     public static Texture2D? PlayerSprite() => Load("res://assets/sprites/player.png");
+
+    // The derived animation frames tools/artgen writes beside the sourced
+    // roster (see tools/artgen/src/anim.rs). Loads until the first gap, so the
+    // frame count lives on disk rather than being restated here - anim.rs owns
+    // it, and PixelSpecSmokeTest asserts the two agree.
+    //
+    // Deliberately no fallback to the static sprite, unlike EventIcon: art
+    // that is *generated* for every id is missing only because `artgen animate`
+    // was not re-run, and a silent fallback would make that indistinguishable
+    // from working. Callers get an empty array and the smoke test fails.
+    public static Texture2D[] AnimFrames(string spriteId, string clip)
+    {
+        var frames = new List<Texture2D>();
+        for (int i = 0; ; i++)
+        {
+            var texture = Load($"res://assets/sprites/anim/{spriteId}/{clip}_{i}.png");
+            if (texture is null) break;
+            frames.Add(texture);
+        }
+        return frames.ToArray();
+    }
 
     public static Texture2D? MapIcon(MapNodeType type) => Load($"res://assets/icons/map/{type switch
     {

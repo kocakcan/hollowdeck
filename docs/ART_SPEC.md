@@ -161,11 +161,22 @@ P0 #180d24   P1 #2e1a42   P2 #4d2e6b   P3 #7a52a3   P4 #b08cd9
 No `corner_radius` and no `ShadowSize` blur anywhere. Both are anti-aliased effects that cannot be
 expressed in pixels.
 
-- Frames, bezels, buttons and panels are `StyleBoxTexture` 9-slices over pixel border art.
-  `ChromeStyles.EndTurnButtonStyle` already uses this pattern — follow it.
-- "Glow" (rare cards, boss nodes, target lock) is an **animated pixel border** — a 1px ring that
-  cycles through `G3 → G4 → G5` — not a blur.
+- Frames, bezels, buttons and panels **should be** `StyleBoxTexture` 9-slices over pixel border art.
+  They are not yet: every box in `ChromeStyles.cs` is a hard-edged `StyleBoxFlat`, and there is no
+  chrome art under `assets/`. This entry read "`ChromeStyles.EndTurnButtonStyle` already uses this
+  pattern — follow it", which stopped being true when `ApplyEmphasisButtonStyle` dropped the sourced
+  ornate frame; the §1 grids and `validate.rs`'s `/theme/` rule are the groundwork with nothing
+  standing on it. Tracked in `docs/PIXEL_ART_ROADMAP.md` §2.
+- "Glow" (rare cards, boss nodes, target lock) should be an **animated pixel border** — a 1px ring
+  cycling `G3 → G4 → G5` — not a blur. Also not built: `ChromeStyles.CardFrameStyle` steps the border
+  to the brightest gold statically and its comment calls the ring "the eventual treatment".
+  `PIXEL_ART_ROADMAP.md` §3.
 - Drop shadows are a hard 1px or 2px offset in `N0`, never a gradient.
+
+The two unbuilt bullets are stated as unbuilt on purpose. A spec that describes an intention in the
+present tense is indistinguishable from one describing the code, and the next reader inherits a claim
+they have no reason to check — which is how the animation rule in §9 went three phases without
+enforcement.
 
 ## 7. Type
 
@@ -255,3 +266,35 @@ text for three phases with the whole suite green.
 Fixing a violation is usually `artgen clamp`, which snaps colours onto the ramp and hardens alpha.
 Both of its passes are idempotent, so it is safe to re-run over the whole tree after a palette
 edit.
+
+## 9. Animation
+
+**A pixel sprite animates by swapping frames, never by transforming the node.** §2 already forbids a
+non-integer scale; a tween that *passes through* one is the same violation spread over time, and it
+is the form that actually shipped. `EnemyView` tweened its sprite's `Scale` to 1.04, 1.08 and 1.15
+and its `RotationDegrees` to 6, `CombatScreen` slid the player 6px at a 5x render scale, and the
+intent icon popped from 1.5x — all of it under this document's own "any non-integer scale is a bug,
+not a judgement call", for three phases, with every suite green. `PixelSpecSmokeTest` only ever read
+the *static* `CustomMinimumSize` out of the `.tscn`, so the rule was enforced at rest and broken in
+motion.
+
+The rules:
+
+- **Frames come from `artgen animate`** (`tools/artgen/src/anim.rs`), which derives them from the
+  sourced 32x32 art with integer pixel moves and palette substitutions only, and writes one PNG per
+  frame into `assets/sprites/anim/<id>/<clip>_<n>.png`. `SpriteAnimator` plays them by setting
+  `TextureRect.Texture`.
+- **The only node property a pixel asset may be tweened on is alpha.** `modulate` resamples nothing.
+  `scale`, `rotation`, `rotation_degrees` and `skew` all do.
+- **A translation must land on a whole source pixel** — a multiple of the asset's render factor from
+  §2. A lunge that genuinely travels is allowed to interpolate between snapped endpoints, because the
+  motion is fast and the alternative is no travel at all; a slow idle loop sitting on a fractional
+  offset is not, and that is what the player bob was.
+- **Deliberately not `AnimatedSprite2D`.** The creature sprites are `TextureRect`s whose
+  `CustomMinimumSize` is what §2's assertion reads, and `EnemyView`'s is inside a `VBoxContainer`. A
+  `Node2D` there breaks Control layout and that assertion together.
+
+The container point is worth keeping, because it is what produced the original bug: a `Container`
+owns its children's position and size, so the old code reached for `Scale` as "the one transform a
+container does not touch". A frame swap is not a transform at all, so the question never arises —
+which is also what lets an escaping enemy finally *travel* rather than being squeezed sideways.

@@ -906,6 +906,22 @@ chain on a claim).
 
 ## Phase 11 — Legibility and feel
 
+**The art medium keeps its own backlog** in `docs/PIXEL_ART_ROADMAP.md` — pixel-specific work
+(chrome 9-slices, the animated glow ring, one light direction, effect frames) sitting beside
+`ART_SPEC.md` the way a backlog sits beside a rule set. It is not a phase and does not gate one.
+Sprite frame animation was its first item and has shipped; it closed a live §2 violation rather than
+adding polish, and the rest of that file is worth reading before touching anything visual.
+
+Note that **card inspect's 1.15x hover bump is the same question, and this codebase has already
+answered it once.** `CardView.cs`'s `FocusHaloSize` comment records killing a 1.08x scale tween on
+the upgrade grid for exactly this: "a fractional scale over pixel art, so the 32px icon drawn at
+`CardArtScale` 3 became 103.68px and the 16px bitmap text became 17.28 — both resampled, which is
+precisely what `PixelSpec` exists to forbid." The halo replaced it there. The *hover* bump at
+`CardView.cs:568` still scales the whole card by 1.15 and was left alone by the animation pass,
+because a hover affordance needs a replacement rather than a deletion — which is what card inspect
+is. `PixelSpecSmokeTest`'s transform guard therefore covers the creature sprites and the intent icon,
+not `CardView`; widening it is the second half of this item.
+
 - **Card inspect.** Cards are 176x240 with a 16px body face and hover does a 1.15x bump; the genre's
   hold-to-inspect is the highest-value UI item left. It has to work from the keyboard too, since
   combat is already fully keyboard-driven.

@@ -788,9 +788,44 @@ to catch committed art drifting from its source. The one command, for all three 
 ```bash
 cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
 #   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 192
+#   animate            derive sprite frames into assets/sprites/anim/ (438 across 37 sprites)
 #   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
 #   validate           what run-smoke-tests.sh calls; nonzero exit on failure
 ```
+
+**Creature sprites animate by frame swap, and that is a correctness rule rather than a style one.**
+`artgen animate` derives `idle`/`windup`/`hit`/`death`/`escape` from each sourced 32x32 tile using
+integer pixel moves and one palette substitution — so the roster stays *sourced* while the frames
+stay *generated*, which is why they live in `assets/sprites/anim/<id>/` and not beside the tiles.
+`scripts/ui/SpriteAnimator.cs` plays them by setting `TextureRect.Texture`.
+
+What it replaced is the thing worth remembering: `EnemyView` tweened its sprite's `Scale` to
+1.04/1.08/1.15 and its `RotationDegrees` to 6, and ART_SPEC §2 has said "any non-integer scale is a
+bug, not a judgement call" the whole time. It survived three phases because
+`PixelSpecSmokeTest.TestCreatureSpritesRenderAtIntegerScale` reads the *static* `CustomMinimumSize`
+out of the `.tscn` — the rule was enforced at rest and broken in motion, with 23 green suites. Four
+things follow:
+
+- **Alpha is the only property a pixel asset may still be tweened on.** `modulate` resamples nothing;
+  `scale`/`rotation`/`skew` all do. Death and escape still fade the *view* — it carries text and HP
+  furniture — while the sprite runs its clip underneath.
+- **A translation must land on a whole source pixel.** `CombatScreen.SnapToPixelGrid` is the one
+  funnel every player position beat goes through. The player's old idle bob was 6px at
+  `SpriteScale` 5, i.e. 1.2 source pixels, which is `subpixel` shimmer by another name.
+- **`SpriteAnimator` is not `AnimatedSprite2D`,** deliberately: these are `TextureRect`s under
+  Control layout, and `EnemyView`'s is inside a `VBoxContainer`. That container is also *why* the old
+  code reached for `Scale` — it owns position and size, so a position tween there is overwritten
+  every layout pass. A frame swap is not a transform, so the objection never arises, and an escaping
+  enemy can finally travel instead of being squeezed sideways.
+- **`PixelSpecSmokeTest.TestNoTweenTransformsAPixelSprite` is a source scan**, like the font-size
+  sweep beside it and for the same reason: these tweens are all behind combat events, so
+  instantiating the screens would miss them. It covers `_sprite`, `_playerSprite` and `_intentIcon`.
+  It does **not** cover `CardView`'s 1.15x hover bump, which is a live instance of the same problem
+  left open on purpose — see ROADMAP Phase 11, where it is half of "card inspect".
+
+`docs/PIXEL_ART_ROADMAP.md` is the medium's own backlog beside `docs/ART_SPEC.md`'s rule set. Two of
+its entries are places §6 describes chrome the code does not have; §6 now says so rather than
+claiming otherwise in the present tense.
 
 There is **no `artgen` on `PATH`** and no `tools/artgen` wrapper — the binary under
 `tools/artgen/target/` is a gitignored build artifact, so always invoke it through `cargo run` as

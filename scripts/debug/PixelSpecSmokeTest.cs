@@ -50,6 +50,8 @@ public partial class PixelSpecSmokeTest : Node
         TestRampIsSelfConsistent();
         TestEveryDefinitionHasAnIcon();
         TestArtgenRampMatchesPixelSpec();
+        TestEveryCreatureHasItsFrames();
+        TestNoTweenTransformsAPixelSprite();
 
         GD.Print($"PixelSpecSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -452,6 +454,128 @@ public partial class PixelSpecSmokeTest : Node
 
     // Walks res:// via DirAccess rather than System.IO so it resolves the same
     // way inside a packaged export, where assets live in the .pck.
+    // The clip set tools/artgen/src/anim.rs writes, restated rather than
+    // imported because there is no import available across the Rust/C# seam -
+    // same argument MapSmokeTest makes for restating the map's width band. A
+    // clip added on one side of that seam and not the other has to be argued
+    // for here rather than inherited.
+    private static readonly (string Clip, int Frames)[] EnemyClips =
+    {
+        ("idle", 2), ("windup", 2), ("hit", 2), ("death", 3), ("escape", 3),
+    };
+
+    private static readonly (string Clip, int Frames)[] PlayerClips =
+    {
+        ("idle", 2), ("windup", 2), ("hit", 2),
+    };
+
+    // Bidirectional, exactly like TestEveryDefinitionHasAnIcon: every creature
+    // has its frames, and every frame directory is a live creature.
+    //
+    // The forward half catches the workflow failure - frames are generated, so
+    // a new enemy has none until `artgen animate` is re-run, and SpriteAnimator
+    // deliberately degrades to the static texture rather than crashing. Without
+    // this check that enemy would simply stand still forever with every suite
+    // green. The orphan half catches a renamed id leaving a stale frame set
+    // behind, which is the same failure the icon sweep exists for.
+    private void TestEveryCreatureHasItsFrames()
+    {
+        EnemyDatabase.LoadAll();
+        var expected = new HashSet<string> { "player" };
+
+        foreach (var enemy in EnemyDatabase.All)
+        {
+            expected.Add(enemy.Id);
+            AssertClips(enemy.Id, EnemyClips);
+        }
+        AssertClips("player", PlayerClips);
+
+        using var dir = DirAccess.Open("res://assets/sprites/anim");
+        if (dir is null)
+        {
+            Check("anim_directory_exists", false,
+                "res://assets/sprites/anim is missing - run 'artgen animate'");
+            return;
+        }
+
+        foreach (string name in dir.GetDirectories())
+        {
+            Check($"anim_orphan_{name}", expected.Contains(name),
+                $"assets/sprites/anim/{name}/ has no matching creature - a renamed id " +
+                "leaves its old frames behind and nothing else would say so");
+        }
+    }
+
+    private void AssertClips(string spriteId, (string Clip, int Frames)[] clips)
+    {
+        foreach (var (clip, frames) in clips)
+        {
+            var loaded = ArtAssets.AnimFrames(spriteId, clip);
+            Check($"frames_{spriteId}_{clip}", loaded.Length == frames,
+                $"assets/sprites/anim/{spriteId}/{clip}_*.png has {loaded.Length} frame(s), " +
+                $"expected {frames} - re-run 'artgen animate'");
+        }
+    }
+
+    // ART_SPEC section 9. The bug this exists for shipped and survived three
+    // phases: EnemyView tweened its sprite's Scale to 1.04/1.08/1.15 and its
+    // rotation to 6 degrees, CombatScreen slid the player 6px at a 5x render
+    // scale, and section 2 called all of that a bug the whole time. Nothing
+    // caught it because TestCreatureSpritesRenderAtIntegerScale reads the
+    // *static* CustomMinimumSize out of the .tscn - the rule was enforced at
+    // rest and broken in motion.
+    //
+    // A source scan for the same reason ScanSourceForFontSizes is one:
+    // instantiating the screens would miss anything behind a branch, and these
+    // are all behind combat events.
+    //
+    // Alpha is deliberately not in the pattern. Modulate resamples nothing, so
+    // it stays the one property a pixel asset may be tweened on, and both death
+    // and escape still use it.
+    private void TestNoTweenTransformsAPixelSprite()
+    {
+        var findings = ScanSourceForSpriteTransforms().ToList();
+        foreach (var (path, line, detail) in findings)
+        {
+            Check($"{path.GetFile()}_line_{line}_transforms_a_pixel_sprite", false,
+                $"{path}:{line} tweens {detail} - a pixel sprite animates by frame swap " +
+                "(SpriteAnimator), never by transform (ART_SPEC section 9)");
+        }
+
+        Check("no_tween_transforms_a_pixel_sprite", findings.Count == 0,
+            $"{findings.Count} site(s) found");
+    }
+
+    // The node identifiers that hold a pixel creature sprite. Named rather than
+    // discovered, because the thing being forbidden is a *property tween on a
+    // specific node*, and no runtime reflection can see one that has not fired
+    // yet.
+    private static readonly string[] PixelSpriteFields = { "_sprite", "_playerSprite", "_intentIcon" };
+
+    private static IEnumerable<(string Path, int Line, string Detail)> ScanSourceForSpriteTransforms()
+    {
+        // Both the tween form and the direct assignment, since setting
+        // _sprite.Scale outright is the same violation held still.
+        var targets = string.Join("|", PixelSpriteFields);
+        var tweened = new Regex(
+            $"""TweenProperty\((?<node>{targets}), "(?<prop>scale|rotation|rotation_degrees)"|(?<node>{targets})\.(?<prop>Scale|RotationDegrees|Rotation) *=""");
+
+        foreach (string path in FilesUnder("res://scripts/ui", ".cs"))
+        {
+            using var file = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (file is null) continue;
+            int line = 0;
+            while (!file.EofReached())
+            {
+                line++;
+                string text = file.GetLine();
+                var match = tweened.Match(text);
+                if (!match.Success) continue;
+                yield return (path, line, $"{match.Groups["node"].Value}.{match.Groups["prop"].Value}");
+            }
+        }
+    }
+
     private static System.Collections.Generic.IEnumerable<string> FilesUnder(string root, string extension)
     {
         using var dir = DirAccess.Open(root);
