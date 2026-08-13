@@ -6,9 +6,11 @@ namespace Hollowdeck.Run;
 
 // Scores a finished run, modelled on Slay the Spire's score categories
 // (https://slaythespire.wiki.gg/wiki/Score). Only categories Hollowdeck
-// actually has a mechanic for are implemented - there's no ascension level,
-// no curse cards, no run timer and no Heart fight, so Ascension/Curses!/
-// Speedster/Heartbreaker have nothing to read. Thresholds are scaled to
+// actually has a mechanic for are implemented - there's no run timer and no
+// Heart fight, so Speedster and Heartbreaker have nothing to read. Ascension
+// does now (Phase 10) and is the last row below; Curses! still does not,
+// because Curses reach a deck only through events and the ladder, never as a
+// reward the player chose. Thresholds are scaled to
 // Hollowdeck's much smaller numbers (50 max HP, ~44g per fight, an 84-card
 // pool, 33 relics) - the StS value each was scaled from is noted per-category
 // below.
@@ -104,16 +106,33 @@ public static class RunScore
     public const int MysteryRooms = 3;
     public const int MysteryPoints = 25;
 
+    // What each ascension rung adds, as a percentage of everything else the run
+    // scored. StS's own Ascension category is a multiplier, and this is one
+    // too - it is just applied as a *row* rather than to the total.
+    //
+    // The reason is that the run-end screen renders the breakdown as a column
+    // of rows above a Total, and a multiplier applied after that column makes
+    // the printed rows stop adding up to the printed total. A player checking
+    // the arithmetic and finding it wrong is the same class of thing as a
+    // drifted intent telegraph, and it is avoidable for free.
+    //
+    // A percentage rather than a flat bonus so the ladder and the unlock track
+    // pull in the same direction: a rung is worth more on a run that did well,
+    // which is what makes climbing worth doing rather than a separate currency.
+    public const int AscensionBonusPercent = 5;
+
     public record Entry(string Label, int Points);
 
     public static List<Entry> EvaluateCurrentRun() =>
-        Evaluate(RunState.Stats, RunState.Deck, RunState.Gold, RunState.Relics.Count);
+        Evaluate(RunState.Stats, RunState.Deck, RunState.Gold, RunState.Relics.Count,
+            RunState.AscensionLevel);
 
     // Returns the itemized breakdown, in the order it should be displayed;
     // Total() sums it. Categories that scored nothing are omitted entirely
     // rather than listed as 0, so the run-end screen only shows what was
     // actually earned.
-    public static List<Entry> Evaluate(RunStats stats, List<CardDefinition> deck, int gold, int relicCount)
+    public static List<Entry> Evaluate(RunStats stats, List<CardDefinition> deck, int gold, int relicCount,
+        int ascension = 0)
     {
         var entries = new List<Entry>();
 
@@ -175,6 +194,13 @@ public static class RunScore
         if (deck.Count > 0 && deck.All(c => c.Rarity != Rarity.Rare)) Add("Pauper", PauperPoints);
 
         if (stats.EventRoomsVisited >= MysteryRooms) Add("Mystery Machine", MysteryPoints);
+
+        // Last, and computed off the subtotal of everything above it, which is
+        // what makes it a multiplier wearing a row's clothes. Add drops a
+        // zero-point row, so rung 0 - every run before the ladder, and every
+        // run with the toggle off - produces no row at all and the printed
+        // breakdown is byte-for-byte what it always was.
+        Add($"Ascension {ascension}", Total(entries) * AscensionBonusPercent * ascension / 100);
 
         return entries;
     }

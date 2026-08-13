@@ -14,12 +14,30 @@ public static class ActDatabase
 
     public static int Count => Acts.Count;
 
+    // Every id named in any act's BossIds. Derived rather than authored,
+    // because BossIds is already the one place the game decides what a boss is
+    // - MapGenerator draws from it and nothing else marks a boss. A bool on
+    // EnemyDefinition would make "is this a boss" answerable two ways, and the
+    // two would disagree the first time a boss was repurposed as an elite.
+    private static readonly HashSet<string> BossIds = new();
+
     public static void LoadAll()
     {
         var defs = DataFile.LoadList<ActDefinition>("res://data/acts/acts.json");
         Acts.Clear();
         Acts.AddRange(defs);
+
+        BossIds.Clear();
+        foreach (var act in Acts)
+        {
+            foreach (var id in act.BossIds) BossIds.Add(id);
+        }
     }
+
+    // Read by the ascension ladder's boss-HP knob, which needs to raise a boss
+    // without touching the normal fights whose mean is the denominator every
+    // boss ratio in BalanceReport is divided by.
+    public static bool IsBoss(string enemyId) => BossIds.Contains(enemyId);
 
     // Clamped rather than throwing: an ActIndex from a save written by a build
     // with more acts than this one has must degrade to the last act, not kill

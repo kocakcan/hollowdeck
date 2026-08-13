@@ -35,14 +35,20 @@ public static class MapGenerator
     private const int MinNodesPerFloor = 3;
     private const int MaxNodesPerFloor = 5;
 
-    public static List<MapNode> Generate(Random rng, ActDefinition act)
+    // The ascension rung arrives the same way the act does - as an argument
+    // rather than read off RunState - because this file's whole shape is that
+    // nothing act-specific is fetched, it is passed. It defaults to identity so
+    // every existing caller, and every suite that generates a map to look at
+    // its shape, is unchanged.
+    public static List<MapNode> Generate(Random rng, ActDefinition act, AscensionModifiers? asc = null)
     {
         int floorCount = act.FloorCount;
         var floors = new List<List<MapNode>>();
+        var rung = asc ?? AscensionModifiers.None;
 
         for (int f = 0; f < floorCount; f++)
         {
-            floors.Add(BuildFloor(f, floorCount, act, rng));
+            floors.Add(BuildFloor(f, floorCount, act, rng, rung));
         }
 
         for (int f = 0; f < floorCount - 1; f++)
@@ -53,7 +59,8 @@ public static class MapGenerator
         return floors.SelectMany(floor => floor).ToList();
     }
 
-    private static List<MapNode> BuildFloor(int floor, int floorCount, ActDefinition act, Random rng)
+    private static List<MapNode> BuildFloor(int floor, int floorCount, ActDefinition act, Random rng,
+        AscensionModifiers asc)
     {
         // Floor 0 is always a soft-open Combat floor; the floor right before
         // the boss is always a forced single Rest node (guaranteed reachable
@@ -76,7 +83,7 @@ public static class MapGenerator
         {
             var (type, concealed) = floor == 0
                 ? (MapNodeType.Combat, false)
-                : PickNodeType(floor, rng);
+                : PickNodeType(floor, rng, asc);
             nodes.Add(MakeNode(floor, c, type, concealed, act, rng));
         }
         return nodes;
@@ -87,7 +94,8 @@ public static class MapGenerator
     // for free - a "?" hiding the one landmark the whole act routes toward
     // would be fog rather than a gamble. MapSmokeTest asserts it rather than
     // leaving it to this comment.
-    private static (MapNodeType Type, bool Concealed) PickNodeType(int floor, Random rng)
+    private static (MapNodeType Type, bool Concealed) PickNodeType(int floor, Random rng,
+        AscensionModifiers asc)
     {
         // Elites don't show up on the first branching floor - too early for
         // a tougher-than-normal fight before the player has any relics/cards.
@@ -107,15 +115,29 @@ public static class MapGenerator
         // elites a run down to 1.8 and the best path 10 down to 8. Nothing
         // would have caught it: BalanceSmokeTest bands elite *cost ratios*,
         // never how often an elite is offered.
+        // An ascension rung that makes elites more common moves weight *from*
+        // Combat into Elite rather than adding to Elite, which is the same
+        // argument the paragraph above makes about the "?" slot, applied by a
+        // caller instead of by an edit. Adding would grow the denominator and
+        // quietly resilence Shop, Treasure, Rest and Event - four types the
+        // rung is not about. Moving it holds the table total at 119 and the
+        // fights-versus-utility-rooms split constant, so the only thing that
+        // changes is which kind of fight a floor offers.
+        //
+        // Only on floors that actually carry an Elite. Below floor 2 the extra
+        // slot is a Combat, so there is nothing for the weight to move into and
+        // subtracting it would shrink the table instead - the same silent
+        // reshare running backwards.
+        bool eliteOnThisFloor = floor >= 2;
         var weights = new List<(MapNodeType type, int weight)>
         {
-            (MapNodeType.Combat, 50),
+            (MapNodeType.Combat, eliteOnThisFloor ? asc.CombatWeight(50) : 50),
             (MapNodeType.Shop, 10),
             (MapNodeType.Treasure, 10),
             (MapNodeType.Rest, 11),
             (MapNodeType.Event, 5),
         };
-        weights.Add(floor >= 2 ? (MapNodeType.Elite, 15) : (MapNodeType.Combat, 15));
+        weights.Add(eliteOnThisFloor ? (MapNodeType.Elite, asc.EliteWeight(15)) : (MapNodeType.Combat, 15));
 
         // A slot in this table rather than a coin flip layered on top of it, so
         // "how much of the map is unknown" is authored against the same

@@ -1,4 +1,5 @@
 using Hollowdeck.Combat;
+using Hollowdeck.Run;
 
 namespace Hollowdeck.Effects;
 
@@ -23,8 +24,28 @@ public static class DamageMath
     // are read under.
     public const int IntangibleDamage = 1;
 
+    // The ascension ladder's enemy-damage rung is applied here, and the place
+    // is the whole of why it is honest. This method is the one thing both
+    // DealDamageEffect (what actually lands) and EnemyView.LiveAttackAmount
+    // (what the telegraph advertises) call, so scaling it moves both together
+    // and they cannot disagree. Applying the rung at resolution alone would
+    // make every enemy in the game telegraph a lie, which is this genre's
+    // canonical bad bug - the player has already committed a turn against it.
+    //
+    // Two details are deliberate. It scales the *base* amount, before Strength,
+    // so the rung raises what the move is authored at rather than compounding
+    // with the fight's accumulated buffs - Strength is worth the same to an
+    // enemy at every rung. And it is gated on the source being an enemy: the
+    // player's cards go through this method too, and a ladder that scaled the
+    // player's damage would hand back what every other knob is taking.
+    //
+    // Thorns is not scaled and does not come through here - DealDamageEffect
+    // subtracts it directly, deliberately, so it cannot re-enter the effect
+    // system. A flat retaliation is what that status is.
     public static int ComputeOutgoing(int baseAmount, Combatant source)
     {
+        if (source is EnemyCombatant) baseAmount = RunState.Ascension.EnemyDamage(baseAmount);
+
         int amount = baseAmount + source.GetStatus(StatusType.Strength);
         if (source.GetStatus(StatusType.Weak) > 0)
         {

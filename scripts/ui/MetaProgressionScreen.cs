@@ -51,8 +51,13 @@ public partial class MetaProgressionScreen : Control
     private void RefreshSummary()
     {
         var meta = MetaProgressionManager.Instance;
+        // The ascension limit joins this line rather than getting a row of its
+        // own, and it is omitted entirely at 0 - a player who has not finished a
+        // run has not met the ladder, and naming it here would be the only
+        // place in the game that mentions a system they cannot reach.
         _progressLabel.Text = $"Progress: {meta.TotalProgress:N0}    " +
-                              $"Runs: {meta.RunsCompleted}    Best run: {meta.BestRunScore:N0}";
+                              $"Runs: {meta.RunsCompleted}    Best run: {meta.BestRunScore:N0}"
+                              + (meta.AscensionLimit > 0 ? $"    Ascension: {meta.AscensionLimit}" : "");
 
         if (meta.NextUnlock() is not { } next)
         {

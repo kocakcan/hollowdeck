@@ -174,7 +174,7 @@ public partial class LibrarySmokeTest : Node
     private void TestUnlockAfterThresholdCrossedIsLive()
     {
         ResetScratch();
-        MetaProgressionManager.Instance.AddRunResult(FirstCardEntry.Threshold, 1, "Win", ScratchPath);
+        MetaProgressionManager.Instance.AddRunResult(FirstCardEntry.Threshold, 1, "Win", path: ScratchPath);
 
         // A fresh instance, not a refresh of the old one - proves the screen
         // reads MetaProgressionManager at build time from current state

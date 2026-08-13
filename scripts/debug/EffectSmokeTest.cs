@@ -27,6 +27,7 @@ public partial class EffectSmokeTest : Node
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         ActDatabase.LoadAll();
+        AscensionDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         TipDatabase.LoadAll();
@@ -61,6 +62,7 @@ public partial class EffectSmokeTest : Node
         TestEveryStatusHasAKeywordBlurb();
         TestEnemyVoiceDescriptions();
         TestArtifactRefusesExactlyTheDebuffs();
+        TestTheCombatEngineReadsTheRung();
         TestThornsBillsTheAttackerOnlyForAnAttack();
         TestIntangibleFloorsDamagePastVulnerable();
         await TestTurnStartGrantingStatuses();
@@ -1400,6 +1402,91 @@ public partial class EffectSmokeTest : Node
     // attack that was fully blocked (it bills the attempt, not the damage) and
     // that it does not fire on lose_hp - which is HP loss with no attacker to
     // bill, and would otherwise have to invent one.
+    // That the combat engine actually *reads* the ascension rung. Everything
+    // else about the ladder can be green while this is false: the data layer
+    // folds, the balance report prints a perfect table of what each rung would
+    // do, the toggle flips and the save round-trips - and the fight is
+    // identical, because the two call sites that matter are one line each and
+    // nothing else in the repo touches them.
+    //
+    // That is the silent data/code-seam no-op this codebase produces, and it is
+    // the one failure mode a ladder authored as data is most exposed to.
+    private void TestTheCombatEngineReadsTheRung()
+    {
+        int top = AscensionDatabase.MaxLevel;
+        var asc = AscensionDatabase.Effective(top);
+        int saved = RunState.AscensionLevel;
+
+        try
+        {
+            // A normal and a boss, so the boss-only knob is covered as well as
+            // the general one - and so a scale applied to every enemy alike
+            // fails rather than passing half of this.
+            var normalDef = EnemyDatabase.All.First(e => !ActDatabase.IsBoss(e.Id));
+            var bossDef = EnemyDatabase.All.First(e => ActDatabase.IsBoss(e.Id));
+
+            RunState.AscensionLevel = 0;
+            var flatNormal = EnemyFactory.Create(normalDef);
+            var flatBoss = EnemyFactory.Create(bossDef);
+
+            RunState.AscensionLevel = top;
+            var hardNormal = EnemyFactory.Create(normalDef);
+            var hardBoss = EnemyFactory.Create(bossDef);
+
+            Check("rung_zero_builds_the_authored_enemy",
+                flatNormal.MaxHp == normalDef.MaxHp && flatNormal.CurrentHp == normalDef.MaxHp,
+                $"{flatNormal.MaxHp}/{flatNormal.CurrentHp} against {normalDef.MaxHp}");
+            Check("the_rung_scales_enemy_hp",
+                hardNormal.MaxHp == asc.EnemyHp(normalDef.MaxHp, false) && hardNormal.MaxHp > flatNormal.MaxHp,
+                $"{flatNormal.MaxHp} -> {hardNormal.MaxHp}");
+            Check("an_enemy_starts_at_its_scaled_maximum", hardNormal.CurrentHp == hardNormal.MaxHp,
+                $"{hardNormal.CurrentHp}/{hardNormal.MaxHp}");
+            // The boss knob stacks on top, so a boss must gain proportionally
+            // more than a normal does - not merely "more", which the boss's
+            // bigger HP pool would give for free.
+            Check("the_rung_leans_harder_on_a_boss",
+                hardBoss.MaxHp / (double)flatBoss.MaxHp > hardNormal.MaxHp / (double)flatNormal.MaxHp,
+                $"boss {flatBoss.MaxHp}->{hardBoss.MaxHp}, normal {flatNormal.MaxHp}->{hardNormal.MaxHp}");
+
+            // The damage half, through DamageMath - which is the function both
+            // DealDamageEffect and EnemyView.LiveAttackAmount call, so the
+            // telegraph and the hit scale together and cannot disagree.
+            var enemy = new EnemyCombatant { Name = "Enemy", MaxHp = 50, CurrentHp = 50 };
+            var player = new PlayerCombatant { MaxHp = 50, CurrentHp = 50 };
+
+            RunState.AscensionLevel = 0;
+            int flatHit = DamageMath.ComputeOutgoing(10, enemy);
+            RunState.AscensionLevel = top;
+            int hardHit = DamageMath.ComputeOutgoing(10, enemy);
+
+            Check("the_rung_scales_enemy_damage",
+                flatHit == 10 && hardHit == asc.EnemyDamage(10) && hardHit > flatHit,
+                $"{flatHit} -> {hardHit}");
+
+            // The gate. The player's cards go through the same function, and a
+            // ladder that scaled them would hand back what every other knob is
+            // taking - invisibly, since the player's own damage preview reads
+            // this too and would agree with itself all the way down.
+            Check("the_rung_leaves_the_players_damage_alone",
+                DamageMath.ComputeOutgoing(10, player) == 10,
+                $"player hit {DamageMath.ComputeOutgoing(10, player)} at rung {top}");
+
+            // And end to end, so a scale applied to the preview but not to
+            // resolution - or the reverse - fails here.
+            var ctx = new EffectContext
+            {
+                Source = enemy, Targets = new List<Combatant> { player }, Combat = null!,
+            };
+            EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 10 });
+            Check("a_scaled_hit_lands_scaled", player.CurrentHp == 50 - hardHit,
+                $"player hp={player.CurrentHp}, expected {50 - hardHit}");
+        }
+        finally
+        {
+            RunState.AscensionLevel = saved;
+        }
+    }
+
     private void TestThornsBillsTheAttackerOnlyForAnAttack()
     {
         var attacker = new EnemyCombatant { Name = "Attacker", MaxHp = 50, CurrentHp = 50 };

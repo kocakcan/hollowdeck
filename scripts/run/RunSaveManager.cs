@@ -44,6 +44,7 @@ public static class RunSaveManager
             Potions = RunState.Potions.Select(p => new PotionSaveEntry { DefinitionId = p.DefinitionId }).ToList(),
             ActIndex = RunState.ActIndex,
             CardSkipStreak = RunState.CardSkipStreak,
+            AscensionLevel = RunState.AscensionLevel,
             MapNodes = RunState.MapNodes,
             CurrentNodeId = RunState.CurrentNodeId,
             VisitedNodeIds = RunState.VisitedNodeIds.ToList(),
@@ -104,6 +105,13 @@ public static class RunSaveManager
         // could never bias a draw - what this stops is the reward row reading
         // "7 skipped" beside rung 3's odds, which is a telegraph that lies.
         RunState.CardSkipStreak = Mathf.Clamp(data.CardSkipStreak, 0, CardPool.MaxSkipStreak);
+        // Clamped for the third time and the same reason: the number arrives
+        // from a file. AscensionDatabase.Effective clamps again on its own, so
+        // an out-of-range value could never resolve to a rung that does not
+        // exist - what this stops is RunState.AscensionLevel *reading* as 40
+        // where the run is being played at 20, which is what the run-end screen
+        // banks into the meta save's limit.
+        RunState.AscensionLevel = Mathf.Clamp(data.AscensionLevel, 0, AscensionDatabase.MaxLevel);
         RunState.MapNodes = data.MapNodes;
         RunState.CurrentNodeId = data.CurrentNodeId;
         RunState.VisitedNodeIds = data.VisitedNodeIds.ToHashSet();

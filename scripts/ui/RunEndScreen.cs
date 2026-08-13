@@ -26,7 +26,7 @@ public partial class RunEndScreen : Control
         int score = RunScore.Total(breakdown);
         int progressBefore = MetaProgressionManager.Instance.TotalProgress;
         var newlyUnlocked = MetaProgressionManager.Instance.AddRunResult(
-            score, RunManager.Instance.RunSeed, won ? "Win" : "Lose");
+            score, RunManager.Instance.RunSeed, won ? "Win" : "Lose", RunState.AscensionLevel);
         RunSaveManager.Delete();
 
         ScreenChrome.AddTitle(this, won ? "Run Complete" : "Run Over",
@@ -34,8 +34,13 @@ public partial class RunEndScreen : Control
 
         BuildOutcome(won);
 
+        // The rung sits with the seed rather than in the score column: both are
+        // *what run this was*, and the score column is what it earned - where
+        // the Ascension row RunScore appends already says the same number in the
+        // currency the column is denominated in.
         GetNode<Label>("CenterContainer/Columns/VBoxContainer/SeedLabel").Text =
-            $"Seed: {RunManager.Instance.RunSeed}";
+            $"Seed: {RunManager.Instance.RunSeed}"
+            + (RunState.AscensionLevel > 0 ? $"    Ascension {RunState.AscensionLevel}" : "");
 
         GetNode<PanelContainer>("CenterContainer/Columns/ScorePanel")
             .AddThemeStyleboxOverride("panel", ChromeStyles.PanelStyle());

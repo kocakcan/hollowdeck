@@ -24,6 +24,7 @@ public partial class ScreenSmokeTest : Node
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         ActDatabase.LoadAll();
+        AscensionDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
         TipDatabase.LoadAll();
@@ -66,6 +67,7 @@ public partial class ScreenSmokeTest : Node
         TestRunSetupClaimsExactlyOneBlessing();
         TestRunSetupSeedEntryRebuildsTheRun();
         await TestRunSetupTilesStayInTheirBand();
+        await TestRunSetupAscensionToggle();
         // These two last, and they have to stay last. Both end in
         // RunManager.ChangeScreen, which puts the tree's current scene through
         // ChangeSceneToFile and detaches this node - so a test added *after*
@@ -1341,6 +1343,189 @@ public partial class ScreenSmokeTest : Node
             pool.Clear();
             pool.AddRange(saved);
         }
+    }
+
+    private const string AscensionBoxPath = "CenterContainer/VBoxContainer/AscensionBox";
+    private const string AscensionTogglePath = AscensionBoxPath + "/AscensionToggle";
+    private const string AscensionLabelPath = AscensionBoxPath + "/AscensionLabel";
+
+    // The ascension toggle: that it is absent before the ladder is unlocked,
+    // that flipping it rebuilds the run rather than relabelling it, that it
+    // leaves play with the seed controls on a claim, and that the line under it
+    // describes the rung the run is actually on.
+    //
+    // Drives the meta save directly, which the RunSaveGuard around _Ready makes
+    // safe on disk - but the manager also caches its data in memory, so the
+    // finally restores that too. A test that left the limit at 20 would hand
+    // every later test in this file a different unlock set.
+    private async System.Threading.Tasks.Task TestRunSetupAscensionToggle()
+    {
+        string? before = ReadMetaSave();
+        int top = AscensionDatabase.MaxLevel;
+
+        try
+        {
+            // --- locked: the row is not on the screen at all -----------------
+            SetAscensionLimit(0);
+            RunManager.Instance.BeginRun(4242);
+            var locked = LoadScene("res://scenes/RunSetupScreen.tscn");
+            Check("runsetup_hides_the_ladder_until_it_is_unlocked",
+                !locked.GetNode<Control>(AscensionBoxPath).Visible,
+                "the ascension row is showing on a save that has never won");
+            locked.QueueFree();
+
+            // --- unlocked, off ------------------------------------------------
+            SetAscensionLimit(top);
+            RunManager.Instance.BeginRun(4242);
+            var screen = LoadScene("res://scenes/RunSetupScreen.tscn");
+            ((Control)screen).Size = new Vector2(1152, 648);
+
+            var box = screen.GetNode<Control>(AscensionBoxPath);
+            var toggle = screen.GetNode<CheckButton>(AscensionTogglePath);
+            var label = screen.GetNode<Label>(AscensionLabelPath);
+
+            Check("runsetup_shows_the_ladder_once_unlocked", box.Visible,
+                "the ascension row is hidden at a nonzero limit");
+            Check("runsetup_toggle_names_the_limit", toggle.Text == $"ASCENSION {top}",
+                $"toggle reads '{toggle.Text}'");
+            Check("runsetup_toggle_starts_off",
+                !toggle.ButtonPressed && RunState.AscensionLevel == 0,
+                $"pressed={toggle.ButtonPressed}, level={RunState.AscensionLevel}");
+
+            // --- flipping it on rebuilds the run ------------------------------
+            int hpBefore = RunState.PlayerMaxHp;
+            int deckBefore = RunState.Deck.Count;
+            toggle.ButtonPressed = true;
+
+            Check("runsetup_toggle_sets_the_rung", RunState.AscensionLevel == top,
+                $"level={RunState.AscensionLevel}");
+            // The rung has to have *rebuilt* the run, not merely been recorded.
+            // Both of these are produced by InitNewRun reading the level, and a
+            // toggle that only assigned the field would leave both unmoved with
+            // everything else about the screen looking right.
+            Check("runsetup_toggle_rebuilds_the_starting_hp",
+                RunState.PlayerMaxHp == AscensionDatabase.Effective(top).StartingMaxHp(RunState.StartingMaxHp)
+                && RunState.PlayerMaxHp != hpBefore,
+                $"{hpBefore} -> {RunState.PlayerMaxHp}");
+            Check("runsetup_toggle_imposes_the_ladders_cards",
+                RunState.Deck.Count == deckBefore + AscensionDatabase.Effective(top).StartingCurseIds.Count,
+                $"deck {deckBefore} -> {RunState.Deck.Count}");
+            Check("runsetup_toggle_keeps_the_seed",
+                screen.GetNode<LineEdit>(SeedFieldPath).Text == "4242",
+                $"field='{screen.GetNode<LineEdit>(SeedFieldPath).Text}'");
+
+            // The line under it is derived from the resolved modifiers, so it
+            // has to name this rung's real numbers. Checked against the values
+            // read out of AscensionDatabase rather than against a literal - a
+            // literal here would be a second copy of the ladder, and the copy
+            // the player reads.
+            var asc = AscensionDatabase.Effective(top);
+            Check("runsetup_summary_reports_the_live_modifiers",
+                label.Text.Contains($"+{asc.EnemyHpPercent - 100}% health")
+                && label.Text.Contains($"+{asc.EnemyDamagePercent - 100}% damage")
+                && label.Text.Contains($"{asc.StartingMaxHp(RunState.StartingMaxHp)} HP"),
+                $"summary='{label.Text}'");
+
+            // Body, not Small. Small is 8px and turned this into an unreadable
+            // rule; nothing but the applied size can observe that.
+            Check("runsetup_summary_is_body_text",
+                label.GetThemeFontSize("font_size") == UiTheme.Fonts.Body,
+                $"font_size={label.GetThemeFontSize("font_size")}");
+
+            // --- and back off again -------------------------------------------
+            toggle.ButtonPressed = false;
+            Check("runsetup_toggle_off_returns_to_rung_zero",
+                RunState.AscensionLevel == 0 && RunState.PlayerMaxHp == RunState.StartingMaxHp
+                && RunState.Deck.Count == deckBefore,
+                $"level={RunState.AscensionLevel}, hp={RunState.PlayerMaxHp}, deck={RunState.Deck.Count}");
+
+            // --- layout, at the row's longest ---------------------------------
+            toggle.ButtonPressed = true;
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+            var screenRect = ((Control)screen).GetGlobalRect();
+            var labelRect = label.GetGlobalRect();
+            Check("runsetup_summary_is_not_clipped_by_the_screen",
+                labelRect.Size.X > 0f && labelRect.Position.X >= screenRect.Position.X - 0.5f
+                && labelRect.End.X <= screenRect.End.X + 0.5f,
+                $"{labelRect.Position.X:F0}..{labelRect.End.X:F0} in {screenRect.Size.X:F0}");
+
+            // The whole reason this is a layout test and not just a wiring one:
+            // the stack is centred, so a taller row pushes the tiles *up* into
+            // the run-status block anchored top-left. Same check the tiles test
+            // makes, re-made with the row at its tallest.
+            var blockRows = screen.GetNode<Control>("RunStatusBar").GetChildren()
+                .OfType<Control>().Select(c => c.GetGlobalRect()).ToList();
+            var tiles = screen.GetNode<GridContainer>(OfferGridPath)
+                .GetChildren().OfType<ActivatablePanel>().ToList();
+            var covered = tiles.Select(t => t.GetGlobalRect())
+                .Concat(new[] { labelRect, box.GetGlobalRect() })
+                .Where(r => blockRows.Any(b => b.Intersects(r)))
+                .Select(r => r.ToString()).ToList();
+            Check("runsetup_the_ascension_row_clears_the_run_status_block", covered.Count == 0,
+                string.Join(", ", covered));
+
+            // --- claiming takes it out of play --------------------------------
+            Activate(tiles[0]);
+            Check("runsetup_claiming_locks_the_ascension_toggle",
+                toggle.Disabled && toggle.FocusMode == Control.FocusModeEnum.None,
+                $"disabled={toggle.Disabled}, focusMode={toggle.FocusMode}");
+
+            // And the lock is a fact about the run, not only about the control:
+            // a toggle driven anyway must not rebuild a run that has already
+            // resolved a blessing.
+            int claimedLevel = RunState.AscensionLevel;
+            int claimedHp = RunState.PlayerMaxHp;
+            toggle.ButtonPressed = false;
+            Check("runsetup_a_locked_toggle_cannot_rebuild_the_run",
+                RunState.AscensionLevel == claimedLevel && RunState.PlayerMaxHp == claimedHp,
+                $"level {claimedLevel} -> {RunState.AscensionLevel}, hp {claimedHp} -> {RunState.PlayerMaxHp}");
+
+            screen.QueueFree();
+        }
+        finally
+        {
+            RestoreMetaSave(before);
+            RunState.AscensionLevel = 0;
+        }
+    }
+
+    private static string? ReadMetaSave()
+    {
+        if (!FileAccess.FileExists("user://meta_progression.json")) return null;
+        using var file = FileAccess.Open("user://meta_progression.json", FileAccess.ModeFlags.Read);
+        return file.GetAsText();
+    }
+
+    private static void SetAscensionLimit(int limit)
+    {
+        using (var file = FileAccess.Open("user://meta_progression.json", FileAccess.ModeFlags.Write))
+        {
+            file.StoreString($$"""
+                { "saveVersion": 3, "totalProgress": 5000, "runsCompleted": 40,
+                  "ascensionLimit": {{limit}}, "recentSeeds": [] }
+                """);
+        }
+        MetaProgressionManager.Instance.LoadFrom("user://meta_progression.json");
+    }
+
+    private static void RestoreMetaSave(string? contents)
+    {
+        if (contents is null)
+        {
+            if (FileAccess.FileExists("user://meta_progression.json"))
+            {
+                DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath("user://meta_progression.json"));
+            }
+        }
+        else
+        {
+            using var file = FileAccess.Open("user://meta_progression.json", FileAccess.ModeFlags.Write);
+            file.StoreString(contents);
+        }
+
+        MetaProgressionManager.Instance.LoadFrom("user://meta_progression.json");
     }
 
     // The screen's tiles, read back the way a player sees them: the heading

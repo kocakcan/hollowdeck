@@ -23,6 +23,7 @@ public partial class RunSaveSmokeTest : Node
         CardDatabase.LoadAll();
         EnemyDatabase.LoadAll();
         ActDatabase.LoadAll();
+        AscensionDatabase.LoadAll();
         RelicDatabase.LoadAll();
         PotionDatabase.LoadAll();
 
@@ -90,6 +91,8 @@ public partial class RunSaveSmokeTest : Node
         // wrong end - or ignored the value and re-derived it - lands on a
         // different number than the one written.
         RunState.CardSkipStreak = 2;
+        // Likewise mid-ladder rather than 0 or the cap.
+        RunState.AscensionLevel = 7;
 
         RunSaveManager.Save(runSeed: 12345, path: ScratchPath);
 
@@ -106,11 +109,14 @@ public partial class RunSaveSmokeTest : Node
         RunState.VisitedNodeIds = new HashSet<string>();
         RunState.ActIndex = 0;
         RunState.CardSkipStreak = 0;
+        RunState.AscensionLevel = 0;
 
         var seed = RunSaveManager.TryLoad(ScratchPath);
         Check("round_trip_seed", seed == 12345, $"seed={seed}");
         Check("round_trip_card_skip_streak", RunState.CardSkipStreak == 2,
             $"streak={RunState.CardSkipStreak}");
+        Check("round_trip_ascension_level", RunState.AscensionLevel == 7,
+            $"ascension={RunState.AscensionLevel}");
         Check("round_trip_gold", RunState.Gold == 42, $"gold={RunState.Gold}");
         Check("round_trip_max_hp", RunState.PlayerMaxHp == 60, $"maxHp={RunState.PlayerMaxHp}");
         Check("round_trip_current_hp", RunState.PlayerCurrentHp == 35, $"currentHp={RunState.PlayerCurrentHp}");
@@ -252,7 +258,35 @@ public partial class RunSaveSmokeTest : Node
         Check("out_of_range_skip_streak_clamps_to_the_cap",
             RunState.CardSkipStreak == CardPool.MaxSkipStreak, $"streak={RunState.CardSkipStreak}");
 
+        // v5 -> v6, the ascension level. Poisoned first for the same reason the
+        // skip streak above is: absent-is-0 and never-assigned-is-0 are the
+        // same value, and only one of them is the field working.
+        ResetScratch();
+        WriteScratchRaw("""
+            { "saveVersion": 5, "runSeed": 13, "gold": 10, "playerMaxHp": 50, "playerCurrentHp": 50,
+              "actIndex": 0, "deckCardIds": ["strike"], "relicIds": [], "potions": [],
+              "mapNodes": [], "currentNodeId": "", "visitedNodeIds": [] }
+            """);
+
+        RunState.AscensionLevel = 9;
+        Check("v5_save_loads", RunSaveManager.TryLoad(ScratchPath) == 13, "v5 save did not load");
+        Check("v5_save_without_an_ascension_level_loads_as_zero",
+            RunState.AscensionLevel == 0, $"ascension={RunState.AscensionLevel}");
+
+        ResetScratch();
+        WriteScratchRaw("""
+            { "saveVersion": 6, "runSeed": 14, "gold": 10, "playerMaxHp": 50, "playerCurrentHp": 50,
+              "actIndex": 0, "ascensionLevel": 999, "deckCardIds": ["strike"], "relicIds": [],
+              "potions": [], "mapNodes": [], "currentNodeId": "", "visitedNodeIds": [] }
+            """);
+
+        RunSaveManager.TryLoad(ScratchPath);
+        Check("out_of_range_ascension_level_clamps_to_the_ladder",
+            RunState.AscensionLevel == AscensionDatabase.MaxLevel,
+            $"ascension={RunState.AscensionLevel}");
+
         RunState.CardSkipStreak = 0;
+        RunState.AscensionLevel = 0;
     }
 
     private void TestCorruptedFileFallsBackToNull()
