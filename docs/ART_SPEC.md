@@ -18,10 +18,16 @@ Every asset is authored on one of these grids. No in-between sizes.
 | Creatures (enemies, player) | **32x32** | Bosses may use 32x48 when the silhouette needs the height |
 | Background tiles | **64x64** | Must tile seamlessly |
 | Icons (card, relic, potion, map, status, intent) | **32x32** | |
-| Chrome 9-slices (frames, bezels, buttons) | **16x16** or **24x24** | Corners must be ≤ 1/3 of the slice |
+| Chrome 9-slices (frames, bezels, buttons) | **16x16** or **24x24** | In `assets/theme/`. Corners must be ≤ 1/3 of the slice |
 
 `emberlord_vashk.png` is the only current 32x48 sprite; everything else is already 32x32 and
 conforms.
+
+Which of the two chrome sizes a slice takes is decided by the *smallest box that draws it*, not by
+how much room the art wants: a `StyleBoxTexture` whose box is shorter than twice its texture margin
+folds its own corners into each other. Panels and HUD slots are 16 because `ScreenChrome`'s HP and
+gold panels sit at a 4px vertical content margin; buttons and the art plinth are 24 because none of
+them is under 28px tall.
 
 ## 2. Scaling — integer factors only
 
@@ -161,22 +167,41 @@ P0 #180d24   P1 #2e1a42   P2 #4d2e6b   P3 #7a52a3   P4 #b08cd9
 No `corner_radius` and no `ShadowSize` blur anywhere. Both are anti-aliased effects that cannot be
 expressed in pixels.
 
-- Frames, bezels, buttons and panels **should be** `StyleBoxTexture` 9-slices over pixel border art.
-  They are not yet: every box in `ChromeStyles.cs` is a hard-edged `StyleBoxFlat`, and there is no
-  chrome art under `assets/`. This entry read "`ChromeStyles.EndTurnButtonStyle` already uses this
-  pattern — follow it", which stopped being true when `ApplyEmphasisButtonStyle` dropped the sourced
-  ornate frame; the §1 grids and `validate.rs`'s `/theme/` rule are the groundwork with nothing
-  standing on it. Tracked in `docs/PIXEL_ART_ROADMAP.md` §2.
+- Frames, bezels, buttons and panels are `StyleBoxTexture` 9-slices over pixel border art, generated
+  by `artgen`'s `chrome` category into `assets/theme/`. Two properties of every such box are
+  correctness rather than taste, and both are wrong by default:
+
+  - **Edges tile, they never stretch.** `AxisStretchMode.Stretch` is what a `StyleBoxTexture` is born
+    with, and it resamples the edge strip to whatever fractional width the box happens to be — §2's
+    "a bug, not a judgement call", reached by doing nothing at all. `TileFit` is the same violation
+    from the other side, since it rescales tiles to fit a whole number of them. Only `Tile` keeps
+    every edge pixel at 1:1. The art is drawn so each edge pixel is a function of one axis alone, so
+    the tile seam is invisible at any size.
+  - **The corner is at most a third of the slice** — §1's rule, which nothing checked until this
+    landed. It is a property of the StyleBox rather than of the PNG, so `artgen validate` cannot see
+    it: it reads pixels, not texture margins.
+
+  `PixelSpecSmokeTest` asserts both over every chrome box the game builds, walking the `ChromeStyles`
+  producers *and* the theme resource, since those are two independent consumers of the same art.
+
+  **A box gets a 9-slice iff its colours are fixed at author time.** A `StyleBoxTexture` has no
+  `BorderColor`, and its one runtime colour knob (`ModulateColor`) multiplies, which lands off the §5
+  ramp. So `PanelStyle`, `SlotStyle`, `PlinthStyle`, the emphasis button and the theme's ordinary
+  buttons are art; `CardFrameStyle` — whose border is a rarity lerped with upgraded and again with
+  hover — stays a `StyleBoxFlat`, along with the badges, the HP bars and the slider. That is a rule,
+  not an unfinished migration.
 - "Glow" (rare cards, boss nodes, target lock) should be an **animated pixel border** — a 1px ring
-  cycling `G3 → G4 → G5` — not a blur. Also not built: `ChromeStyles.CardFrameStyle` steps the border
+  cycling `G3 → G4 → G5` — not a blur. **Not built**: `ChromeStyles.CardFrameStyle` steps the border
   to the brightest gold statically and its comment calls the ring "the eventual treatment".
-  `PIXEL_ART_ROADMAP.md` §3.
+  `PIXEL_ART_ROADMAP.md` §3. These three surfaces stay flat for a second reason on top of the
+  fixed-colour rule above: a glow wants a driver, not a still.
 - Drop shadows are a hard 1px or 2px offset in `N0`, never a gradient.
 
-The two unbuilt bullets are stated as unbuilt on purpose. A spec that describes an intention in the
-present tense is indistinguishable from one describing the code, and the next reader inherits a claim
-they have no reason to check — which is how the animation rule in §9 went three phases without
-enforcement.
+The remaining unbuilt bullet is stated as unbuilt on purpose. A spec that describes an intention in
+the present tense is indistinguishable from one describing the code, and the next reader inherits a
+claim they have no reason to check — which is how the animation rule in §9 went three phases without
+enforcement, and how the first bullet above spent three phases pointing at
+`ChromeStyles.EndTurnButtonStyle` as an example to follow after that function had been deleted.
 
 ## 7. Type
 
@@ -230,6 +255,10 @@ the most distinctive thing about the game's look — and the plan is to recover 
 palette and ornament (heavy oxblood/bronze, ornate pixel borders, drop caps) rather than typeface.
 See `ROADMAP.md`, "Known cost, accepted".
 
+The ornate-pixel-borders half of that is now paid: §6's 9-slices are the ornament, and the emphasis
+button is where it shows most, having carried the loss as bare border weight for three phases. Drop
+caps are still owed.
+
 ## 8. What gets enforced automatically
 
 `tools/artgen validate` runs from `tools/run-smoke-tests.sh` ahead of the engine suites, and fails
@@ -246,9 +275,17 @@ an already-imported texture, not the file.
 
 `PixelSpecSmokeTest` asserts the runtime half — that every sprite and icon site sets `Nearest` and
 an integer scale, that every asset is on a legal grid, that no SVG survives, that the fonts in use
-are the bitmap pair, and two things that keep the two halves honest: that `artgen`'s `palette.rs`
-still matches `PixelSpec.Ramp` entry-for-entry, and that every icon filename is a live definition
-id (in both directions) — cards, relics, potions and events.
+are the bitmap pair, the two §6 chrome rules above, and two things that keep the two halves honest:
+that `artgen`'s `palette.rs` still matches `PixelSpec.Ramp` entry-for-entry, and that every icon
+filename is a live definition id (in both directions) — cards, relics, potions and events.
+
+Chrome gets that same bidirectional treatment, and it needs it more than the icons do. Three sets
+have to agree: the PNGs in `assets/theme/`, the names in `ChromeStyles.Slices`, and the textures
+something actually draws. A missing icon degrades a view to text; a missing chrome slice makes a
+`StyleBoxTexture` draw **nothing at all**, so the panel leaves the interface rather than looking
+unfinished. The "something actually draws" set is collected by driving the real producers and reading
+the theme back, never from a list of textures — a list only knows the names someone already thought
+of, which is the lesson `TestNoTweenTransformsAPixelSprite` was rewritten over.
 
 Events are the one category where the *missing* direction is survivable: `ArtAssets.EventIcon`
 falls back to the map's scroll, so an event authored without art still renders a screen with a

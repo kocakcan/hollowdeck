@@ -1,11 +1,12 @@
 # artgen
 
-Hollowdeck's asset tool. It generates the game's 182 icons, snaps every authored
+Hollowdeck's asset tool. It generates the game's 206 icons, snaps every authored
 asset onto the shared palette, and enforces `docs/ART_SPEC.md`.
 
 ```bash
 cargo run --release -- generate            # write every icon into assets/icons/
 cargo run --release -- generate potions    # just one category
+cargo run --release -- generate chrome     # the 9-slices, into assets/theme/
 cargo run --release -- clamp               # snap all of assets/ onto the ramp
 cargo run --release -- validate            # enforce ART_SPEC §1/§3/§5/§8
 ```
@@ -37,7 +38,7 @@ could not have:
   droplet, flame and fist that the set is composed from — plus the gem, scale
   and barb added for the Phase 8 statuses — so a blade is the same blade in all
   28 icons that use one.
-- **Re-runnable.** Change a ramp entry, re-run, and all 182 icons regenerate
+- **Re-runnable.** Change a ramp entry, re-run, and all 206 icons regenerate
   consistently. That is the property that made the whole pixel-art commitment
   worth making.
 
@@ -50,7 +51,8 @@ could not have:
 | `clamp.rs` | alpha hardening + nearest-ramp snap |
 | `validate.rs` | the ART_SPEC checks and their failure messages |
 | `icons/shapes.rs` | the shared shape vocabulary |
-| `icons/{cards,relics,potions,misc,events}.rs` | the 182 icons themselves |
+| `icons/{cards,relics,potions,misc,events}.rs` | the 192 icons themselves |
+| `icons/chrome.rs` | the 14 9-slice chrome frames (the one category that writes to `assets/theme/`, not `assets/icons/`) |
 
 ## Two invariants that will bite
 

@@ -42,6 +42,10 @@ public partial class PixelSpecSmokeTest : Node
         TestSpritesAreOnLegalGrid();
         TestBackgroundTilesAreOnLegalGrid();
         TestIconsAreOnLegalGrid();
+        TestChromeSlicesAreOnLegalGrid();
+        TestEveryChromeSliceIsDrawnBySomething();
+        TestChromeCornersFitTheSlice();
+        TestChromeEdgesTileRatherThanStretch();
         TestCreatureSpritesRenderAtIntegerScale();
         TestDefaultTextureFilterIsNearest();
         TestCanvasIsLetterboxedNotExpanded();
@@ -108,6 +112,167 @@ public partial class PixelSpecSmokeTest : Node
             Check($"icon_grid_{path.GetFile()}",
                 w == PixelSpec.IconGrid && h == PixelSpec.IconGrid,
                 $"{path} is {w}x{h}, expected {PixelSpec.IconGrid}x{PixelSpec.IconGrid}");
+        }
+    }
+
+    // assets/theme was unasserted on this side entirely until the chrome
+    // slices landed - the three sweeps above walk sprites, backgrounds and
+    // icons, and a 9-slice is on neither of those grids. `artgen validate`
+    // covers the same ground from the raw bytes; this is the engine half, and
+    // it is the one that fails if a slice is on disk but never imported.
+    private void TestChromeSlicesAreOnLegalGrid()
+    {
+        foreach (var path in PngsUnder("res://assets/theme"))
+        {
+            var texture = GD.Load<Texture2D>(path);
+            int w = texture.GetWidth(), h = texture.GetHeight();
+            bool legal = (w == PixelSpec.ChromeSlice && h == PixelSpec.ChromeSlice)
+                || (w == PixelSpec.ChromeSlice + 8 && h == PixelSpec.ChromeSlice + 8);
+            Check($"chrome_grid_{path.GetFile()}", legal,
+                $"{path} is {w}x{h}, expected 16x16 or 24x24 (ART_SPEC section 1)");
+        }
+    }
+
+    // Every chrome StyleBoxTexture the game actually builds, from *both*
+    // consumers: the ChromeStyles producers and the theme resource. Collected
+    // by driving the real functions rather than by listing textures, for the
+    // reason TestNoTweenTransformsAPixelSprite had to be rewritten - a check
+    // that knows only the names someone already thought of is green over the
+    // ones they did not. The emphasis states in particular are reachable only
+    // by applying the style to a real Button and reading the overrides back.
+    private List<(string Label, StyleBoxTexture Style)> CollectChromeStyles()
+    {
+        var found = new List<(string, StyleBoxTexture)>();
+
+        void Add(string label, StyleBox? style)
+        {
+            if (style is StyleBoxTexture textured) found.Add((label, textured));
+        }
+
+        Add("ChromeStyles.PanelStyle", ChromeStyles.PanelStyle(focused: false));
+        Add("ChromeStyles.PanelStyle(focused)", ChromeStyles.PanelStyle(focused: true));
+        Add("ChromeStyles.SlotStyle(filled)", ChromeStyles.SlotStyle(filled: true));
+        Add("ChromeStyles.SlotStyle(empty)", ChromeStyles.SlotStyle(filled: false));
+        Add("ChromeStyles.PlinthStyle", ChromeStyles.PlinthStyle());
+
+        var button = new Button();
+        ChromeStyles.ApplyEmphasisButtonStyle(button);
+        foreach (string state in new[] { "normal", "hover", "pressed", "disabled" })
+            Add($"ApplyEmphasisButtonStyle/{state}", button.GetThemeStylebox(state));
+        button.QueueFree();
+
+        var theme = GD.Load<Theme>("res://assets/theme/hollowdeck_theme.tres");
+        if (theme is not null)
+        {
+            foreach (var type in theme.GetStyleboxTypeList())
+                foreach (var name in theme.GetStyleboxList(type))
+                    Add($"theme {type}/{name}", theme.GetStylebox(name, type));
+        }
+
+        return found;
+    }
+
+    // The data/code seam this codebase actually produces, one content type
+    // over: a slice renamed in artgen and not in ChromeStyles (or the reverse)
+    // makes ArtAssets.ChromeSlice return null, and a StyleBoxTexture with no
+    // texture draws *nothing*. So the panel does not degrade to an unstyled
+    // panel - it leaves the interface, silently, with nothing thrown.
+    //
+    // Three sets have to agree, and each pair catches a different mistake:
+    // the PNGs on disk, the names in ChromeStyles.Slices, and the textures
+    // something actually draws. A slice generated and never wired up is as
+    // much a bug as a name with no file behind it.
+    //
+    // What this deliberately does NOT catch, so the next reader does not
+    // assume it does: the comparison is by *membership*, so two producers
+    // swapping slices with each other - PanelStyle drawing the plinth and
+    // PlinthStyle drawing the panel - leaves all three sets identical and
+    // passes. Pinning which producer draws which name would close it, and it
+    // would be a mirror of the code in a second file with nothing asserting
+    // the mirror, which is the shape this codebase has shipped three times.
+    // The trade is deliberate and rests on the failure modes being different
+    // kinds: a missing slice is *invisible* (a StyleBoxTexture with no texture
+    // draws nothing, which is why this check exists at all), while a swapped
+    // one is a panel wearing the plinth's frame - wrong in a way the first
+    // screenshot shows.
+    private void TestEveryChromeSliceIsDrawnBySomething()
+    {
+        var declared = ChromeStyles.Slices.All.ToHashSet();
+
+        var onDisk = FilesUnder("res://assets/theme", ".png")
+            .Select(path => path.GetFile().GetBaseName())
+            .ToHashSet();
+
+        var drawn = CollectChromeStyles()
+            .Where(entry => entry.Style.Texture is not null)
+            .Select(entry => entry.Style.Texture.ResourcePath.GetFile().GetBaseName())
+            .ToHashSet();
+
+        var missingArt = declared.Except(onDisk).OrderBy(x => x).ToList();
+        Check("chrome_slices_have_art", missingArt.Count == 0,
+            $"ChromeStyles.Slices names with no PNG: {string.Join(", ", missingArt)} - " +
+            "run `artgen generate chrome` and re-import");
+
+        var orphanArt = onDisk.Except(declared).OrderBy(x => x).ToList();
+        Check("chrome_slices_have_no_orphans", orphanArt.Count == 0,
+            $"PNG(s) under assets/theme with no name in ChromeStyles.Slices: " +
+            $"{string.Join(", ", orphanArt)} - a slice was generated and never wired up");
+
+        var undrawn = declared.Except(drawn).OrderBy(x => x).ToList();
+        Check("chrome_slices_are_drawn", undrawn.Count == 0,
+            $"slice(s) nothing draws: {string.Join(", ", undrawn)} - " +
+            "declared in ChromeStyles.Slices but reached by no producer and no theme entry");
+    }
+
+    // ART_SPEC section 1: "corners must be <= 1/3 of the slice". Stated since
+    // the spec was written and checked by nothing, because it is a property of
+    // the StyleBox rather than of the PNG - `artgen validate` reads pixels and
+    // cannot see a texture margin.
+    //
+    // Over-large corners are not a cosmetic problem: Godot draws the corner
+    // patches at 1:1 and gives whatever is left to the tiled edges, so a margin
+    // past a third leaves a box that is nearly all corner, and one past half
+    // makes the corners overlap each other.
+    private void TestChromeCornersFitTheSlice()
+    {
+        foreach (var (label, style) in CollectChromeStyles())
+        {
+            if (style.Texture is null) continue;
+
+            float budget = Mathf.Min(style.Texture.GetWidth(), style.Texture.GetHeight()) / 3f;
+            var margins = new[]
+            {
+                ("left", style.TextureMarginLeft), ("top", style.TextureMarginTop),
+                ("right", style.TextureMarginRight), ("bottom", style.TextureMarginBottom),
+            };
+
+            foreach (var (side, margin) in margins)
+            {
+                Check($"chrome_corner_{label}_{side}", margin <= budget,
+                    $"{label} has a {margin}px {side} texture margin on a " +
+                    $"{style.Texture.GetWidth()}x{style.Texture.GetHeight()} slice; " +
+                    $"ART_SPEC section 1 allows {budget}");
+            }
+        }
+    }
+
+    // The rule that is wrong by default, which is what makes it worth an
+    // assertion rather than a comment: AxisStretchMode.Stretch is what a
+    // StyleBoxTexture is born with, and it resamples the edge strip to whatever
+    // fractional width the box happens to be. That is a non-integer scale -
+    // section 2's "a bug, not a judgement call" - reached by doing nothing at
+    // all. TileFit is the same violation from the other side, since it rescales
+    // the tiles to fit a whole number of them.
+    private void TestChromeEdgesTileRatherThanStretch()
+    {
+        foreach (var (label, style) in CollectChromeStyles())
+        {
+            Check($"chrome_tiles_{label}",
+                style.AxisStretchHorizontal == StyleBoxTexture.AxisStretchMode.Tile &&
+                style.AxisStretchVertical == StyleBoxTexture.AxisStretchMode.Tile,
+                $"{label} stretches its edges ({style.AxisStretchHorizontal} horizontal, " +
+                $"{style.AxisStretchVertical} vertical) - only Tile keeps every edge pixel " +
+                "at 1:1 (ART_SPEC section 2)");
         }
     }
 

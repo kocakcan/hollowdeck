@@ -67,8 +67,10 @@ fn usage() {
     eprintln!(
         "usage: artgen <command> [--dry-run]
 
-  generate [category]   write generated icons into assets/icons/
+  generate [category]   write generated icons into assets/icons/ (chrome into
+                        assets/theme/)
                         category: cards relics potions map status intents
+                                  events chrome
   animate               derive sprite animation frames into assets/sprites/anim/
   clamp [paths...]      snap PNGs onto the shared ramp (default: all of assets/)
   validate              enforce ART_SPEC §1/§3/§5/§8; nonzero exit on failure"
@@ -93,10 +95,7 @@ fn generate(assets: &Path, category: Option<&str>, dry_run: bool) -> ExitCode {
 
     let mut written = 0;
     for icon in &requested {
-        let path = assets
-            .join("icons")
-            .join(icon.category)
-            .join(format!("{}.png", icon.name));
+        let path = output_dir(assets, icon.category).join(format!("{}.png", icon.name));
         let canvas = (icon.draw)();
         if dry_run {
             println!("would write {}", path.display());
@@ -115,6 +114,24 @@ fn generate(assets: &Path, category: Option<&str>, dry_run: bool) -> ExitCode {
         if dry_run { " (dry run)" } else { " written" }
     );
     ExitCode::SUCCESS
+}
+
+/// Where a category's PNGs land. `Icon::category` is the subdirectory for the
+/// seven icon categories, which is what keeps the registry and the on-disk
+/// layout from disagreeing; `chrome` is the one divergence, because 9-slice
+/// border art is on the 16/24 grids rather than 32x32 and so has to sit
+/// somewhere `validate::expected_grid` reads differently. `assets/theme/` is
+/// that place, and it is already where `hollowdeck_theme.tres` lives.
+///
+/// The routing is here rather than in a separate `artgen chrome` subcommand on
+/// purpose: CI re-runs plain `generate` and diffs the tree to catch committed
+/// art drifting from its source, and a subcommand of its own would have been
+/// outside that check.
+fn output_dir(assets: &Path, category: &str) -> PathBuf {
+    match category {
+        "chrome" => assets.join("theme"),
+        other => assets.join("icons").join(other),
+    }
 }
 
 fn run_animate(assets: &Path, dry_run: bool) -> ExitCode {
