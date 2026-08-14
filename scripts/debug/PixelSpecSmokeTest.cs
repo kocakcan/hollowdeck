@@ -182,6 +182,19 @@ public partial class PixelSpecSmokeTest : Node
     // the PNGs on disk, the names in ChromeStyles.Slices, and the textures
     // something actually draws. A slice generated and never wired up is as
     // much a bug as a name with no file behind it.
+    //
+    // What this deliberately does NOT catch, so the next reader does not
+    // assume it does: the comparison is by *membership*, so two producers
+    // swapping slices with each other - PanelStyle drawing the plinth and
+    // PlinthStyle drawing the panel - leaves all three sets identical and
+    // passes. Pinning which producer draws which name would close it, and it
+    // would be a mirror of the code in a second file with nothing asserting
+    // the mirror, which is the shape this codebase has shipped three times.
+    // The trade is deliberate and rests on the failure modes being different
+    // kinds: a missing slice is *invisible* (a StyleBoxTexture with no texture
+    // draws nothing, which is why this check exists at all), while a swapped
+    // one is a panel wearing the plinth's frame - wrong in a way the first
+    // screenshot shows.
     private void TestEveryChromeSliceIsDrawnBySomething()
     {
         var declared = ChromeStyles.Slices.All.ToHashSet();

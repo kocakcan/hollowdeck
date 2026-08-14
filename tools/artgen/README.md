@@ -51,7 +51,7 @@ could not have:
 | `clamp.rs` | alpha hardening + nearest-ramp snap |
 | `validate.rs` | the ART_SPEC checks and their failure messages |
 | `icons/shapes.rs` | the shared shape vocabulary |
-| `icons/{cards,relics,potions,misc,events}.rs` | the 182 icons themselves |
+| `icons/{cards,relics,potions,misc,events}.rs` | the 192 icons themselves |
 | `icons/chrome.rs` | the 14 9-slice chrome frames (the one category that writes to `assets/theme/`, not `assets/icons/`) |
 
 ## Two invariants that will bite
