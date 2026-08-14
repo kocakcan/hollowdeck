@@ -81,7 +81,8 @@ data/         acts / cards / relics / potions / enemies / events / blessings / t
               the content layer
 assets/       sprites, icons, fonts, backgrounds, themes (see CREDITS.md for licensing)
 tools/        run-smoke-tests.sh
-  artgen/     Rust asset tool — generates the 186 icons, palette-clamps art, validates ART_SPEC
+  artgen/     Rust asset tool — generates the 206 icons and chrome slices, palette-clamps art,
+              validates ART_SPEC
 ```
 
 ## Architecture
@@ -237,6 +238,12 @@ change. Those icons are generated — add a `fn` and one registry line in `tools
 then `cargo run --release --manifest-path tools/artgen/Cargo.toml -- generate`. See
 `tools/artgen/README.md`; `PixelSpecSmokeTest` fails if a definition has no icon or an icon has no
 definition.
+
+The interface's own art comes from the same generator: the `chrome` category emits 9-slice frames
+into `assets/theme/`, which `ChromeStyles` and `hollowdeck_theme.tres` draw panels, buttons, HUD
+slots and the art plinth from. Boxes whose colour is decided at runtime — card frames, badges, HP
+bars — stay procedural `StyleBoxFlat`s, because a texture cannot carry a border colour that is a
+rarity lerped with hover.
 
 **A relic** (`data/relics/relics.json`) is a data row like everything else. All 33 declare
 `"behaviorId": "simple_hook_effect"`; none is a C# class. A relic is a `hook` — any of

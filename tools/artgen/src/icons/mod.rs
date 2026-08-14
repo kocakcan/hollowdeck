@@ -1,6 +1,14 @@
-//! The generated icon set — 84 icons across seven categories, replacing the
+//! The generated icon set — 206 icons across eight categories, replacing the
 //! game-icons.net SVGs (79 of them) plus the five event illustrations that
 //! never had a vector equivalent at all.
+//!
+//! Seven of the eight are icons in the ordinary sense and land under
+//! `assets/icons/<category>/`. `chrome` is the exception: it is 9-slice border
+//! art on the 16/24 grids and writes to `assets/theme/`, which is what puts it
+//! under `validate::expected_grid`'s `/theme/` rule rather than the 32x32 icon
+//! one. `main::output_dir` holds that single divergence; the alternative — a
+//! separate `artgen chrome` subcommand — would have put chrome outside the
+//! plain `generate` that CI re-runs to catch committed art drifting from source.
 //!
 //! Why generate rather than hand-place pixels in an editor: `ArtAssets.cs`
 //! resolves art by convention (`assets/icons/cards/<card_id>.png`), so the
@@ -21,6 +29,7 @@ use crate::canvas::Canvas;
 use crate::palette::*;
 
 mod cards;
+mod chrome;
 mod events;
 mod misc;
 mod potions;
@@ -44,7 +53,8 @@ pub const WOOD: Rgb = G0;
 
 pub struct Icon {
     /// Doubles as the subdirectory under `assets/icons/`, so the registry and
-    /// the on-disk layout cannot disagree.
+    /// the on-disk layout cannot disagree. `chrome` is routed elsewhere — see
+    /// `main::output_dir`.
     pub category: &'static str,
     /// The definition id `ArtAssets` looks up. A typo here is a silently
     /// missing icon, which is why the smoke test cross-checks these names
@@ -60,5 +70,6 @@ pub fn all() -> Vec<Icon> {
     icons.extend(potions::icons());
     icons.extend(misc::icons());
     icons.extend(events::icons());
+    icons.extend(chrome::icons());
     icons
 }

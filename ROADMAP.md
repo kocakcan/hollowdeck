@@ -906,11 +906,14 @@ chain on a claim).
 
 ## Phase 11 — Legibility and feel
 
-**The art medium keeps its own backlog** in `docs/PIXEL_ART_ROADMAP.md` — pixel-specific work
-(chrome 9-slices, the animated glow ring, one light direction, effect frames) sitting beside
-`ART_SPEC.md` the way a backlog sits beside a rule set. It is not a phase and does not gate one.
-Sprite frame animation was its first item and has shipped; it closed a live §2 violation rather than
-adding polish, and the rest of that file is worth reading before touching anything visual.
+**The art medium keeps its own backlog** in `docs/PIXEL_ART_ROADMAP.md` — pixel-specific work (the
+animated glow ring, one light direction, effect frames, an easing vocabulary, backgrounds) sitting
+beside `ART_SPEC.md` the way a backlog sits beside a rule set. It is not a phase and does not gate
+one. Its first two items have shipped — sprite frame animation, then chrome 9-slices — and both
+closed a rule `ART_SPEC.md` already stated and nothing enforced rather than adding polish. The
+9-slices also paid off half of §7's "Known cost, accepted" below: the ornament that was supposed to
+carry the illuminated-manuscript identity after Cinzel and IM Fell English went. The rest of that
+file is worth reading before touching anything visual.
 
 Note that **card inspect's 1.15x hover bump is the same question, and this codebase has already
 answered it once.** `CardView.cs`'s `FocusHaloSize` comment records killing a 1.08x scale tween on

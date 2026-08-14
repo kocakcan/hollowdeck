@@ -10,96 +10,139 @@
 ; Every colour below is a PixelSpec.Ramp entry (docs/ART_SPEC.md section 5).
 ; Per section 6 there are no corner radii and no shadow blurs anywhere -
 ; both are anti-aliased effects that cannot exist in pixels.
+;
+; The buttons and the panel are StyleBoxTexture 9-slices over generated pixel
+; border art (assets/theme/*.png, from tools/artgen's `chrome` category). Every
+; colour in them is decided there rather than here, which is why those blocks
+; carry no bg_color/border_color.
+;
+; Two properties on each are correctness rather than taste, and both are
+; asserted by PixelSpecSmokeTest because both are wrong-by-default:
+;
+;   axis_stretch_horizontal/vertical = 1 (Tile). The default is 0 (Stretch),
+;   which resamples the edge strip to whatever fractional width the box happens
+;   to be - a non-integer scale, which section 2 calls a bug rather than a
+;   judgement call. 2 (TileFit) rescales tiles to fit a whole number of them,
+;   which is the same violation from the other side.
+;
+;   texture_margin_* is the corner budget from section 1: at most a third of
+;   the slice, so 8 of 24 for the buttons and 5 of 16 for the panel.
+;
+; What is still StyleBoxFlat below - the progress bars, the slider, the
+; scrollbars - is flat because ChromeStyles mirrors it in code and the comments
+; on both sides say the pair must not drift. They move together or not at all.
 
-[gd_resource type="Theme" load_steps=14 format=3]
+[gd_resource type="Theme" load_steps=22 format=3]
 
 [ext_resource type="FontFile" path="res://assets/fonts/Silkscreen-Bold.ttf" id="1"]
 [ext_resource type="FontFile" path="res://assets/fonts/Tiny5-Regular.ttf" id="2"]
+[ext_resource type="Texture2D" uid="uid://cfh5f588nsxag" path="res://assets/theme/button_normal.png" id="3"]
+[ext_resource type="Texture2D" uid="uid://dgaobs07phmbj" path="res://assets/theme/button_hover.png" id="4"]
+[ext_resource type="Texture2D" uid="uid://88ccupyyinap" path="res://assets/theme/button_pressed.png" id="5"]
+[ext_resource type="Texture2D" uid="uid://cf6b781dfrrf2" path="res://assets/theme/button_disabled.png" id="6"]
+[ext_resource type="Texture2D" uid="uid://beuff2a114bbi" path="res://assets/theme/button_focus.png" id="7"]
+[ext_resource type="Texture2D" uid="uid://bnvj4lhahgb3o" path="res://assets/theme/panel.png" id="8"]
 
-; --- Buttons: N2 face, G1 bezel; hover brightens the bezel to G3 rather than
+; --- Buttons: N2 face, G1 bezel; hover brightens the bezel to G4 rather than
 ; swapping hue, the same "hover is a pure brightness signal" rule CardView's
-; frame styling already follows.
+; frame styling already follows. Those colours now live in
+; tools/artgen/src/icons/chrome.rs, one `fn` per state.
 
-[sub_resource type="StyleBoxFlat" id="sb_btn_normal"]
+[sub_resource type="StyleBoxTexture" id="sb_btn_normal"]
 content_margin_left = 12.0
 content_margin_top = 6.0
 content_margin_right = 12.0
 content_margin_bottom = 6.0
-bg_color = Color(0.117647, 0.101961, 0.094118, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.419608, 0.290196, 0.121569, 1)
+texture = ExtResource("3")
+texture_margin_left = 8.0
+texture_margin_top = 8.0
+texture_margin_right = 8.0
+texture_margin_bottom = 8.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
 
-[sub_resource type="StyleBoxFlat" id="sb_btn_hover"]
+[sub_resource type="StyleBoxTexture" id="sb_btn_hover"]
 content_margin_left = 12.0
 content_margin_top = 6.0
 content_margin_right = 12.0
 content_margin_bottom = 6.0
-bg_color = Color(0.180392, 0.152941, 0.141176, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.780392, 0.619608, 0.278431, 1)
+texture = ExtResource("4")
+texture_margin_left = 8.0
+texture_margin_top = 8.0
+texture_margin_right = 8.0
+texture_margin_bottom = 8.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
 
-[sub_resource type="StyleBoxFlat" id="sb_btn_pressed"]
+[sub_resource type="StyleBoxTexture" id="sb_btn_pressed"]
 content_margin_left = 12.0
 content_margin_top = 6.0
 content_margin_right = 12.0
 content_margin_bottom = 6.0
-bg_color = Color(0.070588, 0.062745, 0.058824, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.611765, 0.435294, 0.180392, 1)
+texture = ExtResource("5")
+texture_margin_left = 8.0
+texture_margin_top = 8.0
+texture_margin_right = 8.0
+texture_margin_bottom = 8.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
 
-[sub_resource type="StyleBoxFlat" id="sb_btn_disabled"]
+[sub_resource type="StyleBoxTexture" id="sb_btn_disabled"]
 content_margin_left = 12.0
 content_margin_top = 6.0
 content_margin_right = 12.0
 content_margin_bottom = 6.0
-bg_color = Color(0.070588, 0.062745, 0.058824, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.180392, 0.152941, 0.141176, 1)
+texture = ExtResource("6")
+texture_margin_left = 8.0
+texture_margin_top = 8.0
+texture_margin_right = 8.0
+texture_margin_bottom = 8.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
 
 ; Keyboard focus. G5, the top of the gold ramp (UiTheme.Palette.FocusRing) -
 ; NOT G4, which is what this was and is also exactly the border
 ; ChromeStyles.EmphasisState paints on hover, so a focused button and a
-; hovered one were the same picture. 4px rather than 2px for the same reason:
-; most buttons in the game carry an emphasis bezel that is already 4px wide,
-; and a 2px ring drawn inside it is invisible. Content margins match
-; EmphasisState's 16/10 so gaining focus never changes a button's size.
-[sub_resource type="StyleBoxFlat" id="sb_btn_focus"]
+; hovered one were the same picture. Content margins match EmphasisState's
+; 16/10 so gaining focus never changes a button's size.
+;
+; draw_center = false makes this a ring drawn over whichever state box is
+; already painted. button_focus.png is therefore the one slice authored with a
+; *transparent* face - Godot still draws the corner and edge patches when the
+; centre is skipped, so an opaque face there would black out the button's own
+; frame everywhere but the middle.
+[sub_resource type="StyleBoxTexture" id="sb_btn_focus"]
 content_margin_left = 16.0
 content_margin_top = 10.0
 content_margin_right = 16.0
 content_margin_bottom = 10.0
 draw_center = false
-border_width_left = 4
-border_width_top = 4
-border_width_right = 4
-border_width_bottom = 4
-border_color = Color(0.984314, 0.917647, 0.658824, 1)
+texture = ExtResource("7")
+texture_margin_left = 8.0
+texture_margin_top = 8.0
+texture_margin_right = 8.0
+texture_margin_bottom = 8.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
 
-; --- Panels
+; --- Panels. The 16px slice rather than the buttons' 24: this is the theme
+; default for every Panel, PanelContainer and TooltipPanel in the game, so it
+; has to survive the shortest of them without folding its own corners together.
+; Matches ChromeStyles.PanelStyle, which draws the same slice for the panels it
+; builds in code.
 
-[sub_resource type="StyleBoxFlat" id="sb_panel"]
+[sub_resource type="StyleBoxTexture" id="sb_panel"]
 content_margin_left = 10.0
 content_margin_top = 10.0
 content_margin_right = 10.0
 content_margin_bottom = 10.0
-bg_color = Color(0.070588, 0.062745, 0.058824, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.419608, 0.290196, 0.121569, 1)
+texture = ExtResource("8")
+texture_margin_left = 5.0
+texture_margin_top = 5.0
+texture_margin_right = 5.0
+texture_margin_bottom = 5.0
+axis_stretch_horizontal = 1
+axis_stretch_vertical = 1
 
 ; --- ProgressBar: the unlocks screen was rendering a stock grey engine bar.
 ; Matches ChromeStyles.HpBarBackground/HpBarFill so the meta screen and the

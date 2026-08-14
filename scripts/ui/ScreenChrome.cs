@@ -305,9 +305,13 @@ public static class ScreenChrome
     /// seam the player sees and no suite can assert about.
     public static ActivatablePanel FocusableFrame(Control content, float padding = UiTheme.Spacing.Md)
     {
-        StyleBoxFlat NormalStyle()
+        // Focus is a second slice rather than a recolour of the first: chrome
+        // is art now, and a StyleBoxTexture has no BorderColor to raise to
+        // FocusRing. panel_focus carries the same shape at the top of the gold
+        // ramp, which is the change the old two-line mutation was making.
+        StyleBox Style(bool focused)
         {
-            var style = ChromeStyles.PanelStyle();
+            var style = ChromeStyles.PanelStyle(focused);
             style.ContentMarginLeft = padding;
             style.ContentMarginRight = padding;
             style.ContentMarginTop = padding;
@@ -316,17 +320,11 @@ public static class ScreenChrome
         }
 
         var panel = new ActivatablePanel { FocusMode = Control.FocusModeEnum.All };
-        panel.AddThemeStyleboxOverride("panel", NormalStyle());
+        panel.AddThemeStyleboxOverride("panel", Style(focused: false));
         panel.AddChild(content);
 
-        panel.FocusEntered += () =>
-        {
-            var focused = NormalStyle();
-            focused.BorderColor = UiTheme.Palette.FocusRing;
-            focused.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
-            panel.AddThemeStyleboxOverride("panel", focused);
-        };
-        panel.FocusExited += () => panel.AddThemeStyleboxOverride("panel", NormalStyle());
+        panel.FocusEntered += () => panel.AddThemeStyleboxOverride("panel", Style(focused: true));
+        panel.FocusExited += () => panel.AddThemeStyleboxOverride("panel", Style(focused: false));
 
         return panel;
     }
@@ -338,19 +336,8 @@ public static class ScreenChrome
     /// thing you fought.
     public static PanelContainer ArtPlinth(Texture2D texture, int scale = PixelSpec.SpriteScale)
     {
-        var style = new StyleBoxFlat
-        {
-            BgColor = UiTheme.Palette.BgDeep,
-            BorderColor = PixelSpec.Ramp.G1,
-        };
-        style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
-        style.ContentMarginLeft = UiTheme.Spacing.Md;
-        style.ContentMarginRight = UiTheme.Spacing.Md;
-        style.ContentMarginTop = UiTheme.Spacing.Md;
-        style.ContentMarginBottom = UiTheme.Spacing.Md;
-
         var panel = new PanelContainer { SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter };
-        panel.AddThemeStyleboxOverride("panel", style);
+        panel.AddThemeStyleboxOverride("panel", ChromeStyles.PlinthStyle());
         panel.AddChild(PixelIcon(texture, scale));
         return panel;
     }

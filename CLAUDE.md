@@ -787,11 +787,18 @@ to catch committed art drifting from its source. The one command, for all three 
 
 ```bash
 cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
-#   generate [cards|relics|potions|map|status|intents]   category optional; omitted = all 192
+#   generate [cards|relics|potions|map|status|intents|events|chrome]
+#                      category optional; omitted = all 206
 #   animate            derive sprite frames into assets/sprites/anim/ (438 across 37 sprites)
 #   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
 #   validate           what run-smoke-tests.sh calls; nonzero exit on failure
 ```
+
+**`chrome` is the one category that does not write into `assets/icons/`.** It is 9-slice border art
+on the 16/24 grids rather than 32x32 icons, so `main::output_dir` routes it to `assets/theme/` —
+which is what puts it under `validate.rs`'s `/theme/` rule instead of the icon one, the same trick
+`anim.rs` plays by writing under `/sprites/`. It stays inside plain `generate` rather than taking a
+subcommand of its own precisely so CI's "generated art is up to date" step keeps covering it.
 
 **Creature sprites animate by frame swap, and that is a correctness rule rather than a style one.**
 `artgen animate` derives `idle`/`windup`/`hit`/`death`/`escape` from each sourced 32x32 tile using
@@ -845,9 +852,38 @@ is why that test drives `_Process` directly rather than trusting the frame count
 things have to be true — the frames exist *and* something ticks them — and every other assertion in
 `PixelSpecSmokeTest` only sees the first.
 
-`docs/PIXEL_ART_ROADMAP.md` is the medium's own backlog beside `docs/ART_SPEC.md`'s rule set. Two of
-its entries are places §6 describes chrome the code does not have; §6 now says so rather than
-claiming otherwise in the present tense.
+**Chrome is 9-slice art now, and which boxes are is a rule rather than how far the migration got.**
+Fourteen slices under `assets/theme/` drive `ChromeStyles`' panels, slots, plinth and emphasis
+button plus `hollowdeck_theme.tres`'s ordinary buttons and panel. The rule: **a box gets a 9-slice
+iff its colours are fixed at author time.** A `StyleBoxTexture` has no `BorderColor`, and
+`ModulateColor` multiplies — so tinting a bronze frame to say "Uncommon" lands off the §5 ramp,
+which is the one thing the medium commitment exists to prevent. `CardFrameStyle` therefore stays
+flat (its border is a rarity lerped with upgraded and again with hover; art would mean one texture
+per `CardType` × `Rarity` × hover × upgraded, which is risk 1 one layer up), and so do the badges,
+the HP bars and the slider. Four things around it:
+
+- **The two properties that matter are both wrong by default**, which is what makes them worth
+  assertions rather than comments. `AxisStretchMode.Stretch` is what a `StyleBoxTexture` is born
+  with and resamples every edge strip to a fractional width — §2's "a bug, not a judgement call",
+  reached by doing nothing; only `Tile` holds 1:1, and `TileFit` is the same violation from the
+  other side. And §1's "corners ≤ 1/3 of the slice" is invisible to `artgen validate`, which reads
+  pixels and cannot see a texture margin.
+- **Both checks walk the `ChromeStyles` producers *and* the theme resource**, because those are two
+  independent consumers of the same art and the `.tres` half is edited by hand. Measured: flipping
+  one `axis_stretch_horizontal` in the `.tres` fails nothing that only drives the C#.
+- **A missing slice is worse than a missing icon**, which is why the coverage check is three-way
+  (PNGs on disk, names in `ChromeStyles.Slices`, textures something actually draws) rather than
+  two-way. Missing icon art degrades a view to text; a `StyleBoxTexture` with a null texture draws
+  *nothing*, so the panel leaves the interface silently. `SliceStyle` falls back to the flat box it
+  replaced and pushes a named error, the `DataFile.cs` argument one layer over.
+- **Slice size follows the shortest box that draws it, not the art.** A `StyleBoxTexture` under
+  twice its texture margin folds its own corners together, and `ScreenChrome`'s HP and gold panels
+  sit at a 4px vertical content margin — so panels and slots are 16px slices and only buttons and
+  the plinth are 24.
+
+`docs/PIXEL_ART_ROADMAP.md` is the medium's own backlog beside `docs/ART_SPEC.md`'s rule set. One of
+its entries is still a place §6 describes chrome the code does not have — the animated glow ring —
+and §6 says so rather than claiming otherwise in the present tense.
 
 There is **no `artgen` on `PATH`** and no `tools/artgen` wrapper — the binary under
 `tools/artgen/target/` is a gitignored build artifact, so always invoke it through `cargo run` as

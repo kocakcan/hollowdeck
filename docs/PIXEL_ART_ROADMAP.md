@@ -5,10 +5,11 @@ owed, ordered by what a player would notice first.
 
 Seeded from [saint11's pixel art tutorials](https://saint11.art/blog/pixel-art-tutorials/) (Pedro
 Medeiros, 80+ cards, CC-BY) read against this codebase. Reading them turned up something worth
-recording as a method rather than a one-off: **three of the seven items below are not "add polish",
-they are places the spec already states a rule the code does not follow.** The spec was written first
+recording as a method rather than a one-off: **three of the seven items below were not "add polish",
+they were places the spec already stated a rule the code did not follow.** The spec was written first
 and the enforcement lagged it, which is exactly the drift `ART_SPEC.md`'s own opening paragraph says
-it exists to prevent.
+it exists to prevent. Two of those three (§1, §2) have shipped and each landed an assertion with it;
+§3 is the one left, and it is the one the spec still describes in the future tense on purpose.
 
 Each item names the tutorial that backs it, so the technique can be checked rather than
 re-derived.
@@ -42,25 +43,44 @@ than deleting — the first is half of ROADMAP Phase 11's "card inspect".
 
 ---
 
-## 2. Chrome 9-slices
+## 2. Chrome 9-slices — **shipped**
 
 *(9-Slice UI, Outline, Shading)*
 
-**§6 already claims this is done, and it is not.** It says frames, bezels, buttons and panels "are
-`StyleBoxTexture` 9-slices over pixel border art" and that "`ChromeStyles.EndTurnButtonStyle` already
-uses this pattern — follow it". Both halves are false: `ApplyEmphasisButtonStyle` deliberately
-*dropped* the sourced ornate frame when the project committed to one medium, and every box in
-`ChromeStyles.cs` is a `StyleBoxFlat` with a 1–3px border. There is no chrome art in `assets/` and no
-`chrome` category in `artgen`.
+Fourteen slices from `artgen`'s `chrome` category (`tools/artgen/src/icons/chrome.rs`) into
+`assets/theme/`, drawn by `ChromeStyles` and by `hollowdeck_theme.tres`: panels, HUD slots, the art
+plinth, the emphasis button's four states and the theme's five ordinary button states. A 1px outer
+rule, a face-coloured gutter, a 1px inner rule, and a stepped bracket in each corner. This is the
+ornament §7's "Known cost, accepted" promised in exchange for Cinzel and IM Fell English, and the
+emphasis button — which had carried that loss as bare border weight since the sourced wooden frame
+was retired — is where it shows.
 
-The groundwork is already laid: §1 reserves the 16x16/24x24 grids, and `validate.rs`'s
-`expected_grid` already enforces them for anything under `/theme/`.
+What it replaced was §6 describing this in the present tense while none of it existed: every box in
+`ChromeStyles.cs` was a `StyleBoxFlat`, `assets/theme/` held no PNGs, and the entry pointed at
+`ChromeStyles.EndTurnButtonStyle` as an example to follow — a function deleted in the same commit
+that dropped the sourced frame. The groundwork had been laid and left standing on nothing:
+`PixelSpec.ChromeSlice` was referenced only by `IsLegalGrid`, and `validate.rs`'s `/theme/` arm had
+never seen a file.
 
-This is also the item that would recover what §7's "Known cost, accepted" gave up — the
-illuminated-manuscript character lost with Cinzel and IM Fell English is meant to come back through
-ornament, and ornament is what 9-slice border art is.
+Four things are worth knowing before touching it:
 
-Fix the false claim in §6 whether or not the work is picked up.
+- **A box gets a 9-slice iff its colours are fixed at author time**, which is why half of
+  `ChromeStyles.cs` is still flat. A `StyleBoxTexture` has no `BorderColor` and `ModulateColor`
+  multiplies, so a rarity-tinted frame lands off the §5 ramp. `CardFrameStyle` would need one
+  texture per `CardType` × `Rarity` × hover × upgraded, which is the per-card-class explosion the
+  effect system exists to avoid one layer down.
+- **The two properties that matter are both wrong by default.** `AxisStretchMode.Stretch` is the
+  constructor's value and resamples every edge to a fractional width; the corner budget (§1's ≤ 1/3)
+  is invisible to `artgen validate`, which reads pixels and cannot see a texture margin. Both are
+  asserted now, over the `ChromeStyles` producers *and* the theme resource, because those are two
+  independent consumers of the same art.
+- **Slice size follows the shortest box, not the art.** Panels and slots are 16 because
+  `ScreenChrome`'s HP and gold panels have a 4px vertical content margin and a `StyleBoxTexture`
+  under twice its margin folds its own corners together; buttons and the plinth are 24.
+- **`chrome` is the one category `generate` writes outside `assets/icons/`** (`main::output_dir`),
+  which is what puts it under `validate.rs`'s `/theme/` rule — the trick `anim.rs` already plays with
+  `/sprites/`. Keeping it inside plain `generate` rather than giving it a subcommand is what keeps
+  CI's "generated art is up to date" step covering it.
 
 ## 3. The animated glow ring
 

@@ -13,8 +13,116 @@ namespace Hollowdeck.UI;
 //     cannot exist in pixels. Every box is hard-edged; UiTheme.Radius is gone.
 //   - ShadowSize glows. Same problem - a blur has no pixel representation.
 //     Emphasis is carried by border weight and ramp brightness instead.
+//
+// Half this file is StyleBoxTexture over generated 9-slice art and half is
+// still StyleBoxFlat, and the split is a rule rather than an unfinished
+// migration:
+//
+//   A box gets a 9-slice iff its colours are fixed at author time.
+//
+// A StyleBoxTexture has no BorderColor. Its only runtime colour knob is
+// ModulateColor, which *multiplies* - so tinting a bronze frame to say
+// "Uncommon" lands on a colour outside the section 5 ramp, which is the one
+// thing this whole medium commitment exists to prevent. So PanelStyle,
+// SlotStyle, PlinthStyle and the emphasis button are art (their colours are
+// decided in tools/artgen/src/icons/chrome.rs), while CardFrameStyle - whose
+// border is a rarity lerped with upgrade and again with hover - stays flat,
+// along with the badges, the HP bars, the slider and the map-node boxes. A
+// card frame wanting art would need one texture per CardType x Rarity x hover
+// x upgraded, which is the per-card-class explosion risk 1 is about.
+//
+// BossNodeGlowStyle and EnemyView.TargetLockStyle are flat for a second
+// reason on top of that one: both are "glow" surfaces that section 6 says
+// should become an animated G3->G4->G5 pixel ring, which is a different item
+// (docs/PIXEL_ART_ROADMAP.md section 3) and wants a driver, not a still.
 public static class ChromeStyles
 {
+    // The generated 9-slices, by filename under assets/theme/. This list is the
+    // registry PixelSpecSmokeTest drives in *both* directions - every name here
+    // must resolve to a texture, and every PNG in that directory must appear
+    // here - so a slice cannot be generated and left unused, and a name cannot
+    // be typo'd into an invisible panel.
+    //
+    // Consts rather than a hand-list at each call site for the reason
+    // TestNoTweenTransformsAPixelSprite learned the hard way: a check that
+    // knows only the names someone already thought of is green over the ones
+    // they didn't.
+    public static class Slices
+    {
+        public const string Panel = "panel";
+        public const string PanelFocus = "panel_focus";
+        public const string SlotFilled = "slot_filled";
+        public const string SlotEmpty = "slot_empty";
+        public const string Plinth = "plinth";
+        public const string ButtonNormal = "button_normal";
+        public const string ButtonHover = "button_hover";
+        public const string ButtonPressed = "button_pressed";
+        public const string ButtonDisabled = "button_disabled";
+        public const string ButtonFocus = "button_focus";
+        public const string EmphasisNormal = "emphasis_normal";
+        public const string EmphasisHover = "emphasis_hover";
+        public const string EmphasisPressed = "emphasis_pressed";
+        public const string EmphasisDisabled = "emphasis_disabled";
+
+        // Ordered as authored, and read by both the smoke test and anything
+        // that wants to sweep the set. The theme resource names five of these
+        // itself (the button states + panel) rather than going through this
+        // class, which is why the smoke test also walks the .tres.
+        public static readonly string[] All =
+        {
+            Panel, PanelFocus, SlotFilled, SlotEmpty, Plinth,
+            ButtonNormal, ButtonHover, ButtonPressed, ButtonDisabled, ButtonFocus,
+            EmphasisNormal, EmphasisHover, EmphasisPressed, EmphasisDisabled,
+        };
+    }
+
+    // The corner budget, which is also the texture margin: ART_SPEC section 1
+    // says a 9-slice's corners must be at most a third of the slice. 5 of 16
+    // and 8 of 24. These are what SliceStyle sets and what
+    // TestChromeCornersFitTheSlice checks against the texture's real size, so
+    // an art change that grows the corner fails rather than clipping.
+    public const int SmallCorner = 5;
+    public const int LargeCorner = 8;
+
+    // The one place a chrome PNG becomes a StyleBox.
+    //
+    // Two things here are correctness rather than taste:
+    //
+    //   - Tile, not Stretch and not TileFit. Stretch is Godot's default, and it
+    //     resamples the edge strip to whatever fractional width the box happens
+    //     to be - a non-integer scale, which section 2 calls a bug rather than a
+    //     judgement call. TileFit rescales tiles to fit a whole number of them,
+    //     which is the same violation reached from the other side. Tile repeats
+    //     the strip at 1:1 and clips the last one, and the art is drawn so that
+    //     every edge pixel is a function of one axis, so the seam is invisible.
+    //
+    //   - A missing texture falls back to `flat` rather than shipping an empty
+    //     StyleBoxTexture, which draws nothing at all. That turns a mis-packed
+    //     build from an interface with invisible panels into the interface that
+    //     shipped before the art existed, plus a named error - the argument
+    //     DataFile.cs makes for content JSON. The fallback is unreachable in a
+    //     correct build, and TestEveryChromeSliceIsDrawnBySomething is what
+    //     keeps it that way.
+    private static StyleBox SliceStyle(string name, int corner, StyleBoxFlat flat)
+    {
+        var texture = ArtAssets.ChromeSlice(name);
+        if (texture is null)
+        {
+            GD.PushError($"ChromeStyles: chrome slice '{name}' is missing from assets/theme/ - "
+                + "falling back to a flat box. Run `artgen generate chrome` and re-import.");
+            return flat;
+        }
+
+        var style = new StyleBoxTexture
+        {
+            Texture = texture,
+            AxisStretchHorizontal = StyleBoxTexture.AxisStretchMode.Tile,
+            AxisStretchVertical = StyleBoxTexture.AxisStretchMode.Tile,
+        };
+        style.SetTextureMarginAll(corner);
+        return style;
+    }
+
     // Shared dim tint for a locked-but-visible item (a card/relic still
     // shown so the collection reads as a whole roster, not just what's
     // unlocked). One definition, so MetaProgressionScreen and LibraryScreen
@@ -94,24 +202,29 @@ public static class ChromeStyles
     }
 
     // The "this is the important button" treatment - End Turn, and the main
-    // menu's entries. Replaces the sourced CC0 ornate wooden frame this used
+    // menu's entries. Replaced the sourced CC0 ornate wooden frame this used
     // to wrap (StumpyStrust's Fantasy UI Box): that texture is smooth,
     // anti-aliased fantasy art, and sitting it beside Silkscreen glyphs and
     // 32x32 sprites was exactly the mixed-media seam the pixel-art commitment
     // exists to close.
     //
-    // Distinguished from the ordinary theme button by weight, not ornament: a
-    // double-thickness gold bezel on a darker face, which survives the medium
-    // where a carved frame does not.
+    // It carried that loss as "weight, not ornament" - a double-thickness gold
+    // bezel and nothing else - for as long as there was no chrome art. There is
+    // now, so the ornament is back in the medium it should have been in: a
+    // generated double bezel with a stepped corner bracket, the same shape at
+    // every state with the ramp doing the state work. ART_SPEC section 7's
+    // "Known cost, accepted" named palette and ornament as how the
+    // illuminated-manuscript character comes back after Cinzel and IM Fell
+    // English; this is the ornament half.
     //
     // Applies all four states in one call because the four were always set
     // together at every call site.
     public static void ApplyEmphasisButtonStyle(Button button)
     {
-        button.AddThemeStyleboxOverride("normal", EmphasisState(PixelSpec.Ramp.N2, PixelSpec.Ramp.G2));
-        button.AddThemeStyleboxOverride("hover", EmphasisState(PixelSpec.Ramp.N3, PixelSpec.Ramp.G4));
-        button.AddThemeStyleboxOverride("pressed", EmphasisState(PixelSpec.Ramp.N1, PixelSpec.Ramp.G3));
-        button.AddThemeStyleboxOverride("disabled", EmphasisState(PixelSpec.Ramp.N1, PixelSpec.Ramp.N3));
+        button.AddThemeStyleboxOverride("normal", EmphasisState(Slices.EmphasisNormal, PixelSpec.Ramp.N2, PixelSpec.Ramp.G2));
+        button.AddThemeStyleboxOverride("hover", EmphasisState(Slices.EmphasisHover, PixelSpec.Ramp.N3, PixelSpec.Ramp.G4));
+        button.AddThemeStyleboxOverride("pressed", EmphasisState(Slices.EmphasisPressed, PixelSpec.Ramp.N1, PixelSpec.Ramp.G3));
+        button.AddThemeStyleboxOverride("disabled", EmphasisState(Slices.EmphasisDisabled, PixelSpec.Ramp.N1, PixelSpec.Ramp.N3));
     }
 
     // Godot's Slider defines no focus stylebox at all - unlike Button and
@@ -206,10 +319,16 @@ public static class ChromeStyles
         return style;
     }
 
-    private static StyleBoxFlat EmphasisState(Color fill, Color border)
+    // The 16/10 content margins are load-bearing across two files:
+    // hollowdeck_theme.tres's sb_btn_focus deliberately matches them so that
+    // gaining keyboard focus never changes a button's size. Move one and the
+    // other has to move with it.
+    private static StyleBox EmphasisState(string slice, Color fill, Color border)
     {
-        var style = new StyleBoxFlat { BgColor = fill, BorderColor = border };
-        style.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
+        var flat = new StyleBoxFlat { BgColor = fill, BorderColor = border };
+        flat.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
+
+        var style = SliceStyle(slice, LargeCorner, flat);
         style.ContentMarginLeft = 16;
         style.ContentMarginTop = 10;
         style.ContentMarginRight = 16;
@@ -355,18 +474,63 @@ public static class ChromeStyles
     // HP bar bezel (HpBarBackground), reused for any row that currently
     // paints straight onto the fog/vignette backdrop with no framing at all
     // (relic bar, potion belt, gold display).
-    public static StyleBoxFlat PanelStyle()
+    //
+    // Returns StyleBox, not StyleBoxTexture: three callers set their own
+    // content margins on the way out (ScreenChrome.Frame and FocusableFrame
+    // widen the padding, and this is the base for both), and ContentMargin* is
+    // on the StyleBox base class, so widening the return type is all that was
+    // needed to keep them working. Anything reaching for BorderColor here is
+    // asking for a colour the art decides - see the file header.
+    //
+    // The border was an off-ramp Color(0.5, 0.4, 0.22) literal for as long as
+    // this was flat, sitting between G2 and G3 and matching neither. Moving it
+    // into the art retired it: chrome.rs draws G1 over G2, which is the pair
+    // HpBarBackground already uses.
+    //
+    // panel is a 16px slice rather than 24 because the shortest boxes in the
+    // game are this one - ScreenChrome's HP and gold panels sit at
+    // ContentMarginTop = 4 - and a StyleBoxTexture whose box is under twice its
+    // texture margin folds its own corners together.
+    public static StyleBox PanelStyle() => PanelStyle(focused: false);
+
+    public static StyleBox PanelStyle(bool focused)
     {
-        var style = new StyleBoxFlat
+        var flat = new StyleBoxFlat
         {
             BgColor = UiTheme.Palette.BgPanel,
-            BorderColor = new Color(0.5f, 0.4f, 0.22f),
+            BorderColor = focused ? UiTheme.Palette.FocusRing : PixelSpec.Ramp.G2,
         };
-        style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
+        flat.SetBorderWidthAll(focused ? UiTheme.BorderWidth.Thick : UiTheme.BorderWidth.Normal);
+
+        var style = SliceStyle(focused ? Slices.PanelFocus : Slices.Panel, SmallCorner, flat);
         style.ContentMarginLeft = UiTheme.Spacing.Sm;
         style.ContentMarginRight = UiTheme.Spacing.Sm;
         style.ContentMarginTop = UiTheme.Spacing.Xs;
         style.ContentMarginBottom = UiTheme.Spacing.Xs;
+        return style;
+    }
+
+    // The art plinth's face: one pixel icon at 5x on the deeper BgDeep ground,
+    // so the art separates from the panel around it. Lived inline in
+    // ScreenChrome.ArtPlinth while it was a flat box; it is here now because
+    // chrome art has one home, which is what this file's header is about.
+    //
+    // 24px, unlike the panel: a plinth is never smaller than the 160px sprite
+    // it frames, so it has the room to carry the heavier frame.
+    public static StyleBox PlinthStyle()
+    {
+        var flat = new StyleBoxFlat
+        {
+            BgColor = UiTheme.Palette.BgDeep,
+            BorderColor = PixelSpec.Ramp.G1,
+        };
+        flat.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
+
+        var style = SliceStyle(Slices.Plinth, LargeCorner, flat);
+        style.ContentMarginLeft = UiTheme.Spacing.Md;
+        style.ContentMarginRight = UiTheme.Spacing.Md;
+        style.ContentMarginTop = UiTheme.Spacing.Md;
+        style.ContentMarginBottom = UiTheme.Spacing.Md;
         return style;
     }
 
@@ -380,14 +544,16 @@ public static class ChromeStyles
     // rather than shrinking - it recedes via a dimmer bezel (G0 over the deep
     // background) instead of disappearing, which is the difference between
     // "you have room for two more" and "there is nothing here".
-    public static StyleBoxFlat SlotStyle(bool filled)
+    public static StyleBox SlotStyle(bool filled)
     {
-        var style = new StyleBoxFlat
+        var flat = new StyleBoxFlat
         {
             BgColor = filled ? UiTheme.Palette.BgPanel : UiTheme.Palette.BgDeep,
             BorderColor = filled ? PixelSpec.Ramp.G1 : PixelSpec.Ramp.G0,
         };
-        style.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
+        flat.SetBorderWidthAll(UiTheme.BorderWidth.Normal);
+
+        var style = SliceStyle(filled ? Slices.SlotFilled : Slices.SlotEmpty, SmallCorner, flat);
         style.ContentMarginLeft = UiTheme.Spacing.Xs;
         style.ContentMarginRight = UiTheme.Spacing.Xs;
         style.ContentMarginTop = UiTheme.Spacing.Xs;
