@@ -202,7 +202,11 @@ fn weak() -> Canvas {
 /// broken one*, which only lands if the intact one is recognisable.
 fn vulnerable() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 4, 24, 25, E1, E2);
+    // The shadow rim falls back to the face colour, because the ember ramp has
+    // no step between E1 and E2 to put it on. The rim therefore shows only
+    // where the light lands, which is a thinner statement of the same fact and
+    // the honest one at five entries.
+    shield(&mut canvas, 16, 4, 24, 25, E1, E2, E1);
     crack(
         &mut canvas,
         &[(16, 4), (13, 11), (18, 15), (14, 22), (16, 28)],
@@ -243,7 +247,10 @@ fn metallicize() -> Canvas {
         canvas.rect(*x, *y, *w, *h, if index % 2 == 0 { B2 } else { B1 });
         // Top edge one step brighter, so each plate reads as sitting proud of
         // the one below rather than the stack reading as a single striped box.
+        // The left edge too: a top edge on its own is a lamp directly
+        // overhead, and §10's is up and to the *left*.
         canvas.hline(*x, *y, *w, B4);
+        canvas.vline(*x, *y, *h, B4);
         // Rivets: two per plate, which is what says "metal" rather than
         // "stairs" at this size.
         canvas.set(*x + 2, *y + h / 2, B5);
@@ -533,7 +540,7 @@ fn intent_attack() -> Canvas {
 
 fn intent_defend() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 3, 26, 27, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 16, 3, 26, 27, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     canvas.vline(16, 8, 14, B4);
     canvas.hline(9, 13, 15, B4);
     finish(&mut canvas);

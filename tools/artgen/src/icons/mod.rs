@@ -31,6 +31,7 @@ use crate::palette::*;
 mod cards;
 mod chrome;
 mod events;
+mod light;
 mod misc;
 mod potions;
 mod relics;
@@ -47,6 +48,11 @@ pub const BONE: Rgb = N7;
 pub const BONE_SHADE: Rgb = N5;
 pub const SHIELD_FACE: Rgb = B2;
 pub const SHIELD_RIM: Rgb = B4;
+/// The rim on the flanks the light misses. One ramp step under `SHIELD_RIM`
+/// rather than two: `B2` would match `SHIELD_FACE` exactly and collapse the
+/// shadow rim into the face, which is the shape the shield had before it had a
+/// light direction at all.
+pub const SHIELD_SHADE: Rgb = B3;
 pub const GLASS: Rgb = B1;
 pub const CORK: Rgb = G1;
 pub const WOOD: Rgb = G0;

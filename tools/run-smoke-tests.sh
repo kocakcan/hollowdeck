@@ -39,6 +39,23 @@ if ! dotnet build -v q --nologo; then
     exit 1
 fi
 
+# The generator's own rules, which are the ones no amount of looking at the
+# output can check. ART_SPEC §10's light direction is the reason these exist:
+# a highlight on the wrong side of a blade is still on the ramp, still 32x32
+# and still hard-alpha, so `validate` below is structurally blind to it and
+# only an assertion about the drawing code can see it. Runs before validate -
+# test the generator, then check what it generated.
+echo
+echo "== artgen tests =="
+if command -v cargo >/dev/null 2>&1; then
+    if ! cargo test --release --quiet --manifest-path tools/artgen/Cargo.toml; then
+        echo "error: artgen unit tests failed; not running suites." >&2
+        exit 1
+    fi
+else
+    echo "skipped: cargo not on PATH (shape rules unchecked)"
+fi
+
 # ART_SPEC's asset rules (grid, palette, hard alpha, no SVG) - see
 # tools/artgen/src/validate.rs. This runs on the raw PNG bytes, which the
 # engine-side suites cannot do: GD.Load hands back an already-imported

@@ -73,6 +73,20 @@ jobs:
       - name: Smoke tests
         run: tools/run-smoke-tests.sh
 
+      # Redundant with run-smoke-tests.sh, which runs these first, and worth a
+      # step of its own anyway: a red step named "artgen tests" says what broke,
+      # where the same failure inside the script above says only "smoke tests".
+      # These are the assertions about ART_SPEC §10's light direction, which is
+      # the one rule in this repo that neither the compiler nor `validate` can
+      # hold - a highlight on the wrong side of a blade is on-ramp, on-grid and
+      # hard-alpha, so every byte-level check passes it.
+      #
+      # --release deliberately: the two `cargo run --release` steps below share
+      # this target directory, so the test binary reuses their dependency
+      # artifacts instead of paying for a second full build.
+      - name: artgen tests
+        run: cargo test --release --manifest-path tools/artgen/Cargo.toml
+
       # artgen's output is committed, so it can drift from its source: edit an
       # icon's fn, forget to re-run, and the repo ships art that no longer
       # matches the code that claims to produce it. Generation is pure, so

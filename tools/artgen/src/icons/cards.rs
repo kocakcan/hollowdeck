@@ -303,9 +303,18 @@ fn clothesline() -> Canvas {
     // on the end of a bar is a mallet, which is what the first version was.
     canvas.rect(17, 9, 12, 15, R3);
     canvas.rect(15, 7, 8, 5, R3);
+    // The knuckles are silhouette, not highlight. They used to be `R4` — a
+    // catch of light on the far right of a fist thrown to the right, which is
+    // the one face §10's lamp cannot reach. The N0 grooves below already
+    // separate the fingers, so dropping them to the body colour costs nothing
+    // at 1x; `raised_fist` could not make the same trade, because there the
+    // knuckles are the only thing telling the fingers apart.
     for y in [11, 15, 19] {
-        canvas.disc(28, y, 2, R4);
+        canvas.disc(28, y, 2, R3);
     }
+    // The light lands on the back of the hand instead.
+    canvas.hline(15, 7, 8, R4);
+    canvas.hline(23, 9, 6, R4);
     for y in [13, 17, 21] {
         canvas.hline(17, y, 12, N0);
     }
@@ -365,7 +374,7 @@ fn toxic_cloud() -> Canvas {
 /// the set: the shared shield with the shared blade over it.
 fn iron_wave() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 13, 6, 22, 24, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 13, 6, 22, 24, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     blade(&mut canvas, (7, 29), (29, 4), 1.5, BLADE, BLADE_EDGE);
     finish(&mut canvas);
     canvas
@@ -376,7 +385,7 @@ fn iron_wave() -> Canvas {
 /// The base Skill, and the shield every defensive card quotes.
 fn defend() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 3, 26, 27, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 16, 3, 26, 27, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     canvas.vline(16, 8, 15, B4);
     canvas.hline(9, 13, 15, B4);
     finish(&mut canvas);
@@ -388,7 +397,7 @@ fn defend() -> Canvas {
 /// outline stays identical to Defend's.
 fn fortify() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 3, 26, 27, B1, SHIELD_RIM);
+    shield(&mut canvas, 16, 3, 26, 27, B1, SHIELD_RIM, SHIELD_SHADE);
 
     let mut bricks = new_icon();
     for (row, y) in (6..26).step_by(5).enumerate() {
@@ -398,7 +407,11 @@ fn fortify() -> Canvas {
         }
     }
     let mut interior = new_icon();
-    shield(&mut interior, 16, 5, 22, 24, SHIELD_FACE, SHIELD_FACE);
+    // All three colours the same: this shield is a cookie cutter, not a
+    // drawing. It exists only for its silhouette, so giving its rim a lit and
+    // a shadow side would be three colours nothing ever renders — and one of
+    // them landing outside the mask would change which bricks survive.
+    shield(&mut interior, 16, 5, 22, 24, SHIELD_FACE, SHIELD_FACE, SHIELD_FACE);
     bricks.intersect(&interior);
     canvas.blit(&bricks, 0, 0);
 
@@ -410,7 +423,7 @@ fn fortify() -> Canvas {
 /// doing something rather than just standing there.
 fn shrug_it_off() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 13, 6, 22, 24, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 13, 6, 22, 24, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     arrow(&mut canvas, (30, 2), (19, 13), 3, 6, N6);
     canvas.line(24, 16, 30, 20, N5);
     canvas.line(22, 20, 29, 27, N5);
@@ -426,6 +439,7 @@ fn second_skin() -> Canvas {
         canvas.rect(3 + inset, y, 27 - inset * 2, 6, B1);
         canvas.rect(4 + inset, y + 1, 25 - inset * 2, 4, SHIELD_FACE);
         canvas.hline(4 + inset, y + 1, 25 - inset * 2, B4);
+        canvas.vline(4 + inset, y + 1, 4, B4);
     }
     finish(&mut canvas);
     canvas
@@ -684,7 +698,9 @@ fn pommel_strike() -> Canvas {
     // The pommel enlarged and brought forward, with the impact burst Bash
     // uses, so the business end reads as the blunt one.
     canvas.disc(25, 5, 4, GUARD);
-    canvas.disc(25, 5, 2, G4);
+    // Up-left on the pommel, not straight up: an overhead lamp is the half of
+    // §10 that reads as no direction at all.
+    canvas.disc(24, 4, 2, G4);
     impact(&mut canvas, 25, 5, G5);
     finish(&mut canvas);
     canvas
@@ -706,7 +722,7 @@ fn sweeping_blow() -> Canvas {
     canvas.erase_rect(0, 0, GRID, 18);
     canvas.thick_line(2, 25, 9, 29, 2, WOOD);
 
-    shield(&mut canvas, 16, 1, 20, 19, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 16, 1, 20, 19, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
 
     finish(&mut canvas);
     canvas
@@ -803,7 +819,7 @@ fn rupture() -> Canvas {
 fn feint() -> Canvas {
     let mut canvas = new_icon();
     blade(&mut canvas, (28, 28), (10, 4), 1.5, BLADE, BLADE_EDGE);
-    shield(&mut canvas, 14, 10, 20, 21, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 14, 10, 20, 21, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     // The Frail mark: the same fracture the Vulnerable status and Crippling
     // Blow use, so a cracked surface always means a debuff landed.
     crack(&mut canvas, &[(14, 12), (11, 18), (17, 22), (13, 29)], N0);
@@ -899,7 +915,7 @@ fn annihilate() -> Canvas {
 /// a smaller Defend rather than by changing shape.
 fn deflect() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 18, 8, 18, 20, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 18, 8, 18, 20, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     // A glancing stroke off the rim, so the shield is deflecting something
     // rather than just being small.
     canvas.line(2, 6, 13, 12, N6);
@@ -916,7 +932,7 @@ fn deflect() -> Canvas {
 /// does — telling the player what a card grants before they read the text.
 fn brace() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 4, 24, 25, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 16, 4, 24, 25, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     dexterity_mark(&mut canvas, 16, 11, 1);
     finish(&mut canvas);
     canvas
@@ -929,7 +945,7 @@ fn hunker_down() -> Canvas {
     let mut canvas = new_icon();
     canvas.rect(1, 26, 30, 4, N4);
     canvas.hline(1, 26, 30, N5);
-    shield(&mut canvas, 16, 2, 26, 25, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 16, 2, 26, 25, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     // The braces: two struts angling back into the ground.
     canvas.thick_line(6, 27, 12, 18, 2, WOOD);
     canvas.thick_line(26, 27, 20, 18, 2, WOOD);
@@ -943,7 +959,7 @@ fn hunker_down() -> Canvas {
 /// separates it from Hunker Down at 1x without changing the silhouette.
 fn entrench() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 1, 24, 26, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 16, 1, 24, 26, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     dexterity_mark(&mut canvas, 16, 6, 2);
 
     // Earth piled over the base, drawn as overlapping mounds so the top edge
@@ -966,8 +982,8 @@ fn entrench() -> Canvas {
 /// Defend's plain heater.
 fn aegis() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 2, 28, 29, B1, G3);
-    shield(&mut canvas, 16, 5, 22, 23, SHIELD_FACE, G4);
+    shield(&mut canvas, 16, 2, 28, 29, B1, G3, G2);
+    shield(&mut canvas, 16, 5, 22, 23, SHIELD_FACE, G4, G3);
     canvas.disc(16, 12, 5, G3);
     canvas.disc(16, 12, 3, G5);
     // One chevron, not two: the shield tapers to a point, and a second row
@@ -1000,7 +1016,10 @@ fn stone_skin() -> Canvas {
         let stagger = if row == 0 { 0 } else { 5 };
         for x in (5 + stagger..28).step_by(9) {
             canvas.rect(x, y, 7, 4, N6);
+            // Top *and* left edge: a lit top alone is a lamp directly
+            // overhead, and §10's is up and to the left.
             canvas.hline(x, y, 7, N7);
+            canvas.vline(x, y, 4, N7);
         }
     }
 
@@ -1055,7 +1074,9 @@ fn war_paint() -> Canvas {
 fn bandage_up() -> Canvas {
     let mut canvas = new_icon();
     canvas.disc(13, 14, 10, N6);
-    canvas.disc(13, 14, 7, N7);
+    // Offset toward the lamp, so `N6` survives as a crescent on the far side.
+    // Concentric, the pad was a flat disc with a lighter middle.
+    canvas.disc(12, 13, 7, N7);
     canvas.disc(13, 14, 3, N4);
     // The wound edge, then the tail unrolling to the corner.
     canvas.thick_line(13, 4, 22, 6, 3, N8);
@@ -1269,7 +1290,7 @@ fn impact(canvas: &mut Canvas, cx: i32, cy: i32, colour: Rgb) {
 /// A shield already stepped back, with the ground it gave up behind it.
 fn backstep() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 21, 8, 18, 21, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 21, 8, 18, 21, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     for (x, y) in [(11, 13), (6, 13)] {
         canvas.thick_line(x, y, x - 4, y + 4, 2, N6);
         canvas.thick_line(x - 4, y + 4, x, y + 8, 2, N6);
@@ -1285,8 +1306,9 @@ fn cinder_slash() -> Canvas {
     sword(&mut canvas, (9, 24), (26, 6), BLADE, BLADE_EDGE);
     canvas.disc(23, 14, 2, E2);
     canvas.disc(27, 19, 2, E2);
-    canvas.set(23, 13, E4);
-    canvas.set(27, 18, E4);
+    // Embers are round, so their catch sits on the up-left shoulder.
+    canvas.set(22, 13, E4);
+    canvas.set(26, 18, E4);
     canvas.disc(18, 9, 1, E3);
     finish(&mut canvas);
     canvas
@@ -1315,7 +1337,7 @@ fn lash_out() -> Canvas {
 /// Shield with a bright spine and rivets: holding still, and healing for it.
 fn steel_nerve() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 4, 24, 26, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 16, 4, 24, 26, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     canvas.vline(16, 8, 15, N8);
     for y in [10, 16, 22] {
         canvas.disc(16, y, 2, N7);
@@ -1361,7 +1383,7 @@ fn jab() -> Canvas {
 /// The shield family with the poison family's green growing out of it.
 fn barbed_guard() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 6, 22, 24, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 16, 6, 22, 24, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     for (x, y) in [(6, 12), (16, 4), (26, 12)] {
         canvas.poly(&[(x - 3, y + 6), (x, y - 4), (x + 3, y + 6)], V2);
         canvas.vline(x, y - 3, 4, V4);
@@ -1480,7 +1502,7 @@ fn blight_storm() -> Canvas {
 /// A shield standing in the fire the rest of the hand went into.
 fn purge() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 3, 22, 21, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 16, 3, 22, 21, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     flame(&mut canvas, 8, 31, 12, E2, E3);
     flame(&mut canvas, 16, 31, 9, E2, E3);
     flame(&mut canvas, 24, 31, 12, E2, E3);
@@ -1672,7 +1694,7 @@ fn overload() -> Canvas {
 /// between this and Shrug It Off.
 fn hold_fast() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 16, 5, 22, 24, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 16, 5, 22, 24, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     canvas.rect(4, 12, 25, 3, N6);
     canvas.rect(4, 19, 25, 3, N6);
     canvas.rect(4, 12, 3, 10, N4);
@@ -1703,8 +1725,13 @@ fn first_light() -> Canvas {
 /// would read as a potion.
 fn mirage() -> Canvas {
     let mut canvas = new_icon();
-    canvas.ring(14, 15, 10, 2, E1);
-    canvas.ring(18, 17, 10, 2, E3);
+    // The bright ring is the up-left one and the dim ghost trails down-right.
+    // It was the other way round, which put the only light in the icon on the
+    // side facing away from the lamp — and the double reads better this way
+    // regardless, since the solid image leading its own after-image is what a
+    // shimmer looks like.
+    canvas.ring(18, 17, 10, 2, E1);
+    canvas.ring(14, 15, 10, 2, E3);
     canvas.hline(8, 26, 16, E2);
     canvas.hline(11, 29, 11, E1);
     finish(&mut canvas);
@@ -1757,8 +1784,12 @@ fn pain() -> Canvas {
 /// the card's whole cost is that it is always *there*.
 fn writhe() -> Canvas {
     let mut canvas = new_icon();
-    canvas.ring(12, 13, 8, 3, P2);
-    canvas.ring(20, 19, 8, 3, P3);
+    // Colours swapped, not positions: the down-right ring still draws second
+    // and so still reads as the one in front, while the brighter of the two
+    // now sits where the lamp is. Moving the rings instead would have traded
+    // a lighting fault for an overlap that says the far link is nearer.
+    canvas.ring(12, 13, 8, 3, P3);
+    canvas.ring(20, 19, 8, 3, P2);
     canvas.ring(16, 16, 3, 2, P1);
     // Barbs, so the knot reads as hostile rather than decorative.
     canvas.line(4, 6, 8, 10, P4);
@@ -1840,7 +1871,7 @@ fn bramble_mail() -> Canvas {
 /// poison family growing out of it - one card is Thorns, the other is Poison.
 fn bramble_guard() -> Canvas {
     let mut canvas = new_icon();
-    shield(&mut canvas, 15, 5, 22, 24, SHIELD_FACE, SHIELD_RIM);
+    shield(&mut canvas, 15, 5, 22, 24, SHIELD_FACE, SHIELD_RIM, SHIELD_SHADE);
     for y in [10, 17, 24] {
         barb(&mut canvas, (26, y), 2, (31, y - 4), R2, R4);
     }

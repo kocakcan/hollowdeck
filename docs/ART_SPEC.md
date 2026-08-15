@@ -307,6 +307,13 @@ the build on:
 It reads the raw PNG bytes, which is why this half lives outside the engine: `GD.Load` hands back
 an already-imported texture, not the file.
 
+`tools/run-smoke-tests.sh` also runs **`cargo test`** over `tools/artgen` immediately before
+`validate` — the generator's own rules, checked before the output is. Those are §10's light
+direction, and they are separate from `validate` for a structural reason rather than a tidiness one:
+a highlight on the wrong side of a blade is on the ramp, on the grid and hard-alpha, so every rule
+`validate` has passes it. Some rules can only be asserted about the code that draws, not about what
+it drew.
+
 `PixelSpecSmokeTest` asserts the runtime half — that every sprite and icon site sets `Nearest` and
 an integer scale, that every asset is on a legal grid, that no SVG survives, that the fonts in use
 are the bitmap pair, the two §6 chrome rules above, and two things that keep the two halves honest:
@@ -369,3 +376,107 @@ The container point is worth keeping, because it is what produced the original b
 owns its children's position and size, so the old code reached for `Scale` as "the one transform a
 container does not touch". A frame swap is not a transform at all, so the question never arises —
 which is also what lets an escaping enemy finally *travel* rather than being squeezed sideways.
+
+## 10. Light
+
+**One lamp, up and to the left, at 45°, for every icon in the set.**
+`tools/artgen/src/icons/light.rs` is where that becomes a number. Canvas y grows downward, so the
+direction the light *travels* is `(+1/√2, +1/√2)` and a face is lit when its outward normal turns
+back against it. Getting that sign backwards is the one mistake here that nothing else can see:
+every shape would stay internally consistent while the whole set lit from the lower right at once.
+
+§5 already committed to hue-shifted ramps, which is the harder half of making pixel art read as
+lit. This is the half that was missing, and it was missing rather than wrong: `shapes.rs` gave the
+set one *form* vocabulary — one `blade`, one `shield` — and no shared light, so each shape picked
+its own lit edge out of a literal and the set came out **consistent in form and contradictory in
+lighting**.
+
+What that cost, concretely. `blade` painted its bright edge on the side that was "leading" relative
+to the blade's own rotation, which is a different *screen* side at every angle; two thirds of the
+authored blades happened to point somewhere that made it right. The three that did not were
+`pommel_strike`, `cataclysm`, and `annihilate` — whose crossed pair came out with one blade lit
+from the upper left and the other from the lower right, **two suns inside one 32x32 square**. And
+`shield`, the second most-quoted form in the game at twenty-six call sites, drew its rim in one flat
+colour all the way round: not lit wrongly, but not lit at all.
+
+Upper-left is ratified rather than chosen. `strike` — the icon the whole Attack half of the set
+quotes — was already lit that way, and its bytes are **unchanged** by the derived rule; so were
+`flask`, `droplet`, `raised_fist` and most of the hand-placed highlights across the category
+modules. A rule that agrees with the existing majority costs three blade flips instead of thirty-six.
+
+### The division of labour
+
+**`light.rs` owns which side is lit; the shape owns how much material that side shows.** A bright
+rim wants to be wide where the light lands (`shield`); a dark body wants to be wide where it does
+not (`gem`). Those are the same rule with different amounts, they go through the same `by_face`
+call with the arguments swapped, and only the amounts are art.
+
+Colour parameters — `edge`, `lit`, `highlight`, `shade` — stay the caller's, because a material's
+pigment is a content decision. **Where those colours land is not a parameter and must never become
+one.** That is the point of the whole item: a wrong-side highlight is now *unrepresentable* in the
+vocabulary rather than discouraged, the same move the game makes deriving `IsPlayable` from
+`CardType` instead of authoring a sixth bool.
+
+Nothing here lightens or darkens arithmetically; §5's ramp is why. The tempting generalisation — a
+pass that walks a finished silhouette and brightens its up-left boundary one ramp step — was
+considered and declined in `light.rs`'s header, because it needs a "next entry in this family"
+relation `palette.rs` does not have and its failure mode is silent at the top of every family.
+
+### Named exceptions
+
+Three classes, and every shape in `shapes.rs` states its own in its doc comment:
+
+- **Directional** — `blade`, `sword`, `shield`, `droplet`, `flask`, `gem`, `scale`, `skull`,
+  `raised_fist`.
+- **Emissive** — `flame`, `orb`, `sparkle`. They *are* the light, locally; giving one a lit side
+  would say it is lit by something else.
+- **Symmetric** — `eye` (an aperture is a hole, and lighting one side of a hole is a mistake),
+  `arrow` and `crack` (marks at 1–3px, no volume), `barb` (the tip is bright because it is thin, and
+  `misc.rs` mirrors barbs in pairs).
+
+**Chrome is exempt as a class.** The fourteen 9-slices stay 4-fold symmetric. A frame is inlay
+rather than lit form, and bevelling it would trade §7's hard-won ornament for a raised-panel look;
+`assets/theme/` showing no diff after a regeneration is the check that the exemption held.
+
+Two smaller exemptions are by **budget** rather than by physics, and they are worth knowing because
+they look like oversights: `sword`'s guard and pommel, and all four knuckles of `raised_fist`.
+Dropping the furthest knuckle to the body colour is what the light says, and it was tried — at 1x
+the fourth finger vanished and the fist read as having three. §1's legibility budget outranks this
+section when they disagree.
+
+### What is enforced, and what is not
+
+Enforced: `cargo test --manifest-path tools/artgen/Cargo.toml`, run from `tools/run-smoke-tests.sh`
+ahead of the engine suites and again as its own CI step. It sweeps `blade` over 32 angles rather
+than checking the authored call sites — the call sites only cover the angles somebody already
+thought of — and drives every other directional shape alone on a blank canvas.
+
+Two things about those assertions are load-bearing and were both wrong once:
+
+- **`light.rs`'s `GRAZING` is a float-equality epsilon, not a tolerance.** At a true tie both faces
+  are edge-on and the answer is arbitrary; a band wide enough to contain a *real* answer lets the
+  tiebreak override the light. At `0.05` — a ~3° wedge — it moved `wild_swing`'s and `map/elite`'s
+  bright edges onto their shadow face while `map/fight`, the same crossed swords in another colour,
+  fell outside the band and kept its lit one. A test pins the epsilon under 0.01 rather than
+  trusting that sentence.
+- **Each shape's assertion measures the pixels its light pass writes**, not the shape's bright mass.
+  Four of the six were green on the previous code because a whole-colour centroid over a shape that
+  already had shading measures the shading it already had.
+
+**Not enforced, and this paragraph is the point of the section:** every hand-placed highlight in
+`cards.rs`, `relics.rs`, `misc.rs`, `events.rs` and `potions.rs`. Those were audited once, by
+reading all ~186 of them and looking at the output; nothing holds them there. A new icon can put a
+`G5` pixel in its bottom-right corner and the whole suite stays green.
+
+`artgen validate` is *structurally* blind here and no amount of work on it would help: a highlight
+on the wrong side is still on the ramp, still 32x32 and still hard-alpha, so it passes every rule
+that command has. A metric over finished icons was prototyped and not shipped — it cannot separate a
+highlight from a *material* use of the same ramp entry (`BLADE_EDGE` is `N8`, an entire shield rim
+is `B4`, `sparkle` is nothing but its top entry), so it ranked the emissive shapes worst precisely
+because they were correct. The same centroid measurement is exact over one shape drawn alone with
+colours the test picks, which is why it lives in the test and not in a command.
+
+The audit's honest finding is worth recording, because it is not what the roadmap forecast: the
+hand-drawn half was **already overwhelmingly up-left**, and the large majority of highlight-coloured
+draw calls turned out to be emblems, marks and materials rather than shading — a crown, a cross, a
+page block, a pale mask behind bars. The real offenders were few.
