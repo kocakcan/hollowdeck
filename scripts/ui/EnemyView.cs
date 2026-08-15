@@ -19,24 +19,12 @@ public partial class EnemyView : Button
     // stylebox can never actually apply during a drag anyway (the dragged
     // CardView Panel sits on top and occludes this Button from Godot's mouse
     // picking), so there's no state to reconcile against.
-    private static readonly StyleBoxFlat TargetLockStyle = BuildTargetLockStyle();
-
-    private static StyleBoxFlat BuildTargetLockStyle()
-    {
-        // Was a rounded box with a 10px gold bloom, on a slate-blue face left
-        // over from the deleted generic theme - the bloom and the radius are
-        // both illegal in pixels (ART_SPEC section 6), and the slate blue was
-        // off-ramp entirely. Now a hard heavy gold bezel on a warm face: the
-        // lock still reads instantly because 4px of G5 against the ramp's
-        // dark neutrals is the highest-contrast pair in the palette.
-        var style = new StyleBoxFlat
-        {
-            BgColor = PixelSpec.Ramp.N3,
-            BorderColor = PixelSpec.Ramp.G5,
-        };
-        style.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
-        return style;
-    }
+    //
+    // The box itself is ChromeStyles.TargetLockStyle now, and it is repainted
+    // every frame by this ring rather than installed once - ART_SPEC section 6's
+    // animated pixel border. Null whenever the view is unlocked, which is the
+    // one piece of state SetTargetLocked has to keep straight.
+    private GlowRing? _targetLockRing;
 
     public EnemyCombatant Combatant { get; set; } = null!;
 
@@ -318,7 +306,30 @@ public partial class EnemyView : Button
     // got rid of.
     public void SetTargetLocked(bool locked)
     {
-        AddThemeStyleboxOverride("normal", locked ? TargetLockStyle : new StyleBoxEmpty());
+        // Stop the old ring before either branch touches the stylebox. A ring
+        // left running for even one more frame repaints "normal" *after* the
+        // unlock below put the empty box back, and IsTargetLocked is defined as
+        // "not StyleBoxEmpty" - so the stale tick is an enemy that reports
+        // itself locked with nothing aimed at it. GlowRing.Stop is
+        // non-deferred for exactly this.
+        //
+        // It runs on the lock branch too, so a second SetTargetLocked(true)
+        // cannot stack two drivers on one view. Neither caller can reach that
+        // today - UpdateTargetHighlight early-returns on an unchanged target and
+        // SetKeyboardTarget always unlocks the previous view first - which makes
+        // this a guard against the third caller rather than against the two.
+        _targetLockRing?.Stop();
+        _targetLockRing = null;
+
+        if (locked)
+        {
+            _targetLockRing = GlowRing.Attach(
+                this, new[] { "normal" }, c => ChromeStyles.TargetLockStyle(c), GlowRing.Gold);
+        }
+        else
+        {
+            AddThemeStyleboxOverride("normal", new StyleBoxEmpty());
+        }
 
         // Keyboard target-cycling gets the intent tooltip too. This view opts
         // out of Godot's focus navigation (see _Ready), so the lock *is* its

@@ -276,6 +276,16 @@ public partial class MapSmokeTest : Node
             boss.Disabled && boss.Modulate.R > 0.9f,
             $"disabled={boss.Disabled}, modulate={boss.Modulate}");
 
+        // ART_SPEC section 6's animated ring. Asserted on the *button* rather
+        // than on the ring class, because PixelSpecSmokeTest already drives
+        // GlowRing itself and every one of those checks stays green if the
+        // driver is simply never attached to anything - which is the whole
+        // failure mode of a feature that lives at a seam.
+        Check("map_screen_gives_the_boss_node_a_glow_ring",
+            boss.GetChildren().OfType<GlowRing>().Count() == 1,
+            $"the boss node carries {boss.GetChildren().OfType<GlowRing>().Count()} GlowRing(s), " +
+            "expected exactly one - a static red border is what this replaced");
+
         var focusable = paired.Where(p => p.button.FocusMode != Control.FocusModeEnum.None).ToList();
         Check("map_screen_denies_focus_to_unreachable_nodes",
             focusable.Count == reachableButtons.Count

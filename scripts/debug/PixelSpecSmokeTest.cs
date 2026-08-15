@@ -58,6 +58,10 @@ public partial class PixelSpecSmokeTest : Node
         TestEveryCreatureHasItsFrames();
         TestNoTweenTransformsAPixelSprite();
         TestTheIdleClipActuallyAdvances();
+        TestTheGlowRingActuallyAdvances();
+        TestEveryGlowFrameIsOnTheRamp();
+        TestTheGlowRingOpensOnWhatItReplaced();
+        TestOnlyARareCardCarriesAGlowRing();
 
         GD.Print($"PixelSpecSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -816,6 +820,170 @@ public partial class PixelSpecSmokeTest : Node
             $"{host.Texture?.ResourcePath ?? "<null>"} - a dead enemy must not return to idle");
 
         host.QueueFree();
+    }
+
+    // The three glow-ring checks below (ART_SPEC section 6, PIXEL_ART_ROADMAP
+    // section 3) share this: attach a ring to a throwaway Control, tick its
+    // _Process directly, and read the border colour back off the stylebox the
+    // ring actually installed.
+    //
+    // Reading it *back* rather than off GlowRing.Gold is the whole point. The
+    // cycle array is trivially on-ramp and trivially varied; what can go wrong
+    // is the builder in between - CardFrameStyle already lerps for upgraded and
+    // hovered two lines from where the glow lands - and a check on the array
+    // would be green through any of it.
+    //
+    // Driving _Process directly is the TestTheIdleClipActuallyAdvances lesson
+    // one surface over: a cycle that exists and a driver that never advances it
+    // look identical to every static check in this file.
+    private static List<Color> TickRing(string[] styleboxes, System.Func<Color, StyleBox> build, Color[] cycle,
+        int ticks, out Color opening)
+    {
+        var host = new Control();
+        var ring = GlowRing.Attach(host, styleboxes, build, cycle);
+
+        opening = ((StyleBoxFlat)host.GetThemeStylebox(styleboxes[0])).BorderColor;
+
+        var seen = new List<Color>();
+        for (int tick = 0; tick < ticks; tick++)
+        {
+            foreach (string name in styleboxes)
+            {
+                seen.Add(((StyleBoxFlat)host.GetThemeStylebox(name)).BorderColor);
+            }
+            ring._Process(GlowRing.FrameSeconds);
+        }
+
+        ring.Stop();
+        host.QueueFree();
+        return seen;
+    }
+
+    private void TestTheGlowRingActuallyAdvances()
+    {
+        var seen = TickRing(new[] { "panel" }, c => ChromeStyles.TargetLockStyle(c), GlowRing.Gold, 8, out _);
+
+        Check("glow_ring_advances", seen.Distinct().Count() > 1,
+            $"the ring held one colour ({string.Join(", ", seen.Distinct().Select(c => c.ToHtml(false)))}) " +
+            "across 8 ticks - a glow that does not cycle is the static border it was supposed to replace");
+
+        // A ping-pong, not a sawtooth: the cycle must come back down through its
+        // middle entry rather than dropping two ramp steps in one frame, which
+        // reads as a flicker. Over a full cycle every entry is visited, and the
+        // peak and trough are each visited once.
+        var cycle = GlowRing.Gold;
+        var full = TickRing(new[] { "panel" }, c => ChromeStyles.TargetLockStyle(c), cycle, cycle.Length, out _);
+        Check("glow_ring_visits_every_entry", full.Distinct().Count() == cycle.Distinct().Count(),
+            $"one cycle painted {full.Distinct().Count()} distinct colours, expected " +
+            $"{cycle.Distinct().Count()} - the ring is skipping an entry");
+    }
+
+    // The reason this ring steps rather than tweening. A TweenProperty on
+    // "border_color" passes through every colour between G3 and G4, and section
+    // 5 admits exactly 43 - so the obvious implementation is off-ramp on almost
+    // every frame it draws, and nothing else in this file would notice.
+    //
+    // Scoped to the two producers that pass the colour straight through. A Rare
+    // *upgraded* card's border is a lerp toward UpgradeAccent before the glow is
+    // ever consulted (CardFrameStyle), so it is off-ramp today, independently of
+    // this feature and out of its scope.
+    private void TestEveryGlowFrameIsOnTheRamp()
+    {
+        var surfaces = new (string Label, System.Func<Color, StyleBox> Build, Color[] Cycle)[]
+        {
+            ("TargetLockStyle", c => ChromeStyles.TargetLockStyle(c), GlowRing.Gold),
+            ("BossNodeGlowStyle", c => ChromeStyles.BossNodeGlowStyle(c), GlowRing.Danger),
+        };
+
+        foreach (var (label, build, cycle) in surfaces)
+        {
+            var offRamp = TickRing(new[] { "panel" }, build, cycle, cycle.Length * 2, out _)
+                .Where(c => !PixelSpec.IsOnRamp(c))
+                .Distinct()
+                .ToList();
+
+            Check($"glow_frames_on_ramp_{label}", offRamp.Count == 0,
+                $"{label} painted {offRamp.Count} colour(s) off the section 5 ramp: " +
+                $"{string.Join(", ", offRamp.Select(c => c.ToHtml(false)))} - a glow must step " +
+                "between authored ramp entries, never interpolate between them");
+        }
+    }
+
+    // Attach paints the peak before the first tick, and that is what makes this
+    // feature's rest state identity rather than a change.
+    //
+    // Each of these three colours is exactly what the static border it replaced
+    // painted - so a screenshot taken the moment a screen builds is unchanged,
+    // which six committed ScreenShot fixtures depend on, and the ring never
+    // opens dimmer than the still it took over from.
+    private void TestTheGlowRingOpensOnWhatItReplaced()
+    {
+        var expected = new (string Label, System.Func<Color, StyleBox> Build, Color[] Cycle, Color Was)[]
+        {
+            ("target_lock", c => ChromeStyles.TargetLockStyle(c), GlowRing.Gold, PixelSpec.Ramp.G5),
+            ("boss_node", c => ChromeStyles.BossNodeGlowStyle(c), GlowRing.Danger, UiTheme.Palette.Damage),
+            ("rare_card",
+                c => ChromeStyles.CardFrameStyle(CardType.Skill, Rarity.Rare, hovered: false, rareGlow: c),
+                GlowRing.Gold, UiTheme.Palette.RarityRareGlow),
+        };
+
+        foreach (var (label, build, cycle, was) in expected)
+        {
+            TickRing(new[] { "panel" }, build, cycle, 1, out var opening);
+            Check($"glow_opens_on_the_still_it_replaced_{label}", opening == was,
+                $"{label} opened on {opening.ToHtml(false)}, expected {was.ToHtml(false)} - " +
+                "the rest state of this feature is supposed to be byte-identical to what shipped before it");
+        }
+    }
+
+    // The third surface, asserted where it is wired rather than where it is
+    // built. Everything above drives GlowRing directly, and every one of those
+    // checks stays green if no view ever attaches one - a feature at a seam
+    // fails by being connected to nothing, which is the shape this project
+    // keeps finding at the data/code boundary.
+    //
+    // Both directions, and the second is the one that needs a test. CardViews
+    // are pooled and reused across refreshes (CombatScreen's _cardViews, the
+    // pile popups, every picker grid), so the same node is a Rare on one
+    // SetCardInstance and a Common on the next; a ring that attaches and never
+    // detaches puts a gold pulse on a Common and reads as a bug in the rarity
+    // colours rather than in the ring.
+    private void TestOnlyARareCardCarriesAGlowRing()
+    {
+        var rare = CardDatabase.All.FirstOrDefault(c => c.Rarity == Rarity.Rare);
+        var common = CardDatabase.All.FirstOrDefault(c => c.Rarity == Rarity.Common);
+        if (rare is null || common is null)
+        {
+            Check("card_glow_ring_fixtures_exist", false,
+                "cards.json has no Rare or no Common to test the ring against");
+            return;
+        }
+
+        var view = GD.Load<PackedScene>("res://scenes/CardView.tscn").Instantiate<CardView>();
+        AddChild(view);
+
+        view.SetCardInstance(new CardInstance(rare));
+        Check("a_rare_card_carries_a_glow_ring",
+            view.GetChildren().OfType<GlowRing>().Count() == 1,
+            $"a Rare CardView carries {view.GetChildren().OfType<GlowRing>().Count()} GlowRing(s), " +
+            "expected exactly one");
+
+        view.SetCardInstance(new CardInstance(common));
+        Check("a_common_card_carries_no_glow_ring",
+            view.GetChildren().OfType<GlowRing>().Count() == 0,
+            "a reused CardView kept its Rare glow ring after becoming a Common - " +
+            "RefreshRareRing has to detach, not just attach");
+
+        // Back to Rare, and still exactly one: the early return in
+        // RefreshRareRing exists so a repeated refresh does not restart the
+        // cycle, and getting that wrong in the other direction stacks drivers.
+        view.SetCardInstance(new CardInstance(rare));
+        view.SetCardInstance(new CardInstance(rare));
+        Check("refreshing_a_rare_card_does_not_stack_rings",
+            view.GetChildren().OfType<GlowRing>().Count() == 1,
+            $"two refreshes left {view.GetChildren().OfType<GlowRing>().Count()} GlowRing(s) on one card");
+
+        view.QueueFree();
     }
 
     // ART_SPEC section 9. The bug this exists for shipped and survived three

@@ -8,8 +8,13 @@ Medeiros, 80+ cards, CC-BY) read against this codebase. Reading them turned up s
 recording as a method rather than a one-off: **three of the seven items below were not "add polish",
 they were places the spec already stated a rule the code did not follow.** The spec was written first
 and the enforcement lagged it, which is exactly the drift `ART_SPEC.md`'s own opening paragraph says
-it exists to prevent. Two of those three (§1, §2) have shipped and each landed an assertion with it;
-§3 is the one left, and it is the one the spec still describes in the future tense on purpose.
+it exists to prevent. **All three (§1, §2, §3) have now shipped, and each landed an assertion with
+it** — which closes that category and leaves §4 onward as ordinary backlog: things the spec never
+claimed and the code never had.
+
+Worth carrying forward, because it is the pattern rather than three incidents: in every one of the
+three, the expensive part was not building the thing. It was that the spec had described it in the
+present tense for three phases, so nobody reading either document had a reason to check.
 
 Each item names the tutorial that backs it, so the technique can be checked rather than
 re-derived.
@@ -82,14 +87,63 @@ Four things are worth knowing before touching it:
   `/sprites/`. Keeping it inside plain `generate` rather than giving it a subcommand is what keeps
   CI's "generated art is up to date" step covering it.
 
-## 3. The animated glow ring
+---
+
+## 3. The animated glow ring — **shipped**
 
 *(Shine)*
 
-§6's other unfulfilled promise: "glow" for rare cards, boss nodes and the target lock is specified as
-a 1px pixel border cycling `G3 → G4 → G5`. `ChromeStyles.cs` calls it "the eventual treatment" in a
-comment and paints a static bright border instead. Small, self-contained, and the most visible
-per-hour item on this list.
+§6's other unfulfilled promise, and the last of the three. `scripts/ui/GlowRing.cs` is a `Node`
+parented to the Control it drives, stepping that box's `BorderColor` through a ramp triple on a
+`_Process` timer — the `SpriteAnimator` shape one property over. Three surfaces: a Rare
+`CardFrameStyle`, `BossNodeGlowStyle`, and the `TargetLockStyle` that moved out of `EnemyView` to
+join the other two.
+
+What it replaced was `ChromeStyles.cs` calling the ring "the eventual treatment" in a comment while
+painting a static bright border, and §6 specifying it in the present tense beside it.
+
+Five things are worth knowing before touching it:
+
+- **It steps rather than tweening, and that is correctness rather than style.** The obvious
+  implementation is `TweenProperty` on `border_color`; it passes through every colour between `G3`
+  and `G4`, and §5 admits 43. The guard is `TestEveryGlowFrameIsOnTheRamp`, which reads the colour
+  back off the *installed* `StyleBox` rather than off the cycle array — the array is trivially
+  on-ramp, and what can go wrong is the builder in between, where `CardFrameStyle` is already
+  lerping two lines from where the glow lands.
+- **The triple is a parameter, so §6 got reworded rather than obeyed literally.** It said
+  `G3 → G4 → G5` for all three surfaces; the boss node takes `R3 → R4 → R5` instead, because
+  `BossNodeGlowStyle` is keyed to the Damage semantic and gold there would say "rare" on the one node
+  whose meaning is danger. A spec sentence written before two of its three subjects existed is worth
+  re-reading rather than following.
+- **`Attach` opens on the peak of its cycle**, which is exactly the colour each ring replaced. That
+  is what makes the rest state identity rather than a change, and what keeps the six `ScreenShot`
+  fixtures that render these screens deterministic. There is deliberately no `ScatterIdlePhase`
+  analogue for the same reason — and because two Rare cards pulsing in unison read as one rule,
+  where two enemies breathing in unison read as one creature drawn twice.
+- **Ungated on `ReduceMotion`**, unlike the reflex. §1's driver already established the rule — gate
+  the photosensitive flash, not the gentle ambient loop, since gating the idle breathe was reported
+  from a playthrough as "sprites don't animate" — and `MapScreen.BuildCurrentNodeRing` loops an
+  ungated alpha pulse on the very screen the boss ring lives on.
+- **Three of the new assertions are about the *seam*, not the driver.** Every check on `GlowRing`
+  itself stays green while nothing attaches one, so `MapSmokeTest`, `CombatTargetingSmokeTest` and
+  `PixelSpecSmokeTest` each assert their surface actually carries a ring — and the card one asserts
+  the reverse too, since `CardView`s are pooled and a ring that attaches without detaching puts a
+  gold pulse on a Common.
+
+Two things this cost that are worth recording, both caught by mutation testing rather than by the
+suite going red:
+
+- **The first teardown assertion could not fail.** It waited three frames after unlocking a target
+  and re-read `IsTargetLocked` — 48ms against a 220ms frame time, so the ring would not have
+  repainted whether or not it was stopped. It asserts the structural fact instead (no `GlowRing`
+  still parented to an unlocked view), which is what actually separates `GlowRing.Stop` from a bare
+  `QueueFree`.
+- **The hazard that teardown closes is intermittent, which is worse than constant.** Godot runs a
+  parent before its children and frees a queued node at frame end, so a ring released with
+  `QueueFree` gets one more tick *after* the caller installed its own box — repainting over it only
+  when that tick crosses the frame time, roughly one unlock in fourteen at 60fps.
+
+---
 
 ## 4. One light direction
 

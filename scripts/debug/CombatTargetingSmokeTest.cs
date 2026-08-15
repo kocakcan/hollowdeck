@@ -53,12 +53,38 @@ public partial class CombatTargetingSmokeTest : Node
 
         enemyA.SetTargetLocked(true);
         Check("lock_sets_lock_stylebox", enemyA.IsTargetLocked, "expected lock stylebox after locking");
+        Check("lock_attaches_exactly_one_glow_ring",
+            enemyA.GetChildren().OfType<GlowRing>().Count() == 1,
+            $"a locked EnemyView carries {enemyA.GetChildren().OfType<GlowRing>().Count()} GlowRing(s), " +
+            "expected exactly one - the lock is an animated ring now, not a static box");
         Check("locking_one_enemy_does_not_affect_the_other", !enemyB.IsTargetLocked,
             "expected enemyB to be unaffected");
 
         enemyA.SetTargetLocked(false);
         Check("unlock_restores_empty_stylebox", !enemyA.IsTargetLocked,
             "expected override removed after unlocking");
+
+        // The lock is a running GlowRing now, so unlocking has to stop a driver
+        // and not just install a box over it: Godot runs a parent before its
+        // children, so a ring still parented here ticks *after* the unlock in
+        // the same frame, and if that tick is the one that crosses
+        // GlowRing.FrameSeconds it repaints "normal" over the StyleBoxEmpty just
+        // installed. IsTargetLocked is defined as "not StyleBoxEmpty", so the
+        // result is an enemy that reports itself targeted with nothing aimed at
+        // it - intermittently, about one unlock in fourteen at 60fps, which is
+        // the worst frequency a bug can have.
+        //
+        // Asserted structurally rather than by ticking, and that distinction
+        // cost a mutation test: the first version of this check waited three
+        // frames and then re-read IsTargetLocked, which cannot fail either way,
+        // because three frames is 48ms against a 220ms frame time. What
+        // separates a real Stop from a bare QueueFree is observable *now* -
+        // QueueFree defers to the end of the frame, so the child is still
+        // attached when this line runs.
+        Check("unlock_detaches_the_glow_ring",
+            enemyA.GetChildren().OfType<GlowRing>().Count() == 0,
+            "a GlowRing is still parented to an unlocked EnemyView - GlowRing.Stop has to " +
+            "detach now rather than defer, or the driver gets one more tick after the unlock");
 
         instance.QueueFree();
 

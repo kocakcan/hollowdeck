@@ -361,9 +361,24 @@ public partial class MapScreen : Control
             // to which branch happens to run last.
             if (isBoss)
             {
-                button.AddThemeStyleboxOverride("normal", ChromeStyles.BossNodeGlowStyle());
-                button.AddThemeStyleboxOverride("hover", ChromeStyles.BossNodeGlowStyle());
-                button.AddThemeStyleboxOverride("disabled", ChromeStyles.BossNodeGlowStyle());
+                // One ring driving all three states rather than three
+                // independent stills - ART_SPEC section 6's animated pixel
+                // border, on the red ramp rather than the gold one because this
+                // node means danger and not rarity (see BossNodeGlowStyle).
+                //
+                // All three names, because the boss is reachable for exactly one
+                // floor of the act and disabled for the other nine, and the ring
+                // has to keep running across that change. Deliberately not
+                // Modulate: that channel already carries the UntraversedDim
+                // exemption above, and MapSmokeTest asserts on it.
+                //
+                // No teardown - the ring parents itself to the button, and
+                // BuildButtons frees every button it rebuilds.
+                GlowRing.Attach(
+                    button,
+                    new[] { "normal", "hover", "disabled" },
+                    c => ChromeStyles.BossNodeGlowStyle(c),
+                    GlowRing.Danger);
             }
             else if (isVisited)
             {

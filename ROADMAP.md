@@ -909,11 +909,16 @@ chain on a claim).
 **The art medium keeps its own backlog** in `docs/PIXEL_ART_ROADMAP.md` — pixel-specific work (the
 animated glow ring, one light direction, effect frames, an easing vocabulary, backgrounds) sitting
 beside `ART_SPEC.md` the way a backlog sits beside a rule set. It is not a phase and does not gate
-one. Its first two items have shipped — sprite frame animation, then chrome 9-slices — and both
-closed a rule `ART_SPEC.md` already stated and nothing enforced rather than adding polish. The
-9-slices also paid off half of §7's "Known cost, accepted" below: the ornament that was supposed to
-carry the illuminated-manuscript identity after Cinzel and IM Fell English went. The rest of that
+one. Its first three items have shipped — sprite frame animation, chrome 9-slices, then the animated
+glow ring — and all three closed a rule `ART_SPEC.md` already stated and nothing enforced rather than
+adding polish. That was the whole of that category, so what is left in that file is ordinary backlog.
+The 9-slices also paid off half of §7's "Known cost, accepted" below: the ornament that was supposed
+to carry the illuminated-manuscript identity after Cinzel and IM Fell English went. The rest of that
 file is worth reading before touching anything visual.
+
+The glow ring is also where `CardView`'s `"panel"` stylebox stopped having four independent writers:
+a driver repainting on a timer has to reproduce whatever the last event decided, which is what forced
+the `RepaintFrame` funnel and a stated precedence (focus > hover > rare glow).
 
 Note that **card inspect's 1.15x hover bump is the same question, and this codebase has already
 answered it once.** `CardView.cs`'s `FocusHaloSize` comment records killing a 1.08x scale tween on
