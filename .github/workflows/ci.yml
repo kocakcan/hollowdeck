@@ -77,11 +77,27 @@ jobs:
       # icon's fn, forget to re-run, and the repo ships art that no longer
       # matches the code that claims to produce it. Generation is pure, so
       # regenerating must be a no-op.
+      #
+      # BOTH output directories, and the second one is the whole point of this
+      # comment. `generate` writes the seven icon categories into assets/icons/
+      # and the `chrome` category into assets/theme/ (main::output_dir), because
+      # 9-slices are on the 16/24 grids rather than 32x32 and have to sit
+      # somewhere validate::expected_grid reads differently. This step diffed
+      # only assets/icons from the day chrome landed, so every one of the
+      # fourteen slices was outside the check - while three places said in the
+      # present tense that it was covered: CLAUDE.md's chrome section,
+      # PIXEL_ART_ROADMAP.md section 2, and output_dir's own docstring, which
+      # gives keeping chrome inside plain `generate` rather than behind a
+      # subcommand as the reason CI still sees it. It did not.
+      #
+      # Anything that teaches `generate` a third output directory has to be
+      # added here too. There is no way to ask artgen where it writes, which is
+      # what makes this list the thing to check rather than the thing to trust.
       - name: Generated art is up to date
         run: |
           cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
-          if ! git diff --exit-code -- assets/icons; then
-            echo "::error::assets/icons differs from what tools/artgen generates." \
+          if ! git diff --exit-code -- assets/icons assets/theme; then
+            echo "::error::assets/icons or assets/theme differs from what tools/artgen generates." \
                  "Run 'cargo run --release --manifest-path tools/artgen/Cargo.toml -- generate' and commit the result."
             exit 1
           fi
