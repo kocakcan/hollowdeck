@@ -190,18 +190,52 @@ expressed in pixels.
   buttons are art; `CardFrameStyle` — whose border is a rarity lerped with upgraded and again with
   hover — stays a `StyleBoxFlat`, along with the badges, the HP bars and the slider. That is a rule,
   not an unfinished migration.
-- "Glow" (rare cards, boss nodes, target lock) should be an **animated pixel border** — a 1px ring
-  cycling `G3 → G4 → G5` — not a blur. **Not built**: `ChromeStyles.CardFrameStyle` steps the border
-  to the brightest gold statically and its comment calls the ring "the eventual treatment".
-  `PIXEL_ART_ROADMAP.md` §3. These three surfaces stay flat for a second reason on top of the
-  fixed-colour rule above: a glow wants a driver, not a still.
+
+  The three glow surfaces below are the sharpest case of it: their border colour is decided *per
+  frame*, so they are the furthest thing there is from fixed at author time, and art was never
+  available to them.
+- "Glow" (rare cards, boss nodes, target lock) is an **animated pixel border**, not a blur:
+  `scripts/ui/GlowRing.cs`, a `Node` parented to the Control it drives, stepping that box's
+  `BorderColor` through a ramp triple on a `_Process` timer. Five things about it are rules rather
+  than settings:
+
+  - **It steps, it never interpolates**, and that is the whole reason it is a frame timer rather
+    than the obvious `TweenProperty` on `border_color`. A tween passes through every colour between
+    `G3` and `G4`; §5 admits 43. Stepping between authored entries is on-ramp by construction — the
+    same argument §9 makes for frame swaps over scale tweens, one property over.
+  - **The triple is the caller's, because a ring is a mechanism and not a colour.** `GlowRing.Gold`
+    (`G3 → G4 → G5 → G4`) is the instance this bullet used to name, and it drives rare cards and the
+    target lock. The boss node takes `GlowRing.Danger` (`R3 → R4 → R5 → R4`): `BossNodeGlowStyle` is
+    keyed to the Damage semantic on purpose, and gold there would say "rare" on the one node whose
+    meaning is danger.
+  - **Ping-pong, not sawtooth.** Coming back down through the middle entry reads as a pulse; jumping
+    two ramp steps in one frame reads as a flicker.
+  - **`Attach` opens on the peak.** The brightest entry of each triple is exactly the static colour
+    that ring replaced (`G5`, `G5`, `R5`), so the rest state is byte-identical to what shipped
+    before the feature and the ring never opens dimmer than the still it took over. Six `ScreenShot`
+    fixtures render these screens and capture immediately, which is the other half of why the
+    opening frame is fixed rather than scattered.
+  - **Not gated on `ReduceMotion`**, per the rule §9's driver states: gate the photosensitive thing,
+    not the gentle ambient loop. A two-step walk up a hue-shifted ramp is gentler than
+    `MapScreen.BuildCurrentNodeRing`'s ungated `modulate:a` pulse sitting on the same screen, and
+    gating one of those two and not the other is what would read as broken.
+
+  Note the width is unchanged. This bullet said "a 1px ring" when the thing it was arguing against
+  was a 6px blur; all three boxes keep `BorderWidth.Thick`, and on a card that weight is a
+  deliberate second emphasis channel beside the colour.
+
+  `PixelSpecSmokeTest` drives the ring's `_Process` directly and reads the colour back off the
+  installed `StyleBox` — never off the cycle array, since what can go wrong is the builder in
+  between. It also asserts each of the three surfaces actually *attaches* one, because every check
+  on the driver stays green while the driver is connected to nothing.
 - Drop shadows are a hard 1px or 2px offset in `N0`, never a gradient.
 
-The remaining unbuilt bullet is stated as unbuilt on purpose. A spec that describes an intention in
-the present tense is indistinguishable from one describing the code, and the next reader inherits a
-claim they have no reason to check — which is how the animation rule in §9 went three phases without
-enforcement, and how the first bullet above spent three phases pointing at
-`ChromeStyles.EndTurnButtonStyle` as an example to follow after that function had been deleted.
+There is no unbuilt bullet left in this section, and the discipline that got it there is worth more
+than the section. A spec that describes an intention in the present tense is indistinguishable from
+one describing the code, and the next reader inherits a claim they have no reason to check — which
+is how the animation rule in §9 went three phases without enforcement, how the first bullet above
+spent three phases pointing at `ChromeStyles.EndTurnButtonStyle` as an example to follow after that
+function had been deleted, and how the glow spent three phases as a still.
 
 ## 7. Type
 

@@ -31,10 +31,18 @@ namespace Hollowdeck.UI;
 // card frame wanting art would need one texture per CardType x Rarity x hover
 // x upgraded, which is the per-card-class explosion risk 1 is about.
 //
-// BossNodeGlowStyle and EnemyView.TargetLockStyle are flat for a second
-// reason on top of that one: both are "glow" surfaces that section 6 says
-// should become an animated G3->G4->G5 pixel ring, which is a different item
-// (docs/PIXEL_ART_ROADMAP.md section 3) and wants a driver, not a still.
+// The three "glow" surfaces section 6 names - a Rare CardFrameStyle,
+// BossNodeGlowStyle and TargetLockStyle - are flat for a second reason on top
+// of that one, and it is the reason they could never have been art. Each is now
+// an animated ring (GlowRing, docs/PIXEL_ART_ROADMAP.md section 3), so its
+// border colour is decided per *frame* rather than at author time, which is the
+// exact condition the rule above disqualifies. All three therefore take that
+// colour as a parameter and default it to the still they replace, which is what
+// keeps them pure functions and every existing call site unchanged.
+//
+// TargetLockStyle lives here rather than in EnemyView, where it was a static
+// readonly box shared by every view: a driver that mutated it would have driven
+// all of them, and this file's own header says chrome has one home.
 public static class ChromeStyles
 {
     // The generated 9-slices, by filename under assets/theme/. This list is the
@@ -372,19 +380,23 @@ public static class ChromeStyles
     // keeps its gold glow at rest, and an upgraded card blends its border
     // toward green independent of rarity - an upgraded Rare card reads as
     // gold-with-a-green-cast rather than one signal replacing the other.
-    public static StyleBoxFlat CardFrameStyle(CardType type, Rarity rarity, bool hovered, bool isUpgraded = false)
+    public static StyleBoxFlat CardFrameStyle(CardType type, Rarity rarity, bool hovered, bool isUpgraded = false,
+        Color? rareGlow = null)
     {
         var borderColor = RarityColor(rarity);
         if (isUpgraded) borderColor = borderColor.Lerp(UiTheme.Palette.UpgradeAccent, 0.35f);
         if (hovered) borderColor = borderColor.Lerp(Colors.White, 0.4f);
 
         // Rare's rest-state emphasis used to be a 6px blur glow. With blurs
-        // gone it reads through the ramp instead - the border steps up to the
-        // brightest gold - plus the extra border weight below. An animated
-        // pixel border (G3->G4->G5 cycling) is the eventual treatment; that
-        // belongs in CardView with the other tweens, not in this pure style
-        // function.
-        if (!hovered && rarity == Rarity.Rare) borderColor = UiTheme.Palette.RarityRareGlow;
+        // gone it reads through the ramp instead - the border steps up the gold
+        // ramp - plus the extra border weight below.
+        //
+        // rareGlow is the current frame of CardView's GlowRing, and it defaults
+        // to the top of that ramp, which is where the static version sat. So an
+        // un-driven call (every grid, popup and picker that renders a card
+        // without a ring) paints exactly what it painted before this parameter
+        // existed.
+        if (!hovered && rarity == Rarity.Rare) borderColor = rareGlow ?? UiTheme.Palette.RarityRareGlow;
 
         var style = new StyleBoxFlat
         {
@@ -570,12 +582,40 @@ public static class ChromeStyles
     // over a deep oxblood face - it still reads as the one node on the map
     // you are not supposed to walk into casually, and the skull icon it
     // frames was always doing most of that work anyway.
-    public static StyleBoxFlat BossNodeGlowStyle()
+    //
+    // border is the current frame of MapScreen's GlowRing, cycling R3->R4->R5
+    // rather than section 6's literal gold: the semantic above is the whole
+    // point of this style, and a gold ring would say "rare" on the one node
+    // whose meaning is danger. Defaults to Damage (= R5), the top of that ramp
+    // and the colour this painted before the ring existed.
+    public static StyleBoxFlat BossNodeGlowStyle(Color? border = null)
     {
         var style = new StyleBoxFlat
         {
             BgColor = PixelSpec.Ramp.R0,
-            BorderColor = UiTheme.Palette.Damage,
+            BorderColor = border ?? UiTheme.Palette.Damage,
+        };
+        style.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
+        return style;
+    }
+
+    // Target-lock glow while a SingleEnemy card is being dragged over an enemy,
+    // or while the keyboard is cycled onto it. Moved here from a static readonly
+    // field on EnemyView when the ring landed - one box shared by every view is
+    // fine for a still and wrong for something a driver repaints.
+    //
+    // Was a rounded box with a 10px gold bloom, on a slate-blue face left over
+    // from the deleted generic theme - the bloom and the radius are both illegal
+    // in pixels (section 6), and the slate blue was off-ramp entirely. Now a
+    // hard heavy gold bezel on a warm face: the lock reads instantly because the
+    // top of the gold ramp against the dark neutrals is the highest-contrast
+    // pair in the palette. Defaults to G5, which is where the still sat.
+    public static StyleBoxFlat TargetLockStyle(Color? border = null)
+    {
+        var style = new StyleBoxFlat
+        {
+            BgColor = PixelSpec.Ramp.N3,
+            BorderColor = border ?? PixelSpec.Ramp.G5,
         };
         style.SetBorderWidthAll(UiTheme.BorderWidth.Thick);
         return style;

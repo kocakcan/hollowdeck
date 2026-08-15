@@ -881,9 +881,49 @@ the HP bars and the slider. Four things around it:
   sit at a 4px vertical content margin — so panels and slots are 16px slices and only buttons and
   the plinth are 24.
 
-`docs/PIXEL_ART_ROADMAP.md` is the medium's own backlog beside `docs/ART_SPEC.md`'s rule set. One of
-its entries is still a place §6 describes chrome the code does not have — the animated glow ring —
-and §6 says so rather than claiming otherwise in the present tense.
+**A glow is a driver, and the three surfaces that have one share it.** `scripts/ui/GlowRing.cs` is a
+`Node` parented to the Control it drives, stepping that box's `BorderColor` through a ramp triple on
+a `_Process` timer: a Rare `CardFrameStyle`, `BossNodeGlowStyle`, and the `TargetLockStyle` that
+moved out of `EnemyView` to sit beside them. It is the last of the three items
+`PIXEL_ART_ROADMAP.md` classed as *a rule ART_SPEC already stated and the code did not follow*.
+
+Six things about it are expensive to rediscover:
+
+- **It steps and never interpolates**, which is why it is a frame timer rather than a
+  `TweenProperty` on `border_color`. A tween passes through every colour between `G3` and `G4` and
+  §5 admits 43 — the `SpriteAnimator` argument one property over. `TestEveryGlowFrameIsOnTheRamp`
+  reads the colour back off the *installed* `StyleBox` rather than off the cycle array, because the
+  array is trivially on-ramp and what can go wrong is the builder in between, where `CardFrameStyle`
+  already lerps for upgraded and hovered two lines from where the glow lands.
+- **The triple is the caller's.** `GlowRing.Gold` for rare cards and the target lock; the boss node
+  takes `GlowRing.Danger` (`R3→R4→R5`), because `BossNodeGlowStyle` is keyed to the Damage semantic
+  and gold there would say "rare" on the one node whose meaning is danger. §6 named gold for all
+  three and was reworded, since it was written before two of its subjects existed.
+- **`Attach` opens on the peak, and that is what makes the rest state identity.** Each cycle's
+  brightest entry is exactly the still it replaced (`G5`, `G5`, `R5`), so first paint is unchanged,
+  six `ScreenShot` fixtures stay deterministic, and no ring opens dimmer than what it took over.
+  Deliberately no `ScatterIdlePhase` analogue.
+- **Ungated on `ReduceMotion`**, per the rule `SpriteAnimator` states: gate the photosensitive flash,
+  not the gentle ambient loop. `MapScreen.BuildCurrentNodeRing` already loops an ungated alpha pulse
+  on the same screen the boss ring lives on.
+- **`GlowRing.Stop` is non-deferred, and the bug it closes is intermittent.** Godot runs a parent
+  before its children and frees a queued node at frame end, so a ring released with a bare
+  `QueueFree` ticks once *after* the caller installed its own box — repainting over it only when
+  that tick crosses the frame time, about one unlock in fourteen. Only `EnemyView` needs this; the
+  other two rings are freed with the node they are parented to.
+- **Three of the new assertions are about the seam rather than the driver**, and they are the ones
+  that matter: every check on `GlowRing` itself stays green while nothing attaches one. `MapSmokeTest`,
+  `CombatTargetingSmokeTest` and `PixelSpecSmokeTest` each assert their surface carries a ring, and
+  the card one asserts the reverse too — `CardView`s are pooled, so a ring that attaches without
+  detaching puts a gold pulse on a Common.
+
+`CardView` gained a `RepaintFrame` funnel with it. The `"panel"` stylebox had four writers, which
+was survivable while each ran in response to an event and became wrong the moment a timer joined
+them; the precedence is now stated rather than left to branch order — **focus > hover > rare glow**.
+
+`docs/PIXEL_ART_ROADMAP.md` is the medium's own backlog beside `docs/ART_SPEC.md`'s rule set. With
+the ring, every entry that was *a rule §6 stated and the code lacked* is closed; what is left there
+is ordinary backlog the spec never claimed.
 
 There is **no `artgen` on `PATH`** and no `tools/artgen` wrapper — the binary under
 `tools/artgen/target/` is a gitignored build artifact, so always invoke it through `cargo run` as

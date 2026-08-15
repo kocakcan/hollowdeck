@@ -232,22 +232,98 @@ public partial class CardView : Panel
     {
         if (Interactive || CardInstance is null) return;
 
-        var def = CardInstance.Definition;
-        var style = ChromeStyles.CardFrameStyle(def.Type, def.Rarity, focused, CardUpgrade.IsUpgraded(def));
-        if (focused)
-        {
-            style.BorderColor = UiTheme.Palette.FocusRing;
-            style.ShadowColor = new Color(UiTheme.Palette.FocusRing, 0.55f);
-            style.ShadowSize = FocusHaloSize;
-            style.ShadowOffset = Vector2.Zero; // a halo, not a drop shadow
-        }
-        AddThemeStyleboxOverride("panel", style);
+        // Tracked rather than read back off HasFocus() at paint time, the way
+        // _hovered is: the frame has three inputs and the ring repaints it from
+        // a timer, so every input has to be readable when nothing is calling.
+        _frameFocused = focused;
+        RepaintFrame();
 
         // Paint over the neighbours the halo now overlaps. No tween and no
         // ReduceMotion gate needed: this is a static repaint, not motion -
         // which also retires the bug where arrow-keying faster than
         // UiTheme.Motion.Fast left two live tweens fighting over "scale".
         ZIndex = focused ? 10 : 0;
+    }
+
+    // Whether the halo is showing. Only ever true on a non-interactive card -
+    // ApplyFocusFrame is the sole writer and it bails on Interactive - which is
+    // what keeps a hand card out of the focus branch below.
+    private bool _frameFocused;
+
+    // The Rare ring's current frame, kept current by the ring's own builder and
+    // null when there is no ring. Without it, a repaint triggered by anything
+    // else mid-cycle (a hover exit, a re-sort) would paint the *default* top of
+    // the ramp and snap the pulse to its peak until the next tick.
+    private Color? _rareGlow;
+
+    private GlowRing? _rareRing;
+
+    // The one place the "panel" stylebox is decided. It was four near-identical
+    // call sites - the base repaint, hover in, hover out, and the focus frame -
+    // which was survivable while each ran in response to an event and fatal once
+    // a timer joined them: the ring repaints on its own schedule and has to
+    // reproduce whatever the other three last decided.
+    //
+    // The precedence is stated rather than left to which branch happens to run
+    // last, the way Ethereal beating Retain is stated: **focus > hover > rare
+    // glow.** The first two already suppress the glow through CardFrameStyle's
+    // own `!hovered` condition; focus needs saying here because it overwrites
+    // BorderColor after that function has returned.
+    private StyleBoxFlat BuildFrameStyle(Color? rareGlow)
+    {
+        var def = CardInstance!.Definition;
+        var style = ChromeStyles.CardFrameStyle(
+            def.Type, def.Rarity, _hovered, CardUpgrade.IsUpgraded(def), rareGlow);
+
+        if (_frameFocused)
+        {
+            style.BorderColor = UiTheme.Palette.FocusRing;
+            style.ShadowColor = new Color(UiTheme.Palette.FocusRing, 0.55f);
+            style.ShadowSize = FocusHaloSize;
+            style.ShadowOffset = Vector2.Zero; // a halo, not a drop shadow
+        }
+
+        return style;
+    }
+
+    private void RepaintFrame()
+    {
+        if (CardInstance is null) return;
+        AddThemeStyleboxOverride("panel", BuildFrameStyle(_rareGlow));
+    }
+
+    // A Rare card glows; nothing else does. Called from SetCardInstance because
+    // these views are pooled and reused (CombatScreen's _cardViews, the pile
+    // popups, every picker grid), so the same node can be a Rare on one refresh
+    // and a Common on the next.
+    //
+    // The early return is what makes that reuse cheap: without it, every refresh
+    // of a Rare card would tear the driver down and re-attach it, which resets
+    // the cycle to its peak and leaves the pulse permanently frozen there on any
+    // screen that refreshes more often than once every 0.22s.
+    private void RefreshRareRing()
+    {
+        bool wanted = CardInstance?.Definition.Rarity == Rarity.Rare;
+        if (wanted == (_rareRing is not null)) return;
+
+        if (!wanted)
+        {
+            _rareRing!.Stop();
+            _rareRing = null;
+            _rareGlow = null;
+            RepaintFrame();
+            return;
+        }
+
+        _rareRing = GlowRing.Attach(
+            this,
+            new[] { "panel" },
+            glow =>
+            {
+                _rareGlow = glow;
+                return BuildFrameStyle(glow);
+            },
+            GlowRing.Gold);
     }
 
     public void SetCardInstance(CardInstance card)
@@ -286,7 +362,10 @@ public partial class CardView : Panel
                     || (def.IsXCost ? player.CurrentEnergy >= 1 : player.CurrentEnergy >= def.Cost)));
         Modulate = affordable ? Colors.White : UnaffordableTint;
 
-        AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(def.Type, def.Rarity, hovered: false, CardUpgrade.IsUpgraded(def)));
+        // Ring first, so a view that has just stopped being Rare drops its
+        // driver before the repaint below rather than after it.
+        RefreshRareRing();
+        RepaintFrame();
         // Re-painting the frame above would otherwise drop the focus ring off
         // a card that is currently focused (PileViewPopup re-sorts in place).
         if (HasFocus()) ApplyFocusFrame(true);
@@ -567,7 +646,7 @@ public partial class CardView : Panel
             tween.SetParallel(true);
             tween.TweenProperty(this, "scale", HoverScale, 0.12);
             tween.TweenProperty(this, "rotation_degrees", 0f, 0.12); // "stands up straight"
-            if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: true, CardUpgrade.IsUpgraded(CardInstance.Definition)));
+            RepaintFrame();
         }
         RefreshKeywordTooltip();
     }
@@ -583,7 +662,7 @@ public partial class CardView : Panel
             tween.SetParallel(true);
             tween.TweenProperty(this, "scale", NormalScale, 0.12);
             tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.12);
-            if (CardInstance is not null) AddThemeStyleboxOverride("panel", ChromeStyles.CardFrameStyle(CardInstance.Definition.Type, CardInstance.Definition.Rarity, hovered: false, CardUpgrade.IsUpgraded(CardInstance.Definition)));
+            RepaintFrame();
         }
         // Not necessarily a hide: a card the player focused themselves keeps
         // its panel while the mouse wanders off it, which is what _focusShowing
