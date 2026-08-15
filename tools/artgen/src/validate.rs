@@ -21,8 +21,11 @@ pub struct Report {
 }
 
 /// Legal dimensions for a path, by the directory it sits in. `None` means the
-/// directory carries no dimension rule (chrome, one-off UI textures) and only
-/// the palette rules apply.
+/// directory carries no dimension rule and only the palette rules apply.
+///
+/// Chrome was that case until `assets/theme/` gained the 16/24 arm below, and
+/// this comment still named it as an example afterwards. Nothing is left in the
+/// `None` bucket today except one-off UI textures outside the four directories.
 fn expected_grid(path: &Path) -> Option<&'static [(u32, u32)]> {
     let text = path.to_string_lossy().replace('\\', "/");
     if text.contains("/sprites/") {

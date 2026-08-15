@@ -127,6 +127,18 @@ fn generate(assets: &Path, category: Option<&str>, dry_run: bool) -> ExitCode {
 /// purpose: CI re-runs plain `generate` and diffs the tree to catch committed
 /// art drifting from its source, and a subcommand of its own would have been
 /// outside that check.
+///
+/// That reasoning was necessary and **not sufficient**, which is worth stating
+/// because this comment asserted the conclusion for as long as chrome has
+/// existed and it was false the whole time. Staying inside `generate` only gets
+/// the art regenerated; CI also has to *diff the directory it lands in*, and the
+/// step listed `assets/icons` alone — so all fourteen slices were regenerated
+/// and then ignored. `artgen validate` cannot cover the gap either: a drifted
+/// slice is still on the ramp and still 16x16, so it passes every rule that
+/// command has.
+///
+/// So a new output directory here is a two-line change: this match, and the
+/// path list in `.github/workflows/ci.yml`'s "Generated art is up to date".
 fn output_dir(assets: &Path, category: &str) -> PathBuf {
     match category {
         "chrome" => assets.join("theme"),
