@@ -90,7 +90,7 @@ fn bulwark_charm() -> Canvas {
     canvas.line(6, 4, 16, 9, G2);
     canvas.line(26, 4, 16, 9, G2);
     canvas.ring(16, 10, 3, 1, G3);
-    shield(&mut canvas, 16, 12, 20, 18, SHIELD_FACE, G3);
+    shield(&mut canvas, 16, 12, 20, 18, SHIELD_FACE, G3, G2);
     canvas.vline(16, 15, 9, B4);
     canvas.hline(11, 18, 11, B4);
     finish(&mut canvas);

@@ -12,6 +12,11 @@ it exists to prevent. **All three (§1, §2, §3) have now shipped, and each lan
 it** — which closes that category and leaves §4 onward as ordinary backlog: things the spec never
 claimed and the code never had.
 
+§4 has since shipped too, and it inverts that pattern in a way worth noticing: the code landed
+*first* and `ART_SPEC.md` §10 was written to describe it. So §10 is the first section of that
+document that has never been ahead of its own enforcement — which is precisely the drift the three
+items above each spent three phases inside.
+
 Worth carrying forward, because it is the pattern rather than three incidents: in every one of the
 three, the expensive part was not building the thing. It was that the spec had described it in the
 present tense for three phases, so nobody reading either document had a reason to check.
@@ -149,17 +154,99 @@ suite going red:
 
 ---
 
-## 4. One light direction
+## 4. One light direction — **shipped**
 
 *(Shading, Illumination Techniques)*
 
-`tools/artgen/src/icons/shapes.rs` has a shared form vocabulary — one `blade`, one `shield` — which
-is what stops 192 icons drifting into 192 different tapers. What it does not have is a **global light
-direction**: each shape picks its own lit edge (`blade`'s `edge` parameter, `scale`'s `lit`,
-`gem`'s facets), so the set is internally consistent in form and inconsistent in lighting.
+One lamp, up and to the left, at 45°, for all 192 icons. `tools/artgen/src/icons/light.rs` owns the
+direction and answers which of two faces it falls on; `shapes.rs` derives every highlight *position*
+from it. `ART_SPEC.md` §10 is the rule.
 
-§5 already commits to hue-shifted ramps, which is the harder half. Pinning a light direction is
-mostly a convention plus an audit.
+What it replaced was a set with one **form** vocabulary and no shared **light**: each shape picked
+its own lit edge out of a literal, so the icons were consistent in form and contradictory in
+lighting. `blade` painted its bright edge on the side that was "leading" relative to the blade's own
+rotation — a different *screen* side at every angle — and two thirds of the authored blades happened
+to point somewhere that made that right. The three that did not were `pommel_strike`, `cataclysm`,
+and `annihilate`, whose crossed pair carried one blade lit from the upper left and the other from
+the lower right: two suns inside one 32x32 square. `shield`, at twenty-six call sites, had no light
+direction at all.
+
+Six things are worth knowing before touching it:
+
+- **The direction was ratified, not chosen.** `strike` — the icon the whole Attack half quotes — was
+  already lit upper-left, and the derived rule reproduces its bytes exactly. So `strike.png` staying
+  out of `git status` after a regeneration is the sharpest check this change has: if it moves, the
+  sign is wrong somewhere. `flask`, `droplet`, `raised_fist` and most hand-placed highlights were
+  already up-left too, which is why the item cost three blade flips rather than thirty-six.
+- **The rule is that position stops being a parameter.** Colours stay the caller's — pigment is a
+  content decision — but `blade` no longer has a literal through which a wrong side *could* be
+  authored. That is the `IsPlayable`-derived-from-`CardType` move, one language over; the alternative
+  was documenting the convention and hoping, which is what the previous three items all found rots.
+- **`light.rs` owns which side; the shape owns how much.** `shield` reveals a rim brighter than its
+  face, so its wide band goes on the lit side; `gem` reveals a body darker than its face and wants
+  the wide band in shadow. Same `by_face` call, arguments swapped. Folding that choice into `light.rs`
+  would make one of the two wrong.
+- **Two exemptions are by budget rather than by physics, and they look like oversights.** All four
+  of `raised_fist`'s knuckles keep their `R4`; dropping the furthest to the body colour is what the
+  light says and it was tried, and at 1x the fourth finger vanished into the hand. §1's legibility
+  budget outranks §10 when they disagree. `clothesline` could make the opposite trade — its `N0`
+  finger grooves already separate the fingers — which is why the two hands are lit differently and
+  each says so.
+- **The report that would rank the hand-drawn half was prototyped and deliberately not shipped.** It
+  cannot separate a highlight from a *material* use of the same ramp entry: `BLADE_EDGE` is `N8`, a
+  whole shield rim is `B4`, `sparkle` is nothing but its top entry — so it ranked the emissive shapes
+  worst precisely because they were correct, and roughly half its top ten were false positives when
+  checked by eye. A metric that noisy cannot gate, and a report that does not gate is one nobody runs.
+  The identical centroid measurement is *exact* over one shape drawn alone with colours the test
+  picks, which is why it lives in the test instead.
+- **`tools/artgen` has tests now, and it had none before.** `cargo test` ran nowhere in this
+  repository — not in `run-smoke-tests.sh`, not in CI. The blade sweep covers 32 angles rather than
+  the authored call sites, because the call sites only cover the angles somebody already thought of.
+
+Four things this cost that are worth recording, and the first two are the ones to read:
+
+- **A "stability" deadband silently rebuilt the exact bug the feature exists to prevent.** `lit_offset`
+  shipped for one commit with `GRAZING = 0.05`, on the reasoning that a band around the terminator
+  stops a highlight flipping from a one-pixel change in a tip coordinate. That reasoning is
+  backwards. 0.05 is a ~3° *wedge of real answers*, and inside it the tiebreak overrides the light:
+  `wild_swing` (incidence +0.0499) and `map/elite`'s left sword (+0.0303) had their bright edges
+  moved onto the **shadow** face, while `map/fight` — the same crossed-sword icon in a different
+  colour, and 0.005 the other side of the threshold — kept its lit edge. So the two icons that are
+  meant to be the same weapon twice lit the same blade on opposite faces: `annihilate`'s two suns,
+  rebuilt across a matched pair, by the mechanism written to prevent them. `GRAZING` is a float
+  epsilon now (`1e-3`), and a test asserts it stays under 0.01 rather than trusting the comment.
+  The general form: **a tolerance that can contain a real answer is not a tolerance.**
+- **The count in four documents was the tell, and it was legible before anyone looked at a pixel.**
+  All four said the derived rule flips "three blades"; with the deadband in, reverting `blade` moved
+  *five* icons. That gap was the whole bug, visible from a number. Fixing `GRAZING` made the
+  documented three true again — which is the direction that repair should run: the docs were right
+  and the code was wrong, rather than the docs being quietly restated to match.
+- **The first version of the sweep failed on a blade that was lit correctly.** It compared the edge
+  and body centroids directly; `edge` runs hilt to shoulder while `body` includes the tip, so on an
+  up-left blade the edge's centroid sits *behind* the body's along the blade's own axis, and that
+  along-axis term swamped the one-pixel lateral one the rule actually decides. Projecting onto
+  `across` first removes a term the rule never touches. The test was wrong, not the shape — and it
+  is the kind of wrong that would have been "fixed" by loosening the assertion.
+- **The audit's finding was not the forecast.** This entry predicted "mostly a convention plus an
+  audit" and expected the ~186 hand-placed highlights to be the bulk of the work. Reading all of them
+  turned up that the hand-drawn half was already overwhelmingly up-left, and that the large majority
+  of highlight-*coloured* draw calls are emblems, marks and materials rather than shading — a crown,
+  a cross, a page block, a pale mask deliberately high on the ramp because it sits behind light bars.
+  Eight sites genuinely contradicted the lamp. The expensive half was the vocabulary, which is the
+  half that could be made unrepresentable.
+- **Four of the six shape assertions were green on the code they replaced**, and every one failed
+  for the same reason: it measured a colour the shape had *already* been placing, rather than the
+  pixels this change's light pass writes. `flask`'s row read the pre-existing authored glint instead
+  of the new lit wall, so deleting the wall outright left it passing; `skull`'s read the jaw's
+  contact band, which is correct under any light; `raised_fist`'s `R2` centroid was dominated by a
+  wrist block sitting fourteen rows below the knuckles, so the new flank could be deleted *or moved
+  to the lit side* with the suite green. Each now measures inside a row band or against a colour only
+  the new pass writes, and all eight shapes fail under both deletion and inversion. **A whole-colour
+  centroid over a shape that already had shading measures the shading it already had.**
+
+**What is deferred, and stated so it is not mistaken for finished:** those ~186 hand-placed
+highlights are audited but *unheld*. Nothing asserts them, `artgen validate` is structurally blind to
+them, and a new icon may put a `G5` pixel in its bottom-right corner with the whole suite green.
 
 ## 5. Combat effect frames
 

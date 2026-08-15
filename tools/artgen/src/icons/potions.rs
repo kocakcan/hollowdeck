@@ -60,7 +60,7 @@ fn vigor() -> Canvas {
 
 fn block() -> Canvas {
     potion(B3, B5, |canvas| {
-        shield(canvas, 16, EMBLEM_Y - 6, 12, 13, B5, N8);
+        shield(canvas, 16, EMBLEM_Y - 6, 12, 13, B5, N8, N7);
     })
 }
 
@@ -69,8 +69,8 @@ fn block() -> Canvas {
 /// shield. Two overlapping shields were tried and read as one dented one.
 fn greater_block() -> Canvas {
     potion(B4, B5, |canvas| {
-        shield(canvas, 16, EMBLEM_Y - 7, 15, 16, N8, B1);
-        shield(canvas, 16, EMBLEM_Y - 5, 11, 12, B4, B1);
+        shield(canvas, 16, EMBLEM_Y - 7, 15, 16, N8, B1, B0);
+        shield(canvas, 16, EMBLEM_Y - 5, 11, 12, B4, B1, B0);
     })
 }
 
@@ -122,7 +122,7 @@ fn weak() -> Canvas {
 
 fn vulnerability() -> Canvas {
     potion(E1, E3, |canvas| {
-        shield(canvas, 16, EMBLEM_Y - 7, 14, 15, E2, E4);
+        shield(canvas, 16, EMBLEM_Y - 7, 14, 15, E2, E4, E3);
         crack(
             canvas,
             &[(16, EMBLEM_Y - 7), (13, EMBLEM_Y - 2), (18, EMBLEM_Y + 1), (15, EMBLEM_Y + 8)],
