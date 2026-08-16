@@ -174,7 +174,28 @@ fn shadow_half(cx: i32, cy: i32) -> [(i32, i32); 4] {
 }
 
 /// **Directional.** Heater shield: square shoulders, straight sides for the top
-/// 45%, then a taper to a point. `width` is the full span.
+/// half, then a bowed taper to a blunt base. `width` is the full span.
+///
+/// The taper is the part worth stating, because the obvious version is wrong
+/// and shipped. Straight sides for the top 45% and then two straight lines to
+/// a single pixel is not a heater shield, it is a spearhead — the bottom 55% of
+/// the silhouette is a plain triangle, and at 1x the eye reads the point rather
+/// than the plate. Two things fix it and both are needed:
+///
+/// - **The taper bows outward** rather than running straight to the tip. One
+///   extra vertex per flank at `knee` is enough: real plate carries its
+///   material down and *then* turns in, where a straight line does the turning
+///   evenly all the way, which is exactly what reads as a blade.
+/// - **The base is blunt.** A shield is a thing you hide behind, so it ends in
+///   a short flat rather than a point. `half / 5` keeps that proportional, so
+///   the 11px potion emblems and the 28px Aegis get the same silhouette rather
+///   than the small ones degenerating back into the triangle.
+///
+/// The shoulder stayed near where it was (50%, from 45%), and that is worth
+/// saying because moving it was tried first and is the wrong lever: holding the
+/// flanks to 60% makes a *longer* shield rather than a rounder one, and it
+/// leaves so few rows for the taper that the small emblems come out as blobs.
+/// The bow is what does the work.
 ///
 /// The rim is two colours, split at the terminator: `rim` on the top edge and
 /// the left flank, `shade` on the right flank and the taper the light does not
@@ -199,14 +220,7 @@ pub fn shield(
     shade: Rgb,
 ) {
     let half = width / 2;
-    let shoulder = top + height * 45 / 100;
-    let outline = [
-        (cx - half, top),
-        (cx + half, top),
-        (cx + half, shoulder),
-        (cx, top + height),
-        (cx - half, shoulder),
-    ];
+    let outline = shield_outline(cx, top, half, height);
     canvas.poly(&outline, rim);
 
     let mut shadow = Canvas::new(canvas.width, canvas.height);
@@ -214,14 +228,51 @@ pub fn shield(
     shadow.erase_poly(&lit_half(cx, top + height / 2));
     canvas.blit(&shadow, 0, 0);
 
-    let inset = [
-        (cx - half + 2, top + 2),
-        (cx + half - 2, top + 2),
-        (cx + half - 2, shoulder),
-        (cx, top + height - 3),
-        (cx - half + 2, shoulder),
-    ];
-    canvas.poly(&inset, face);
+    // The face is the same silhouette shrunk, not a second hand-written one.
+    // Two outlines that were meant to be parallel drifted apart the moment the
+    // taper stopped being straight - the old inset kept the tip 3px above the
+    // rim's, which is a rim of a different thickness at the bottom than at the
+    // sides. Deriving it means the rim is 2px the whole way round by
+    // construction, and a future change to the profile moves both.
+    canvas.poly(&shield_outline(cx, top + 2, half - 2, height - 4), face);
+}
+
+/// The heater silhouette, as eight points: flat top, straight flanks to
+/// `shoulder`, a bowed turn through `knee`, and a short flat base.
+///
+/// Split out so the rim and the face are the same shape at two sizes — see
+/// `shield`. The four numbers are the whole design and are proportions rather
+/// than tuning: flanks to 50% of the height, a knee at 80%, four fifths of the
+/// span at that knee, and a base `half / 5` wide.
+fn shield_outline(cx: i32, top: i32, half: i32, height: i32) -> [(i32, i32); 8] {
+    let shoulder = top + height * 50 / 100;
+    let knee = top + height * 80 / 100;
+    // Four fifths of the span at the knee is what makes the taper convex: a
+    // straight line from the shoulder to the base would be at roughly half by
+    // this row, so the extra material is the bow.
+    //
+    // Three quarters is the number this wants to be and it is not safe. At the
+    // narrowest authored shield (11px, the potion emblems) integer division
+    // lands `half * 3 / 4` exactly *on* the straight line — a bow of zero, at
+    // precisely the size where the taper has the fewest rows to read in and
+    // where the pointed version was worst. The sweep in
+    // `a_shield_is_not_a_spearhead_at_any_size` is what found that; one call at
+    // one size would not have.
+    let knee_half = half * 4 / 5;
+    // At least 1, so the smallest authored shield (11px wide) still ends in a
+    // 3px flat rather than collapsing to the point this shape exists to avoid.
+    let base = (half / 5).max(1);
+    let bottom = top + height;
+    [
+        (cx - half, top),
+        (cx + half, top),
+        (cx + half, shoulder),
+        (cx + knee_half, knee),
+        (cx + base, bottom),
+        (cx - base, bottom),
+        (cx - knee_half, knee),
+        (cx - half, shoulder),
+    ]
 }
 
 /// **Directional.** Teardrop with the point up — poison, blood, any liquid.
@@ -845,6 +896,64 @@ mod tests {
             "shield's lit rim at {rim:?} is not toward the lamp from its \
              shadow rim at {shade:?}"
         );
+    }
+
+    /// A shield must not read as a spearhead, at any authored size.
+    ///
+    /// This is a *silhouette* rule rather than a lighting one, which is why it
+    /// is its own test: the shape shipped for the whole life of the set with
+    /// straight flanks for the top 45% and then two straight lines to a single
+    /// pixel, so the bottom 55% of it was a plain triangle and the eye read the
+    /// point instead of the plate. Every check that existed stayed green, since
+    /// a triangle is as on-ramp, on-grid and hard-alpha as a shield is.
+    ///
+    /// Two properties, and both are needed. **A blunt base** — the widest
+    /// authored shield and the narrowest must both end in a flat, or the small
+    /// ones degenerate back into the shape this replaced. And **a convex
+    /// taper** — the flank at the knee has to sit outside the straight line
+    /// from the shoulder to the base, because a straight taper turns in evenly
+    /// all the way down and that is exactly what reads as a blade.
+    ///
+    /// Swept over the authored size range rather than one call, for the reason
+    /// the blade sweep covers 32 angles: 26 call sites span 11px to 28px wide,
+    /// and proportions expressed as percentages of height are precisely the
+    /// thing that survives at one size and collapses at another.
+    #[test]
+    fn a_shield_is_not_a_spearhead_at_any_size() {
+        for width in [11, 15, 18, 22, 26, 28] {
+            let height = width + 1;
+            let half = width / 2;
+            let outline = shield_outline(16, 2, half, height);
+            let bottom = 2 + height;
+
+            // The base: the two vertices on the bottom row, spanning a flat.
+            let mut base: Vec<i32> = outline
+                .iter()
+                .filter(|(_, y)| *y == bottom)
+                .map(|(x, _)| *x)
+                .collect();
+            assert_eq!(base.len(), 2, "width {width}: base is not a flat pair");
+            base.sort_unstable();
+            let base_half = (base[1] - base[0]) / 2;
+            assert!(
+                base_half >= 1,
+                "width {width}: the shield ends in a {}px base - a point, which is the \
+                 spearhead this shape exists to stop being",
+                base[1] - base[0] + 1
+            );
+
+            // The bow: knee outside the straight shoulder-to-base line.
+            let shoulder = outline[2];
+            let knee = outline[3];
+            let t = (knee.1 - shoulder.1) as f32 / (bottom - shoulder.1) as f32;
+            let straight = shoulder.0 as f32 + (base[1] - shoulder.0) as f32 * t;
+            assert!(
+                knee.0 as f32 > straight,
+                "width {width}: the knee at x={} is inside the straight taper's {straight:.1}, \
+                 so the flank runs straight from shoulder to base",
+                knee.0
+            );
+        }
     }
 
     /// `raised_fist` takes no colour parameters, so it is checked against the
