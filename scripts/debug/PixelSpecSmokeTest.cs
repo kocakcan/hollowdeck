@@ -56,8 +56,10 @@ public partial class PixelSpecSmokeTest : Node
         TestEveryDefinitionHasAnIcon();
         TestArtgenRampMatchesPixelSpec();
         TestEveryCreatureHasItsFrames();
+        TestEveryCombatEffectHasItsFrames();
         TestNoTweenTransformsAPixelSprite();
         TestTheIdleClipActuallyAdvances();
+        TestACombatEffectAdvancesAndFrees();
         TestTheGlowRingActuallyAdvances();
         TestEveryGlowFrameIsOnTheRamp();
         TestTheGlowRingOpensOnWhatItReplaced();
@@ -704,6 +706,248 @@ public partial class PixelSpecSmokeTest : Node
                 $"assets/sprites/anim/{spriteId}/{clip}_*.png has {loaded.Length} frame(s), " +
                 $"expected {frames} - re-run 'artgen animate'");
         }
+    }
+
+    // Frames per combat effect, restated from tools/artgen/src/icons/fx.rs for
+    // the reason EnemyClips above is restated from anim.rs: nothing imports
+    // across the Rust/C# seam, so two copies is the floor and this is what holds
+    // them level.
+    private const int FxFrameCount = 4;
+
+    // A real frame at 60fps, and how many of them a burst gets to finish in.
+    // Half a second against an authored run of 4 x CombatFx.FrameSeconds =
+    // 0.24s, so the budget is roughly double what the effect asks for - loose
+    // enough that a cadence tweak does not fail this, tight enough that a
+    // one-shot outliving the beat it annotates does.
+    private const double FrameSeconds60Fps = 1.0 / 60.0;
+    private const int BurstBudgetTicks = 30;
+
+    // Three-way, and it needs to be for the same reason the chrome slices do:
+    // the sets that have to agree are PNGs on disk, names in CombatFx, and
+    // effects something actually spawns - and each pair of those can agree while
+    // the third disagrees.
+    //
+    // The third set is the one worth having. Every check on the driver stays
+    // green while nothing calls it, which is precisely what the GlowRing pass
+    // had to add three separate seam assertions for; an effect authored, drawn,
+    // generated and never spawned is 4 files of dead art that `artgen validate`
+    // reports as conforming.
+    private void TestEveryCombatEffectHasItsFrames()
+    {
+        // Reflected rather than listed, so this cannot go stale against the
+        // class it is checking. It also gives the constant *names*, which is
+        // what a call site spells - `CombatFx.Impact`, never "impact".
+        var constants = typeof(CombatFx)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .ToDictionary(f => f.Name, f => (string)f.GetRawConstantValue()!);
+
+        Check("combat_fx_all_lists_every_constant",
+            constants.Values.OrderBy(v => v).SequenceEqual(CombatFx.All.OrderBy(v => v)),
+            $"CombatFx.All [{string.Join(", ", CombatFx.All)}] does not cover the declared " +
+            $"constants [{string.Join(", ", constants.Values)}] - All is what every sweep here " +
+            "drives, so a constant missing from it is an effect nothing checks");
+
+        // On disk: the prefix of every fx_*.png, i.e. the run each frame is in.
+        var onDisk = PngsUnder("res://assets/icons/fx")
+            .Select(path => path.GetFile().GetBaseName())
+            .Select(name => name.Contains('_') ? name[..name.LastIndexOf('_')] : name)
+            .ToHashSet();
+
+        var missing = CombatFx.All.Except(onDisk).OrderBy(x => x).ToList();
+        Check("combat_fx_have_art", missing.Count == 0,
+            $"no frames for: {string.Join(", ", missing)} - run `artgen generate fx` and re-import");
+
+        var orphaned = onDisk.Except(CombatFx.All).OrderBy(x => x).ToList();
+        Check("combat_fx_have_no_orphans", orphaned.Count == 0,
+            $"frame run(s) under assets/icons/fx with no CombatFx name: " +
+            $"{string.Join(", ", orphaned)} - an effect was generated and never wired up");
+
+        foreach (string effect in CombatFx.All)
+        {
+            var frames = ArtAssets.FxFrames(effect);
+            Check($"combat_fx_frames_{effect}", frames.Length == FxFrameCount,
+                $"assets/icons/fx/{effect}_*.png has {frames.Length} frame(s), expected " +
+                $"{FxFrameCount} - re-run `artgen generate fx`");
+        }
+
+        var spawned = ScanSourceForNames("res://scripts/ui", "CombatFx", "CombatFx.cs");
+        var unspawned = constants
+            .Where(entry => !spawned.Contains(entry.Key))
+            .Select(entry => entry.Value)
+            .OrderBy(x => x)
+            .ToList();
+        Check("combat_fx_are_spawned", unspawned.Count == 0,
+            $"effect(s) nothing plays: {string.Join(", ", unspawned)} - declared in CombatFx and " +
+            "reached by no call site, so every other check here passes over dead art");
+    }
+
+    // Collects the member names used as `<type>.<Member>` under a directory,
+    // skipping the file that declares them. A source scan rather than a runtime
+    // observation because these fire off a combat HP diff, which instantiating a
+    // screen would not produce - the same argument the transform and font-size
+    // scans in this file already make.
+    //
+    // **Comment lines are skipped, and that is what makes the check able to
+    // fail.** The first version did not skip them, so a burst deleted from
+    // PopupDelta still counted as spawned: the paragraph above it explaining
+    // when Venom fires names `CombatFx.Venom`, and prose about a call site
+    // reads to a regex exactly like the call site. Measured - repointing that
+    // one spawn at another effect left all 1113 checks green. The same skip is
+    // in ScanSourceForSpriteTransforms below, for the same reason.
+    private static HashSet<string> ScanSourceForNames(string root, string type, string declaringFile)
+    {
+        var pattern = new Regex($@"\b{Regex.Escape(type)}\.(?<member>\w+)");
+        var found = new HashSet<string>();
+        foreach (string path in FilesUnder(root, ".cs"))
+        {
+            if (path.GetFile() == declaringFile) continue;
+            using var reader = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (reader is null) continue;
+            while (!reader.EofReached())
+            {
+                string line = reader.GetLine();
+                if (line.TrimStart().StartsWith("//")) continue;
+                foreach (Match match in pattern.Matches(line))
+                {
+                    found.Add(match.Groups["member"].Value);
+                }
+            }
+        }
+        return found;
+    }
+
+    // The driver half, and the half that matters: four PNGs on disk plus a
+    // TextureRect that never swaps them look identical to every check above.
+    // Same shape as TestTheIdleClipActuallyAdvances, and driven by calling
+    // _Process directly for the same reason - a suite asserts inside _Ready and
+    // cannot yield.
+    //
+    // ReduceMotion is asserted in both positions, again because only one is the
+    // bug: every burst opens on a solid disc with an N8 core, which is the
+    // photosensitive frame and must be declined, and the three frames after it
+    // are the effect and must not be.
+    private void TestACombatEffectAdvancesAndFrees()
+    {
+        bool original = SettingsManager.Instance.ReduceMotion;
+        const string scratch = "user://settings_combatfx_test.json";
+
+        foreach (bool reduceMotion in new[] { false, true })
+        {
+            SettingsManager.Instance.SetReduceMotion(reduceMotion, scratch);
+
+            var host = new Control();
+            AddChild(host);
+            CombatFx.Play(host, new Vector2(200, 120), CombatFx.Impact);
+
+            var rect = host.GetChildren().OfType<TextureRect>().FirstOrDefault();
+            if (rect is null)
+            {
+                Check($"combat_fx_spawns_a_rect_reduce_motion_{reduceMotion}", false,
+                    "CombatFx.Play added no TextureRect - the effect is silently doing nothing");
+                host.QueueFree();
+                continue;
+            }
+
+            var animator = rect.GetChildren().OfType<SpriteAnimator>().FirstOrDefault();
+            if (animator is null)
+            {
+                Check($"combat_fx_attaches_a_driver_reduce_motion_{reduceMotion}", false,
+                    "the effect rect carries no SpriteAnimator - frames on disk with nothing " +
+                    "ticking them render as one held pose");
+                host.QueueFree();
+                continue;
+            }
+
+            string expected = reduceMotion ? "impact_1" : "impact_0";
+            Check($"combat_fx_opens_on_{expected}",
+                rect.Texture?.ResourcePath.Contains(expected) ?? false,
+                $"ReduceMotion={reduceMotion} should open the burst on {expected}, got " +
+                $"{rect.Texture?.ResourcePath ?? "<null>"}");
+
+            // Ticked at a real frame time for a fixed budget, deliberately not
+            // at a multiple of CombatFx.FrameSeconds. Deriving the tick from
+            // the constant under test makes the check unable to observe that
+            // constant at all: the first version stepped by FrameSeconds * 2
+            // and stayed green with FrameSeconds set to 600, which is a burst
+            // that never finishes. So the assertion is a *budget* - a one-shot
+            // that outlives the beat it annotates is the failure, whether it
+            // stalled on one frame or is merely half an hour long.
+            var seen = new HashSet<string>();
+            for (int tick = 0; tick < BurstBudgetTicks; tick++)
+            {
+                seen.Add(rect.Texture?.ResourcePath ?? "<null>");
+                animator._Process(FrameSeconds60Fps);
+            }
+
+            Check($"combat_fx_advances_reduce_motion_{reduceMotion}", seen.Count > 1,
+                $"the burst held one frame ({string.Join(", ", seen)}) across " +
+                $"{BurstBudgetTicks} frames with ReduceMotion={reduceMotion}");
+
+            // Freed at the end of the run, not left behind. A burst that never
+            // frees is one leaked 160x160 Control per hit, which is invisible
+            // for a fight and then is not.
+            Check($"combat_fx_frees_itself_reduce_motion_{reduceMotion}",
+                rect.IsQueuedForDeletion(),
+                "the effect rect is still alive after its run - AttachOneShot's onComplete " +
+                "is what frees it, and nothing else will");
+
+            host.QueueFree();
+        }
+
+        SettingsManager.Instance.SetReduceMotion(original, scratch);
+        if (Godot.FileAccess.FileExists(scratch)) DirAccess.RemoveAbsolute(scratch);
+
+        TestACombatEffectRendersAtIntegerScale();
+    }
+
+    // Section 2, for the one pixel TextureRect in the game that no .tscn
+    // declares - so TestCreatureSpritesRenderAtIntegerScale, which reads
+    // CustomMinimumSize out of a scene file, cannot see it at all.
+    private void TestACombatEffectRendersAtIntegerScale()
+    {
+        var host = new Control();
+        AddChild(host);
+        CombatFx.Play(host, new Vector2(201, 123), CombatFx.Ward);
+
+        var rect = host.GetChildren().OfType<TextureRect>().FirstOrDefault();
+        if (rect is null)
+        {
+            Check("combat_fx_integer_scale_setup", false, "CombatFx.Play added no TextureRect");
+            host.QueueFree();
+            return;
+        }
+
+        float scale = rect.Size.Y / PixelSpec.CreatureGrid;
+        Check("combat_fx_renders_at_an_integer_scale",
+            Mathf.Abs(scale - Mathf.Round(scale)) < 0.001f && scale >= 1f
+            && Mathf.IsEqualApprox(rect.Size.X, rect.Size.Y),
+            $"a burst renders a {PixelSpec.CreatureGrid}px source into {rect.Size} = {scale}x, " +
+            "which is not an integer scale (ART_SPEC section 2)");
+
+        Check("combat_fx_is_nearest_filtered",
+            rect.TextureFilter == CanvasItem.TextureFilterEnum.Nearest,
+            $"a burst filters as {rect.TextureFilter}, not Nearest (ART_SPEC section 3)");
+
+        // Section 9's translation rule. The centre a call site hands over comes
+        // from a Control's GlobalPosition plus half its Size and is fractional
+        // far more often than not; the spawner has to round it, and (201, 123)
+        // is deliberately on neither axis's grid.
+        Check("combat_fx_lands_on_a_whole_source_pixel",
+            rect.Position.X % PixelSpec.SpriteScale == 0 && rect.Position.Y % PixelSpec.SpriteScale == 0,
+            $"a burst sits at {rect.Position}, which is not a multiple of " +
+            $"{PixelSpec.SpriteScale} - a pixel asset placed off the grid renders uneven " +
+            "pixel widths exactly as a fractional scale does (ART_SPEC section 9)");
+
+        // Section 5, indirectly but where it actually bites: the burst is a
+        // Control laid over the enemy row, and the CpuParticles2D it replaced
+        // was a Node2D that could never have taken a click.
+        Check("combat_fx_ignores_the_mouse",
+            rect.MouseFilter == Control.MouseFilterEnum.Ignore,
+            "a burst is hit-testable - a 160x160 Control over the enemy row swallows the " +
+            "click that targets the enemy under it");
+
+        host.QueueFree();
     }
 
     // Frames on disk and a driver that never advances them look identical to

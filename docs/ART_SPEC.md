@@ -18,6 +18,7 @@ Every asset is authored on one of these grids. No in-between sizes.
 | Creatures (enemies, player) | **32x32** | Bosses may use 32x48 when the silhouette needs the height |
 | Background tiles | **64x64** | Must tile seamlessly |
 | Icons (card, relic, potion, map, status, intent) | **32x32** | |
+| Combat effect frames | **32x32** | In `assets/icons/fx/`. A creature's grid, because an effect lands *on* a creature |
 | Chrome 9-slices (frames, bezels, buttons) | **16x16** or **24x24** | In `assets/theme/`. Corners must be ≤ 1/3 of the slice |
 
 `emberlord_vashk.png` is the only current 32x48 sprite; everything else is already 32x32 and
@@ -328,6 +329,17 @@ unfinished. The "something actually draws" set is collected by driving the real 
 the theme back, never from a list of textures — a list only knows the names someone already thought
 of, which is the lesson `TestNoTweenTransformsAPixelSprite` was rewritten over.
 
+The combat effect bursts get the same bidirectional treatment plus a third set, for the reason
+chrome needs one: `CombatFx.All`, the frame runs in `assets/icons/fx/`, and the effects some call
+site actually *spawns*. The third is the one that earns its keep — an effect authored, drawn,
+generated and never played is four files of dead art that `artgen validate` reports as conforming.
+It is collected by scanning `scripts/ui` for the constant, **skipping comment lines**, because the
+first version counted the paragraph explaining when an effect fires as a call site and could not
+fail. Beside it, `TestACombatEffectAdvancesAndFrees` drives the animator directly: frames on disk
+and a driver that never advances them look identical to every other check here, and the burst also
+has to *end* — its budget is asserted against a real 60fps tick rather than against its own frame
+time, since a check that steps by the constant it is testing cannot observe that constant at all.
+
 Events are the one category where the *missing* direction is survivable: `ArtAssets.EventIcon`
 falls back to the map's scroll, so an event authored without art still renders a screen with a
 subject. The check is there for the orphan direction, where a renamed id would drop back to the
@@ -358,16 +370,31 @@ motion.
 
 The rules:
 
-- **Frames come from `artgen animate`** (`tools/artgen/src/anim.rs`), which derives them from the
-  sourced 32x32 art with integer pixel moves and palette substitutions only, and writes one PNG per
-  frame into `assets/sprites/anim/<id>/<clip>_<n>.png`. `SpriteAnimator` plays them by setting
-  `TextureRect.Texture`.
+- **Frames come from `artgen`, and there are two kinds.** *Derived* frames come from
+  `artgen animate` (`tools/artgen/src/anim.rs`), which takes the sourced 32x32 creature art and
+  applies integer pixel moves and palette substitutions only, writing one PNG per frame into
+  `assets/sprites/anim/<id>/<clip>_<n>.png`. *Authored* frames come from plain `artgen generate` —
+  today the combat effect bursts in `tools/artgen/src/icons/fx.rs`, drawn from nothing and written
+  to `assets/icons/fx/<effect>_<n>.png`. Both are played by `SpriteAnimator` setting
+  `TextureRect.Texture`, and the distinction is only about where the pixels come from: an effect has
+  no source tile to displace, so there is nothing for `animate` to derive it from.
+
+  This bullet said "derives" flat for as long as frame animation has existed, which was true when
+  creatures were the only thing animating. It is recorded here rather than quietly rewritten because
+  the same drift is what §1, §2 and §3 of `PIXEL_ART_ROADMAP.md` each cost three phases: a document
+  describing in the present tense a rule the code has since outgrown reads exactly like a document
+  describing one it never met.
 - **The only node property a pixel asset may be tweened on is alpha.** `modulate` resamples nothing.
   `scale`, `rotation`, `rotation_degrees` and `skew` all do.
 - **A translation must land on a whole source pixel** — a multiple of the asset's render factor from
-  §2. A lunge that genuinely travels is allowed to interpolate between snapped endpoints, because the
-  motion is fast and the alternative is no travel at all; a slow idle loop sitting on a fractional
-  offset is not, and that is what the player bob was.
+  §2, through `PixelSpec.SnapTranslation`. A lunge that genuinely travels is allowed to interpolate
+  between snapped endpoints, because the motion is fast and the alternative is no travel at all; a
+  slow idle loop sitting on a fractional offset is not, and that is what the player bob was.
+
+  It applies to a node *placed* as much as to one tweened, which is easy to read past because the
+  rule arrived from a tween. A combat effect is positioned from a `Control`'s `GlobalPosition` plus
+  half its `Size` — fractional far more often than not — and sits there for four frames, which is a
+  longer look at an off-grid pixel asset than any lunge gives.
 - **Deliberately not `AnimatedSprite2D`.** The creature sprites are `TextureRect`s whose
   `CustomMinimumSize` is what §2's assertion reads, and `EnemyView`'s is inside a `VBoxContainer`. A
   `Node2D` there breaks Control layout and that assertion together.
@@ -428,8 +455,8 @@ Three classes, and every shape in `shapes.rs` states its own in its doc comment:
 
 - **Directional** — `blade`, `sword`, `shield`, `droplet`, `flask`, `gem`, `scale`, `skull`,
   `raised_fist`.
-- **Emissive** — `flame`, `orb`, `sparkle`. They *are* the light, locally; giving one a lit side
-  would say it is lit by something else.
+- **Emissive** — `flame`, `orb`, `sparkle`, and the whole of `icons/fx.rs`. They *are* the light,
+  locally; giving one a lit side would say it is lit by something else.
 - **Symmetric** — `eye` (an aperture is a hole, and lighting one side of a hole is a mistake),
   `arrow` and `crack` (marks at 1–3px, no volume), `barb` (the tip is bright because it is thin, and
   `misc.rs` mirrors barbs in pairs).

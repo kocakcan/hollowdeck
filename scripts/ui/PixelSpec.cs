@@ -66,6 +66,20 @@ public static class PixelSpec
     public static Vector2 SizeFor(int gridWidth, int gridHeight, int scale) =>
         new(gridWidth * scale, gridHeight * scale);
 
+    // Section 9's other half: a translation must land on a whole source pixel,
+    // i.e. a multiple of the asset's render factor. Rounds each axis
+    // independently, which is what "whole source pixel" means on a square grid.
+    //
+    // Callers differ in what they measure the offset *from* - PlayerSprite
+    // rounds relative to its rest position, because that position is not itself
+    // a multiple of SpriteScale, while a combat effect rounds its absolute
+    // placement. That choice stays theirs; the rounding does not, because a
+    // second copy of it is a second chance to write `(int)` instead of Round and
+    // bias every offset toward zero.
+    public static Vector2 SnapTranslation(Vector2 offset, int scale) => new(
+        Mathf.Round(offset.X / scale) * scale,
+        Mathf.Round(offset.Y / scale) * scale);
+
     // Nearest filtering on every pixel asset (section 3). The engine default
     // is Linear, which blurs pixel art at any scale.
     //

@@ -912,6 +912,10 @@ beside `ART_SPEC.md` the way a backlog sits beside a rule set. It is not a phase
 one. Its first three items have shipped — sprite frame animation, chrome 9-slices, then the animated
 glow ring — and all three closed a rule `ART_SPEC.md` already stated and nothing enforced rather than
 adding polish. That was the whole of that category, so what is left in that file is ordinary backlog.
+One light direction and the combat effect frames have since shipped too; the latter is the first
+ordinary-backlog entry to land, and it retired the last smooth-gradient art on the combat screen —
+a `CpuParticles2D` spark that broke three ART_SPEC rules in a spot where neither the transform scan
+nor `artgen validate` could reach it.
 The 9-slices also paid off half of §7's "Known cost, accepted" below: the ornament that was supposed
 to carry the illuminated-manuscript identity after Cinzel and IM Fell English went. The rest of that
 file is worth reading before touching anything visual.
@@ -944,8 +948,10 @@ is the second half of this item; both entries need a replacement affordance, not
   `AudioMusic` synthesises rather than loads, per-act and boss variants are parameter work, not an
   asset budget — the cheapest atmosphere available.
 - **An animation-speed setting.** `ReduceMotion` is binary and gates only decorative motion (screen
-  fade, reward flourishes, fog, one particle burst). The moment-to-moment card and combat juice is
-  ungated, which is exactly where a speed control starts to matter around the tenth run.
+  fade, reward flourishes, fog) plus the two photosensitive flash frames — the `hit` clip's and the
+  combat bursts', both through `SpriteAnimator.FlashOpeningClips`. The moment-to-moment card and
+  combat juice is ungated, which is exactly where a speed control starts to matter around the tenth
+  run.
 
 **Already done — do not rebuild:** keyword tooltips over cards and intents, draw/discard/exhaust pile
 inspection, and a damage preview that resolves live Strength and Weak *and* the aimed enemy's

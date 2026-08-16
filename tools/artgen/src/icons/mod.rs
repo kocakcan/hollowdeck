@@ -1,14 +1,23 @@
-//! The generated icon set — 206 icons across eight categories, replacing the
+//! The generated set — 222 PNGs across nine categories, replacing the
 //! game-icons.net SVGs (79 of them) plus the five event illustrations that
 //! never had a vector equivalent at all.
 //!
-//! Seven of the eight are icons in the ordinary sense and land under
-//! `assets/icons/<category>/`. `chrome` is the exception: it is 9-slice border
-//! art on the 16/24 grids and writes to `assets/theme/`, which is what puts it
-//! under `validate::expected_grid`'s `/theme/` rule rather than the 32x32 icon
-//! one. `main::output_dir` holds that single divergence; the alternative — a
-//! separate `artgen chrome` subcommand — would have put chrome outside the
-//! plain `generate` that CI re-runs to catch committed art drifting from source.
+//! Seven of the nine are icons in the ordinary sense: one file per definition
+//! id, under `assets/icons/<category>/`. The other two each break one half of
+//! that and are worth knowing apart, because they break *different* halves:
+//!
+//! - **`chrome`** breaks the location. It is 9-slice border art on the 16/24
+//!   grids and writes to `assets/theme/`, which is what puts it under
+//!   `validate::expected_grid`'s `/theme/` rule rather than the 32x32 icon one.
+//!   `main::output_dir` holds that single divergence; the alternative — a
+//!   separate `artgen chrome` subcommand — would have put chrome outside the
+//!   plain `generate` that CI re-runs to catch committed art drifting from
+//!   source.
+//! - **`fx`** breaks the naming. It lands in `assets/icons/fx/` like an
+//!   ordinary category and needs no arm in `output_dir` at all, but its files
+//!   are a *frame sequence* (`impact_0.png` … `venom_3.png`) rather than one
+//!   per content id, so the smoke test's `AssertIconsMatch` sweep does not
+//!   apply to it and it carries a coverage check of its own.
 //!
 //! Why generate rather than hand-place pixels in an editor: `ArtAssets.cs`
 //! resolves art by convention (`assets/icons/cards/<card_id>.png`), so the
@@ -31,6 +40,7 @@ use crate::palette::*;
 mod cards;
 mod chrome;
 mod events;
+mod fx;
 mod light;
 mod misc;
 mod potions;
@@ -77,5 +87,6 @@ pub fn all() -> Vec<Icon> {
     icons.extend(misc::icons());
     icons.extend(events::icons());
     icons.extend(chrome::icons());
+    icons.extend(fx::icons());
     icons
 }

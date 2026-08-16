@@ -48,6 +48,11 @@ public sealed partial class SpriteAnimator : Node
     private const string IdleClip = "idle";
     private const double DefaultFrameTime = 0.1;
 
+    // The synthetic clip name AttachOneShot registers its frames under. Not in
+    // FrameTime above, because a one-shot's cadence comes from its caller - see
+    // _frameTime.
+    private const string OneShotClip = "one_shot";
+
     // The clip sets, named here rather than typed out at each Attach call.
     //
     // They were string literals at the two call sites, which made the clip names
@@ -76,6 +81,7 @@ public sealed partial class SpriteAnimator : Node
     private EndBehavior _onEnd = EndBehavior.Loop;
     private bool _held;
     private Action? _onComplete;
+    private double? _frameTime;
 
     /// <summary>
     /// Attaches an animator to <paramref name="target"/>, preloading every
@@ -108,6 +114,39 @@ public sealed partial class SpriteAnimator : Node
         target.AddChild(animator);
         animator.PlayIdle();
         animator.ScatterIdlePhase();
+        return animator;
+    }
+
+    /// <summary>
+    /// Attaches an animator that plays one run of <paramref name="frames"/> and
+    /// stops on the last one, invoking <paramref name="onComplete"/> — which is
+    /// where a transient effect node frees itself. Returns null on an empty run.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not routed through <see cref="Attach"/>: that one resolves
+    /// frames from a sprite id and requires an idle clip, and a combat burst
+    /// (tools/artgen/src/icons/fx.rs) has neither a sprite nor a rest state. It
+    /// is the same driver underneath — _Process, ApplyFrame and the Hold end
+    /// behaviour are untouched — which is the point. A burst is a pixel asset
+    /// animating by frame swap, so it belongs to this class rather than to a
+    /// second one that would have to re-learn ART_SPEC section 9.
+    ///
+    /// The clip is registered under OneShotClip and that name is in
+    /// FlashOpeningClips, so the Reduce Motion rule reaches these for free: an
+    /// effect's frame 0 is its brightest, exactly as the hit clip's is, and it
+    /// gets declined rather than softened by the mechanism already written for
+    /// that. A per-effect gate would have been a second answer to one question.
+    /// </remarks>
+    public static SpriteAnimator? AttachOneShot(
+        TextureRect target, Texture2D[] frames, double frameTime, Action? onComplete = null)
+    {
+        if (frames.Length == 0) return null;
+
+        var animator = new SpriteAnimator { Name = "SpriteAnimator", _target = target };
+        animator._clips[OneShotClip] = frames;
+        animator._frameTime = frameTime;
+        target.AddChild(animator);
+        animator.Play(OneShotClip, EndBehavior.Hold, onComplete);
         return animator;
     }
 
@@ -215,7 +254,14 @@ public sealed partial class SpriteAnimator : Node
     // So the flash is *declined* - the clip starts on its recoil frame instead,
     // keeping the hit legible - which is ScreenFade's own rule for this setting:
     // decline the effect rather than soften it.
-    private static readonly HashSet<string> FlashOpeningClips = new() { "hit" };
+    //
+    // OneShotClip is here for the same reason and it is not a widening of the
+    // rule: every combat effect burst opens on a solid disc with an N8 core,
+    // which is the same full-brightness frame the hit clip opens on. It is
+    // listed by clip name rather than per effect so a fifth burst inherits the
+    // gate instead of needing one - the CardUpgrade.ShouldScale failure shape,
+    // and this is the side of it that stays silent.
+    private static readonly HashSet<string> FlashOpeningClips = new() { "hit", OneShotClip };
 
     private void Play(string clip, EndBehavior onEnd, Action? onComplete = null)
     {
@@ -247,7 +293,7 @@ public sealed partial class SpriteAnimator : Node
         if (_held) return;
 
         _elapsed += delta;
-        double perFrame = FrameTime.TryGetValue(_clip, out double t) ? t : DefaultFrameTime;
+        double perFrame = _frameTime ?? (FrameTime.TryGetValue(_clip, out double t) ? t : DefaultFrameTime);
         if (_elapsed < perFrame) return;
         _elapsed -= perFrame;
 

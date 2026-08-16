@@ -33,12 +33,28 @@ public static class ArtAssets
     // that is *generated* for every id is missing only because `artgen animate`
     // was not re-run, and a silent fallback would make that indistinguishable
     // from working. Callers get an empty array and the smoke test fails.
-    public static Texture2D[] AnimFrames(string spriteId, string clip)
+    public static Texture2D[] AnimFrames(string spriteId, string clip) =>
+        FrameRun($"res://assets/sprites/anim/{spriteId}/{clip}");
+
+    // The combat effect bursts (tools/artgen/src/icons/fx.rs). Same loader, and
+    // deliberately so: these are a frame run rather than an icon, which is the
+    // one thing about them that does not follow from living under
+    // assets/icons/. Everything the sprite frames' comment above says about the
+    // missing-art path applies here unchanged - CombatFx names the effect in a
+    // pushed error and PixelSpecSmokeTest fails in both directions.
+    public static Texture2D[] FxFrames(string effect) =>
+        FrameRun($"res://assets/icons/fx/{effect}");
+
+    // Loads <prefix>_0.png, _1.png, ... until the first gap, so the frame count
+    // lives on disk. One implementation rather than two near-identical loops:
+    // the only thing that differs between a creature clip and an effect burst
+    // is where the run starts.
+    private static Texture2D[] FrameRun(string prefix)
     {
         var frames = new List<Texture2D>();
         for (int i = 0; ; i++)
         {
-            var texture = Load($"res://assets/sprites/anim/{spriteId}/{clip}_{i}.png");
+            var texture = Load($"{prefix}_{i}.png");
             if (texture is null) break;
             frames.Add(texture);
         }
