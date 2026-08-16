@@ -606,11 +606,16 @@ fn metallicize() -> Canvas {
     let mut canvas = new_icon();
 
     // Breastplate. Pauldrons wider than the waist, with a notch cut for the
-    // neck: a plate that simply tapered from square shoulders to a point read
-    // as a heater shield, which is the one shape this icon had to stay clear
-    // of - Block already has three shields.
-    canvas.poly(&[(3, 8), (13, 8), (16, 11), (19, 8), (29, 8), (26, 15), (24, 26), (16, 29), (8, 26), (6, 15)], B2);
-    canvas.poly(&[(6, 10), (12, 10), (16, 13), (20, 10), (26, 10), (24, 15), (22, 25), (16, 27), (10, 25), (8, 15)], B1);
+    // neck: those are what keep it clear of a heater shield, which is the one
+    // shape this icon has to stay clear of - Block already has three shields.
+    //
+    // The hem used to be a point, on the reasoning that a plate tapering to one
+    // did NOT read as a shield. That was true of the old shield and stopped
+    // being true when the shield gained a blunt base: a point is now the thing
+    // that reads as the shape this was avoiding, and it is the notch and the
+    // pauldrons doing the separating.
+    canvas.poly(&breastplate_outline(16, 8, 13, 15, 29), B2);
+    canvas.poly(&breastplate_outline(16, 10, 10, 15, 27), B1);
     // Pauldron caps, one step brighter, so the shoulders read as separate
     // pieces bolted on rather than as part of one silhouette.
     canvas.rect(3, 8, 5, 4, B3);
@@ -1848,8 +1853,12 @@ fn bramble_mail() -> Canvas {
     // Steel rather than the neutral ramp, so it lands in the same family as the
     // Metallicize card - both are a plate you wear, and the green is the only
     // thing that should be doing the separating.
-    canvas.poly(&[(4, 8), (13, 8), (16, 11), (19, 8), (28, 8), (25, 16), (23, 26), (16, 29), (9, 26), (7, 16)], B2);
-    canvas.poly(&[(7, 10), (12, 10), (16, 13), (20, 10), (25, 10), (23, 16), (21, 25), (16, 27), (11, 25), (9, 16)], B1);
+    //
+    // The same `breastplate_outline` the Metallicize card draws, rather than a
+    // transcribed copy of it: "quotes metallicize's pauldroned plate" was the
+    // stated intent and two drifted literals were what implemented it.
+    canvas.poly(&breastplate_outline(16, 8, 12, 16, 29), B2);
+    canvas.poly(&breastplate_outline(16, 10, 9, 16, 27), B1);
     canvas.rect(4, 8, 5, 4, B3);
     canvas.rect(23, 8, 5, 4, B3);
 
@@ -1885,13 +1894,38 @@ fn bramble_guard() -> Canvas {
 fn scaled_hide() -> Canvas {
     let mut canvas = new_icon();
 
-    // A pelt: wide at the shoulders, pinched at the waist, hem coming to a
-    // point. Leather rather than steel, so the scales laid on it are visibly
-    // *on* something - the first draft was a dark blue backing that vanished
-    // against the frame and left the card reading as a square of scales.
-    let hide = [(7, 4), (25, 4), (28, 11), (23, 21), (16, 30), (9, 21), (4, 11)];
+    // A pelt: wide at the shoulders, pinched at the waist, blunt hem. Leather
+    // rather than steel, so the scales laid on it are visibly *on* something -
+    // the first draft was a dark blue backing that vanished against the frame
+    // and left the card reading as a square of scales.
+    //
+    // The hem takes the shared `blunt_taper` rather than running straight to a
+    // point. This was the most triangular thing left in the set - at 1x the
+    // long straight run from the waist to a single pixel read as a blue diamond
+    // rather than as a garment, which is the same misread the shield fix was
+    // reported for.
+    // `hide` is the whole silhouette and has to stay that way: it is reused as
+    // the clipping mask at the bottom of this function, so a version of it that
+    // stops at the waist clips the icon to a wedge.
+    let hem = blunt_taper(16, 7, 26, 30);
+    let hide = [
+        (7, 4),
+        (25, 4),
+        (28, 11),
+        (23, 21),
+        hem[0],
+        hem[1],
+        hem[2],
+        hem[3],
+        (9, 21),
+        (4, 11),
+    ];
     canvas.poly(&hide, N3);
-    canvas.poly(&[(9, 6), (23, 6), (25, 12), (21, 20), (16, 27), (11, 20), (7, 12)], N4);
+    let inner = blunt_taper(16, 5, 25, 28);
+    canvas.poly(
+        &[(9, 6), (23, 6), (25, 12), (21, 20), inner[0], inner[1], inner[2], inner[3], (11, 20), (7, 12)],
+        N4,
+    );
 
     for (row, y) in [9, 15, 21].iter().enumerate() {
         let stagger = if row % 2 == 0 { 0 } else { 4 };
