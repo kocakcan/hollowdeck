@@ -277,11 +277,23 @@ fn hollow_crown() -> Canvas {
 /// 12 Block at combat start — the heaviest defensive relic, so a full tower
 /// shield with a centre ridge rather than the heater shape the lighter ones
 /// use. A plain rectangle was tried and read as a door.
+///
+/// It drew its own outline from two literals until the shield fix, and so was
+/// the one shield in the game that kept the straight-taper-to-a-point profile
+/// after every `shapes::shield` caller had been corrected — plus the drifted rim
+/// that came with hand-writing the inset (tip 3px above the outer, i.e. thicker
+/// at the bottom than at the sides). `tower_shield` owns both now. What still
+/// separates it from `bulwark_charm`'s heater is the bevelled shoulders, the
+/// long flanks and the ridge; the taper is deliberately the same, because a
+/// point was never the distinction.
+///
+/// The rim/face pairing was also inverted against the rest of the set — a rim
+/// *darker* than the face, where every `shield` caller passes a rim brighter
+/// than its face — which is why it read as flat and concentric rather than lit.
 fn iron_resolve() -> Canvas {
     let mut canvas = new_icon();
-    canvas.poly(&[(8, 5), (24, 5), (26, 9), (26, 21), (16, 30), (6, 21), (6, 9)], N4);
-    canvas.poly(&[(9, 7), (23, 7), (24, 10), (24, 20), (16, 27), (8, 20), (8, 10)], N6);
-    canvas.rect(15, 7, 3, 20, N7);
+    tower_shield(&mut canvas, 16, 4, 20, 26, N5, N7, N6);
+    canvas.rect(15, 8, 3, 18, N7);
     canvas.rect(8, 13, 17, 2, N4);
     canvas.disc(16, 15, 3, N4);
     canvas.disc(16, 15, 1, N7);
@@ -586,8 +598,17 @@ fn vengeful_spirit() -> Canvas {
 /// what `frugal_satchel` already is.
 fn warded_bracer() -> Canvas {
     let mut canvas = new_icon();
-    canvas.poly(&[(6, 6), (26, 6), (24, 27), (16, 30), (8, 27)], N5);
-    canvas.poly(&[(8, 8), (24, 8), (22, 25), (16, 27), (10, 25)], N6);
+    // The shared `blunt_taper` hem, not a point. A vambrace is a plate you hide
+    // an arm behind, so it belongs to the same family as the shields even
+    // though it is not one - and the open mouth at the top is what keeps it
+    // from reading as `frugal_satchel`'s pouch, not the pointed bottom.
+    let hem = blunt_taper(16, 8, 27, 30);
+    canvas.poly(&[(6, 6), (26, 6), (24, 24), hem[0], hem[1], hem[2], hem[3], (8, 24)], N5);
+    let inner_hem = blunt_taper(16, 6, 26, 28);
+    canvas.poly(
+        &[(8, 8), (24, 8), (22, 24), inner_hem[0], inner_hem[1], inner_hem[2], inner_hem[3], (10, 24)],
+        N6,
+    );
     canvas.disc(16, 6, 10, N5);
     canvas.rect(6, 6, 21, 3, N5);
     canvas.disc(16, 6, 8, N2);

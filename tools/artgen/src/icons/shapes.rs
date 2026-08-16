@@ -241,38 +241,177 @@ pub fn shield(
 /// `shoulder`, a bowed turn through `knee`, and a short flat base.
 ///
 /// Split out so the rim and the face are the same shape at two sizes — see
-/// `shield`. The four numbers are the whole design and are proportions rather
-/// than tuning: flanks to 50% of the height, a knee at 80%, four fifths of the
-/// span at that knee, and a base `half / 5` wide.
+/// `shield`. Its own two numbers are proportions rather than tuning: flanks to
+/// 50% of the height and a knee at 80%. What happens *below* that knee belongs
+/// to `blunt_taper`, which every plate in the set shares.
 fn shield_outline(cx: i32, top: i32, half: i32, height: i32) -> [(i32, i32); 8] {
     let shoulder = top + height * 50 / 100;
     let knee = top + height * 80 / 100;
-    // Four fifths of the span at the knee is what makes the taper convex: a
-    // straight line from the shoulder to the base would be at roughly half by
-    // this row, so the extra material is the bow.
-    //
-    // Three quarters is the number this wants to be and it is not safe. At the
-    // narrowest authored shield (11px, the potion emblems) integer division
-    // lands `half * 3 / 4` exactly *on* the straight line — a bow of zero, at
-    // precisely the size where the taper has the fewest rows to read in and
-    // where the pointed version was worst. The sweep in
-    // `a_shield_is_not_a_spearhead_at_any_size` is what found that; one call at
-    // one size would not have.
-    let knee_half = half * 4 / 5;
-    // At least 1, so the smallest authored shield (11px wide) still ends in a
-    // 3px flat rather than collapsing to the point this shape exists to avoid.
-    let base = (half / 5).max(1);
     let bottom = top + height;
+    let [knee_r, base_r, base_l, knee_l] = blunt_taper(cx, half, knee, bottom);
     [
         (cx - half, top),
         (cx + half, top),
         (cx + half, shoulder),
-        (cx + knee_half, knee),
-        (cx + base, bottom),
-        (cx - base, bottom),
-        (cx - knee_half, knee),
+        knee_r,
+        base_r,
+        base_l,
+        knee_l,
         (cx - half, shoulder),
     ]
+}
+
+/// The bottom four vertices every plate in the set shares: a bowed knee on each
+/// flank, then a short flat base. Returned right-knee, right-base, left-base,
+/// left-knee, so a caller splices them into a clockwise outline between its own
+/// two shoulder points.
+///
+/// This is the whole of "a shield is a plate you hide behind, not a spearhead",
+/// in one place. It was inlined in `shield_outline` and therefore reached only
+/// the shapes that call `shield` — `iron_resolve` drew its own tower shield from
+/// two literals and kept the straight-taper-to-a-point profile the fix had
+/// already deleted, along with the drifted rim that came with it. A rule that
+/// lives in one shape's body is a rule the next shape does not inherit.
+///
+/// Four fifths of the span at the knee is what makes the taper convex: a
+/// straight line from the shoulder to the base would be at roughly half by this
+/// row, so the extra material is the bow.
+///
+/// Three quarters is the number this wants to be and it is not safe. At the
+/// narrowest authored shield (11px, the potion emblems) integer division lands
+/// `half * 3 / 4` exactly *on* the straight line — a bow of zero, at precisely
+/// the size where the taper has the fewest rows to read in and where the pointed
+/// version was worst. The sweep in `no_plate_outline_is_a_spearhead_at_any_size`
+/// is what found that; one call at one size would not have.
+///
+/// `knee_y` is an explicit row rather than a percentage of the shoulder-to-base
+/// span, and that is not a style choice. `shield_outline` places its knee at 80%
+/// of the *total* height with the shoulder at 50%; re-deriving that as 60% of the
+/// span between them lands on a different row under integer division (at
+/// `height = 25`, row 20 against row 19), which would have moved all 23 icons the
+/// shield fix already shipped.
+pub fn blunt_taper(cx: i32, half: i32, knee_y: i32, bottom_y: i32) -> [(i32, i32); 4] {
+    let knee_half = half * 4 / 5;
+    // At least 1, so the smallest authored shield (11px wide) still ends in a
+    // 3px flat rather than collapsing to the point this shape exists to avoid.
+    let base = (half / 5).max(1);
+    [
+        (cx + knee_half, knee_y),
+        (cx + base, bottom_y),
+        (cx - base, bottom_y),
+        (cx - knee_half, knee_y),
+    ]
+}
+
+/// The tower silhouette: a flat top on bevelled shoulders, long straight flanks,
+/// and the same `blunt_taper` bottom the heater shield has.
+///
+/// A tower is a different object from a heater and has to keep reading as one —
+/// it is the 12-Block relic standing beside `bulwark_charm`'s heater, and two
+/// icons for two relics that resolve to the same silhouette is a worse bug than
+/// the one this fixes. The separation is the bevel and the long flanks, which is
+/// where a tower's material actually differs; the *taper* is shared, because a
+/// pointed bottom was never the distinction, it was just the old shape.
+fn tower_shield_outline(cx: i32, top: i32, half: i32, height: i32) -> [(i32, i32); 10] {
+    // The top flat is inset and the flanks bevel out to full span just below it.
+    // That shoulder is what says "tower" at 1x, so it is proportional rather
+    // than a constant 2px: at the sizes below 16 a fixed inset eats the whole
+    // top edge and the shape reads as a heater again.
+    let top_half = half * 4 / 5;
+    let bevel = top + height * 16 / 100;
+    let shoulder = top + height * 64 / 100;
+    let knee = top + height * 86 / 100;
+    let bottom = top + height;
+    let [knee_r, base_r, base_l, knee_l] = blunt_taper(cx, half, knee, bottom);
+    [
+        (cx - top_half, top),
+        (cx + top_half, top),
+        (cx + half, bevel),
+        (cx + half, shoulder),
+        knee_r,
+        base_r,
+        base_l,
+        knee_l,
+        (cx - half, shoulder),
+        (cx - half, bevel),
+    ]
+}
+
+/// The pauldroned breastplate, as eleven points: a flat top notched for the
+/// neck, shoulders wider than the waist, and the shared `blunt_taper` hem.
+///
+/// `metallicize` and `bramble_mail` each carried their own copy of this — the
+/// second quotes the first by design ("the same substance at two scales"), and
+/// what it actually quoted was a hand-transcribed near-copy that had drifted on
+/// every number: pauldron half 13 against 12, waist row 15 against 16, caps at
+/// x=3/24 against 4/23. Two literals that are meant to be one shape is the
+/// defect `shield` removed from its own rim and face, one icon family over.
+///
+/// The hem was a point on both, which is the third instance of the same thing:
+/// `metallicize`'s comment says a plate "that simply tapered from square
+/// shoulders to a point read as a heater shield, which is the one shape this
+/// icon had to stay clear of" — and that was true of the *old* heater. Now that
+/// a shield ends in a flat, a point is what makes a breastplate read as the
+/// shape it was avoiding. The notch and the pauldrons are what separate them,
+/// and they still do.
+pub fn breastplate_outline(
+    cx: i32,
+    top: i32,
+    half: i32,
+    waist_y: i32,
+    bottom_y: i32,
+) -> [(i32, i32); 11] {
+    let waist = half - 3;
+    let knee = waist_y + (bottom_y - waist_y) * 70 / 100;
+    let [knee_r, base_r, base_l, knee_l] = blunt_taper(cx, waist, knee, bottom_y);
+    [
+        (cx - half, top),
+        (cx - 3, top),
+        (cx, top + 3),
+        (cx + 3, top),
+        (cx + half, top),
+        (cx + waist, waist_y),
+        knee_r,
+        base_r,
+        base_l,
+        knee_l,
+        (cx - waist, waist_y),
+    ]
+}
+
+/// **Directional.** Tower shield: bevelled square shoulders, long straight
+/// flanks, blunt base. `width` is the full span.
+///
+/// `shield`'s three passes, in `shield`'s order, over `tower_shield_outline` —
+/// see that function for why the order is load-bearing (the shadow pass paints
+/// the whole unlit *silhouette*, and it is the inset face landing last that cuts
+/// it back to a rim; drawing the face first buries the interior in `shade`).
+///
+/// The face is derived from the same outline rather than hand-written, which is
+/// the specific defect this replaced: `iron_resolve`'s two literals had drifted
+/// so that the inner tip sat 3px above the outer, i.e. a rim thicker at the
+/// bottom than at the sides. Deriving it makes the rim 2px the whole way round
+/// by construction, and a future change to the profile moves both.
+pub fn tower_shield(
+    canvas: &mut Canvas,
+    cx: i32,
+    top: i32,
+    width: i32,
+    height: i32,
+    face: Rgb,
+    rim: Rgb,
+    shade: Rgb,
+) {
+    let half = width / 2;
+    let outline = tower_shield_outline(cx, top, half, height);
+    canvas.poly(&outline, rim);
+
+    let mut shadow = Canvas::new(canvas.width, canvas.height);
+    shadow.poly(&outline, shade);
+    shadow.erase_poly(&lit_half(cx, top + height / 2));
+    canvas.blit(&shadow, 0, 0);
+
+    canvas.poly(&tower_shield_outline(cx, top + 2, half - 2, height - 4), face);
 }
 
 /// **Directional.** Teardrop with the point up — poison, blood, any liquid.
@@ -898,7 +1037,57 @@ mod tests {
         );
     }
 
-    /// A shield must not read as a spearhead, at any authored size.
+    /// The two silhouette rules, over one outline. Shared so that a new plate
+    /// shape inherits the check by being added to the sweep below rather than by
+    /// someone remembering to re-derive what "not a spearhead" means.
+    ///
+    /// Both properties are needed. **A blunt base** — the widest authored shield
+    /// and the narrowest must both end in a flat, or the small ones degenerate
+    /// back into the shape this replaced. And **a convex taper** — the flank at
+    /// the knee has to sit outside the straight line from the shoulder to the
+    /// base, because a straight taper turns in evenly all the way down and that
+    /// is exactly what reads as a blade.
+    ///
+    /// The shoulder and the knee are found by row rather than by index, because
+    /// the heater carries eight vertices and the tower ten: on the right flank,
+    /// the lowest vertex above the base is the knee and the one above it is the
+    /// shoulder. Indexing would have made this helper silently wrong for the
+    /// second caller while staying green for the first.
+    fn assert_not_a_spearhead(outline: &[(i32, i32)], bottom: i32, what: &str) {
+        let mut base: Vec<i32> = outline
+            .iter()
+            .filter(|(_, y)| *y == bottom)
+            .map(|(x, _)| *x)
+            .collect();
+        assert_eq!(base.len(), 2, "{what}: base is not a flat pair");
+        base.sort_unstable();
+        assert!(
+            (base[1] - base[0]) / 2 >= 1,
+            "{what}: ends in a {}px base - a point, which is the spearhead this \
+             shape exists to stop being",
+            base[1] - base[0] + 1
+        );
+
+        let mut flank: Vec<(i32, i32)> = outline
+            .iter()
+            .copied()
+            .filter(|(x, y)| *x > 16 && *y < bottom)
+            .collect();
+        flank.sort_by_key(|(_, y)| *y);
+        let knee = flank[flank.len() - 1];
+        let shoulder = flank[flank.len() - 2];
+
+        let t = (knee.1 - shoulder.1) as f32 / (bottom - shoulder.1) as f32;
+        let straight = shoulder.0 as f32 + (base[1] - shoulder.0) as f32 * t;
+        assert!(
+            knee.0 as f32 > straight,
+            "{what}: the knee at x={} is inside the straight taper's {straight:.1}, \
+             so the flank runs straight from shoulder to base",
+            knee.0
+        );
+    }
+
+    /// No plate in the set may read as a spearhead, at any authored size.
     ///
     /// This is a *silhouette* rule rather than a lighting one, which is why it
     /// is its own test: the shape shipped for the whole life of the set with
@@ -907,51 +1096,69 @@ mod tests {
     /// point instead of the plate. Every check that existed stayed green, since
     /// a triangle is as on-ramp, on-grid and hard-alpha as a shield is.
     ///
-    /// Two properties, and both are needed. **A blunt base** — the widest
-    /// authored shield and the narrowest must both end in a flat, or the small
-    /// ones degenerate back into the shape this replaced. And **a convex
-    /// taper** — the flank at the knee has to sit outside the straight line
-    /// from the shoulder to the base, because a straight taper turns in evenly
-    /// all the way down and that is exactly what reads as a blade.
-    ///
     /// Swept over the authored size range rather than one call, for the reason
-    /// the blade sweep covers 32 angles: 26 call sites span 11px to 28px wide,
+    /// the blade sweep covers 32 angles: the call sites span 11px to 28px wide,
     /// and proportions expressed as percentages of height are precisely the
-    /// thing that survives at one size and collapses at another.
+    /// thing that survives at one size and collapses at another. Fixing the
+    /// heater alone is what left the tower pointed for a release, so both
+    /// outlines are driven here.
+    ///
+    /// **What this does not cover, stated so it is not mistaken for coverage:**
+    /// the four hand-drawn plates that splice `blunt_taper` onto their own tops
+    /// — `metallicize`, `bramble_mail` and `scaled_hide` in `cards.rs`, and
+    /// `warded_bracer` in `relics.rs`. Their outlines are literals inside icon
+    /// bodies rather than functions, so nothing here can reach them; they are
+    /// held only by the shared taper they call. This is the same standing
+    /// exemption ART_SPEC section 10 records for the hand-placed highlights.
     #[test]
-    fn a_shield_is_not_a_spearhead_at_any_size() {
+    fn no_plate_outline_is_a_spearhead_at_any_size() {
         for width in [11, 15, 18, 22, 26, 28] {
             let height = width + 1;
             let half = width / 2;
-            let outline = shield_outline(16, 2, half, height);
             let bottom = 2 + height;
 
-            // The base: the two vertices on the bottom row, spanning a flat.
-            let mut base: Vec<i32> = outline
-                .iter()
-                .filter(|(_, y)| *y == bottom)
-                .map(|(x, _)| *x)
-                .collect();
-            assert_eq!(base.len(), 2, "width {width}: base is not a flat pair");
-            base.sort_unstable();
-            let base_half = (base[1] - base[0]) / 2;
-            assert!(
-                base_half >= 1,
-                "width {width}: the shield ends in a {}px base - a point, which is the \
-                 spearhead this shape exists to stop being",
-                base[1] - base[0] + 1
+            assert_not_a_spearhead(
+                &shield_outline(16, 2, half, height),
+                bottom,
+                &format!("heater at width {width}"),
             );
+            assert_not_a_spearhead(
+                &tower_shield_outline(16, 2, half, height),
+                bottom,
+                &format!("tower at width {width}"),
+            );
+        }
+    }
 
-            // The bow: knee outside the straight shoulder-to-base line.
-            let shoulder = outline[2];
-            let knee = outline[3];
-            let t = (knee.1 - shoulder.1) as f32 / (bottom - shoulder.1) as f32;
-            let straight = shoulder.0 as f32 + (base[1] - shoulder.0) as f32 * t;
+    /// The shared taper itself, held directly rather than only through the two
+    /// outlines that splice it in.
+    ///
+    /// Worth its own test because `blunt_taper` is now the single place the rule
+    /// lives: a caller that stopped using it would fail the sweep above, but a
+    /// caller that kept using it while the *primitive* collapsed would fail
+    /// nothing else. `(half / 5).max(1)` is exactly the kind of clamp that reads
+    /// as belt-and-braces and is load-bearing at 11px, where `half / 5` is 0.
+    #[test]
+    fn the_shared_taper_always_ends_in_a_flat() {
+        for width in [11, 15, 18, 22, 26, 28] {
+            let half = width / 2;
+            let [knee_r, base_r, base_l, knee_l] = blunt_taper(16, half, 20, 24);
+
+            assert_eq!(base_r.1, 24, "width {width}: right base is off the bottom row");
+            assert_eq!(base_l.1, 24, "width {width}: left base is off the bottom row");
             assert!(
-                knee.0 as f32 > straight,
-                "width {width}: the knee at x={} is inside the straight taper's {straight:.1}, \
-                 so the flank runs straight from shoulder to base",
-                knee.0
+                base_r.0 > base_l.0,
+                "width {width}: the base collapsed to a {}px point",
+                base_r.0 - base_l.0 + 1
+            );
+            assert!(
+                knee_r.0 > base_r.0 && knee_l.0 < base_l.0,
+                "width {width}: the knee is no wider than the base, so there is no taper"
+            );
+            assert_eq!(
+                (knee_r.0 - 16, knee_r.1),
+                (16 - knee_l.0, knee_l.1),
+                "width {width}: the taper is not symmetric about the centre"
             );
         }
     }
