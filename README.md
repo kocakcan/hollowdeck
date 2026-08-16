@@ -81,7 +81,7 @@ data/         acts / cards / relics / potions / enemies / events / blessings / t
               the content layer
 assets/       sprites, icons, fonts, backgrounds, themes (see CREDITS.md for licensing)
 tools/        run-smoke-tests.sh
-  artgen/     Rust asset tool — generates the 192 icons and 14 chrome slices, palette-clamps
+  artgen/     Rust asset tool — generates the 208 icons and 14 chrome slices, palette-clamps
               art, validates ART_SPEC
 ```
 

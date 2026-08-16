@@ -106,9 +106,40 @@ public partial class CombatTargetingSmokeTest : Node
         await TestClickingAnEnemyResolvesAnAimedPotion();
         await TestHitTestSkipsCorpsesAndIgnoresUntargetedCards();
         await TestASummonBuildsAnEnemyViewMidFight();
+        TestTheBlockedBeatNeedsAnAbsorbedHit();
 
         GD.Print($"CombatTargetingSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
+    }
+
+    // The gate on the "Blocked!" beat and its ward burst.
+    //
+    // Both combatants clear their own Block at the top of their turn, so an
+    // expiry and an absorbed hit move HP and Block identically - which is why
+    // this gated on `blockDelta < 0 && hpDelta == 0` for several phases and
+    // fired every turn either side had leftover Block and nothing had attacked.
+    // Small enough to miss as a text pop; not small at all once it became a
+    // 160x160 ward burst on the player sprite.
+    //
+    // Asserted against CombatScreen.IsAbsorbedHit rather than by driving a real
+    // fight, because reaching PopupDelta needs turns to pass and the enemy turn
+    // is wall-clock paced - the same reason BalanceModel is static analysis
+    // rather than a simulator. The rule is the part that was wrong.
+    private void TestTheBlockedBeatNeedsAnAbsorbedHit()
+    {
+        Check("blocked_beat_fires_on_an_absorbed_hit",
+            CombatScreen.IsAbsorbedHit(hpDelta: 0, absorbedDelta: 1),
+            "a hit Block ate whole must play the blocked beat");
+
+        Check("blocked_beat_ignores_expiring_block",
+            !CombatScreen.IsAbsorbedHit(hpDelta: 0, absorbedDelta: 0),
+            "Block falling with nothing absorbed is a turn boundary, not a blocked hit - " +
+            "gating on the Block delta fires this beat every turn either side carried Block");
+
+        Check("blocked_beat_ignores_a_hit_that_got_through",
+            !CombatScreen.IsAbsorbedHit(hpDelta: -3, absorbedDelta: 1),
+            "Block that absorbed part of a hit still lost HP, which is the ordinary hit " +
+            "reaction - two beats for one hit otherwise");
     }
 
     // The glow is EnemyView's own Button background, so anything drawn over

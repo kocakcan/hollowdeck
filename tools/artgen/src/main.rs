@@ -70,7 +70,7 @@ fn usage() {
   generate [category]   write generated icons into assets/icons/ (chrome into
                         assets/theme/)
                         category: cards relics potions map status intents
-                                  events chrome
+                                  events chrome fx
   animate               derive sprite animation frames into assets/sprites/anim/
   clamp [paths...]      snap PNGs onto the shared ramp (default: all of assets/)
   validate              enforce ART_SPEC §1/§3/§5/§8; nonzero exit on failure"
@@ -117,7 +117,7 @@ fn generate(assets: &Path, category: Option<&str>, dry_run: bool) -> ExitCode {
 }
 
 /// Where a category's PNGs land. `Icon::category` is the subdirectory for the
-/// seven icon categories, which is what keeps the registry and the on-disk
+/// eight icon categories, which is what keeps the registry and the on-disk
 /// layout from disagreeing; `chrome` is the one divergence, because 9-slice
 /// border art is on the 16/24 grids rather than 32x32 and so has to sit
 /// somewhere `validate::expected_grid` reads differently. `assets/theme/` is

@@ -787,12 +787,43 @@ to catch committed art drifting from its source. The one command, for all three 
 
 ```bash
 cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
-#   generate [cards|relics|potions|map|status|intents|events|chrome]
-#                      category optional; omitted = all 206
+#   generate [cards|relics|potions|map|status|intents|events|chrome|fx]
+#                      category optional; omitted = all 222
 #   animate            derive sprite frames into assets/sprites/anim/ (438 across 37 sprites)
 #   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
 #   validate           what run-smoke-tests.sh calls; nonzero exit on failure
 ```
+
+**Combat feedback is generated frames too, and the burst that carried it before was invisible to
+every check the project has.** `impact`/`ward`/`bloom`/`venom` (`tools/artgen/src/icons/fx.rs`) are
+four authored four-frame runs — flash, ring, arms, motes — spawned by `scripts/ui/CombatFx.cs` and
+played by `SpriteAnimator.AttachOneShot`, the same driver the creature clips use. They replaced
+`CombatScreen.SpawnHitSpark`, a `CpuParticles2D` drawing a smooth 24x24 radial gradient at
+`ScaleAmountMin 0.4`: three ART_SPEC violations in one node, and not one of them catchable, because
+it was neither a `TextureRect` (so the transform scan skipped it) nor a file under `assets/` (so
+`artgen validate` never read it). The `modulate` flashes beside it are **left alone** — §9 permits
+them, since `modulate` resamples nothing. Five things:
+
+- **The art is in `assets/icons/fx/` and the name reads backwards on purpose.** Frame runs belong
+  under `assets/sprites/`, but `output_dir`'s default arm already routes an unknown category to
+  `assets/icons/<category>/` and CI already diffs `assets/icons` — so this cost *zero*
+  infrastructure lines where a new output directory costs two. The price is that `assets/icons/` now
+  holds one directory whose files are a sequence rather than one per definition id, which is why the
+  fx coverage check is hand-written instead of reusing `AssertIconsMatch`.
+- **Four effects are four frame sets, not one tinted four ways.** `ModulateColor` multiplies and
+  lands off the ramp — the `CardFrameStyle`-stays-flat argument, one asset class over.
+- **Reduce Motion reached them for free.** `AttachOneShot` registers under one synthetic clip name
+  and that name is in `FlashOpeningClips`, so every burst inherits the decline of its opening flash
+  frame rather than each needing a gate. A fifth burst inherits it too.
+- **`CombatFx.Venom` fires when Poison *lands*, not when it ticks.** `PopupDelta` is a state diff
+  with no cause channel, so a tick is indistinguishable from a sword and plays `impact`. Giving it a
+  cause is a `CombatManager` change. `_lastStats` widened from `(Hp, Block)` to `(Hp, Block, Poison)`
+  for this, and Poison is the only status in there: every other one announces itself by changing a
+  number the player already watches.
+- **The Rust tests are about the *sequence*, which is what `validate` is structurally blind to** — a
+  burst that repeats a frame, contracts, or thickens as it dies is on the ramp, on the grid and
+  hard-alpha. Four rules: frames differ, extent never shrinks, mass falls after the ring, every
+  frame is centred.
 
 **`chrome` is the one category that does not write into `assets/icons/`.** It is 9-slice border art
 on the 16/24 grids rather than 32x32 icons, so `main::output_dir` routes it to `assets/theme/` —
@@ -961,8 +992,11 @@ was survivable while each ran in response to an event and became wrong the momen
 them; the precedence is now stated rather than left to branch order — **focus > hover > rare glow**.
 
 `docs/PIXEL_ART_ROADMAP.md` is the medium's own backlog beside `docs/ART_SPEC.md`'s rule set. With
-the ring, every entry that was *a rule §6 stated and the code lacked* is closed; what is left there
-is ordinary backlog the spec never claimed.
+the ring, every entry that was *a rule §6 stated and the code lacked* is closed; the effect frames
+that followed are the first ordinary-backlog entry to ship, and what is left there — an easing
+vocabulary, backgrounds — is more of the same. Effect frames did turn up one last instance of that
+first category running the *other* way: §9 said frame animation derives its frames from sourced art,
+which was true until an authored set existed. It has been widened rather than restated.
 
 There is **no `artgen` on `PATH`** and no `tools/artgen` wrapper — the binary under
 `tools/artgen/target/` is a gitignored build artifact, so always invoke it through `cargo run` as
@@ -1103,6 +1137,12 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   node it can flee — otherwise emptying the board scores as a Win, pays out in full, and rewards the
   slow deck the move was written to punish
 - `scenes/CombatScreen.tscn` — card drag/hover/targeting
+- `scripts/ui/CombatFx.cs` — the four combat effect bursts, and the single place a burst is
+  positioned, sized and freed. The registry (`CombatFx.All`) is what `PixelSpecSmokeTest` drives, so
+  a fifth effect is one entry rather than a name retyped in a test
+- `scripts/ui/SpriteAnimator.cs` — the one frame-swap driver, for creature clips and effect bursts
+  alike. `Attach` resolves frames from a sprite id and needs an `idle`; `AttachOneShot` takes frames
+  outright and holds the last one, which is what a burst needs and what frees it
 - `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic
   status block, framed panel, art plinth), attached from `_Ready` like `ScreenBackground` and
   `DeckViewButtons`. Owns those node paths; `ScreenChrome.HpLabelPath` and friends are what the

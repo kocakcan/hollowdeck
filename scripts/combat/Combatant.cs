@@ -13,6 +13,21 @@ public abstract class Combatant
     public Dictionary<StatusType, int> Statuses = new();
     public bool IsDead => CurrentHp <= 0;
 
+    // How many hits this combatant's Block has eaten, ever, this fight. The one
+    // *cause* the view layer gets, and it exists because a state diff cannot
+    // recover one: CombatScreen.PopupDelta sees Block fall and has no way to
+    // tell "a hit was absorbed" from "the turn ended and Block expired", which
+    // are the same two numbers moving the same way.
+    //
+    // Both combatants clear Block on their own turn, so without this the
+    // "Blocked!" beat fired every single turn either side had leftover Block
+    // and nothing had attacked. Monotonic on purpose - a counter cannot be
+    // confused by the clear, where a bool would need someone to reset it.
+    //
+    // Not serialized, because no Combatant is: Combat is deliberately absent
+    // from RunManager.AutoSaveScreens, so a fight never outlives its session.
+    public int HitsAbsorbed;
+
     public int GetStatus(StatusType status) => Statuses.GetValueOrDefault(status, 0);
 
     public void AddStatus(StatusType status, int amount)
