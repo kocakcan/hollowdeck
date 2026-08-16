@@ -395,6 +395,15 @@ The rules:
   rule arrived from a tween. A combat effect is positioned from a `Control`'s `GlobalPosition` plus
   half its `Size` — fractional far more often than not — and sits there for four frames, which is a
   longer look at an off-grid pixel asset than any lunge gives.
+
+  **And it applies to a node's parents, which snapping the node cannot reach.** `CombatScreen`'s
+  screen shake moves the scene root, so every pixel asset on the screen rides its offset; a burst
+  whose own position is snapped still resamples if the screen under it is at x = 1.68. The shake
+  therefore snaps its waypoints too, at scale **1** rather than at the asset's factor — a
+  Nearest-filtered texture translated by a whole number of canvas pixels samples exactly at any
+  integer scale. Worth stating because no assertion can see it: a check on a burst parents it to a
+  Control that never moves, and there is nowhere the accumulated transform of an arbitrary ancestor
+  chain is available to assert about.
 - **Deliberately not `AnimatedSprite2D`.** The creature sprites are `TextureRect`s whose
   `CustomMinimumSize` is what §2's assertion reads, and `EnemyView`'s is inside a `VBoxContainer`. A
   `Node2D` there breaks Control layout and that assertion together.

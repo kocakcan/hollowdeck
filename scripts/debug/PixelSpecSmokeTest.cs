@@ -918,12 +918,16 @@ public partial class PixelSpecSmokeTest : Node
             return;
         }
 
-        float scale = rect.Size.Y / PixelSpec.CreatureGrid;
-        Check("combat_fx_renders_at_an_integer_scale",
-            Mathf.Abs(scale - Mathf.Round(scale)) < 0.001f && scale >= 1f
-            && Mathf.IsEqualApprox(rect.Size.X, rect.Size.Y),
-            $"a burst renders a {PixelSpec.CreatureGrid}px source into {rect.Size} = {scale}x, " +
-            "which is not an integer scale (ART_SPEC section 2)");
+        // Pinned to the exact size, not merely to *an* integer scale. "Integer
+        // and square" is satisfied by CardArtScale's 96x96 too, so a burst
+        // shipped at 60% of its intended size would leave this green - and
+        // combat_fx_lands_on_a_whole_source_pixel would not catch it either,
+        // since changing ApplyPixelRect and SnapTranslation together in
+        // CombatFx.Play keeps them agreeing with each other.
+        var expected = PixelSpec.SizeFor(PixelSpec.CreatureGrid, PixelSpec.SpriteScale);
+        Check("combat_fx_renders_at_an_integer_scale", rect.Size.IsEqualApprox(expected),
+            $"a burst measures {rect.Size}, expected {expected} - a {PixelSpec.CreatureGrid}px " +
+            $"source at SpriteScale {PixelSpec.SpriteScale} (ART_SPEC section 2)");
 
         Check("combat_fx_is_nearest_filtered",
             rect.TextureFilter == CanvasItem.TextureFilterEnum.Nearest,

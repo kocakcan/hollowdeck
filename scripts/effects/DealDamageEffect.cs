@@ -18,6 +18,12 @@ public class DealDamageEffect : IEffect
             int unblocked = targetAmount - absorbedByBlock;
             target.CurrentHp -= unblocked;
 
+            // The one place Block eats anything, which is why the counter the
+            // view layer diffs is incremented here rather than inferred there.
+            // See Combatant.HitsAbsorbed: falling Block on its own cannot tell
+            // an absorbed hit from an expired one.
+            if (absorbedByBlock > 0) target.HitsAbsorbed++;
+
             // Thorns bills the attacker for the hit, and it deliberately fires
             // on the *attempt* rather than on damage getting through - a hit
             // fully eaten by Block still gets pricked, which is what makes

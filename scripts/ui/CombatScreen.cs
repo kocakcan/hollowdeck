@@ -104,17 +104,23 @@ public partial class CombatScreen : Control
     private Tween? _endTurnPulseTween;
     private bool _endTurnPulsing;
 
-    // Previous HP/Block/Poison per combatant, so Refresh() can diff and pop up
-    // floating combat text - CombatManager only tells us "something
-    // changed," not what.
+    // Previous HP/Block/Poison/absorbed-hits per combatant, so Refresh() can
+    // diff and pop up floating combat text - CombatManager only tells us
+    // "something changed," not what.
     //
-    // Poison joined the pair when CombatFx.Venom did, and it is the only status
-    // in here. That is not an oversight: a status with an *arrival* worth
-    // showing separately from its effect is what this field is for, and Poison
-    // is the one - every other status announces itself by changing a number the
-    // player is already watching, while Poison's whole cost lands on turns that
-    // have not happened yet.
-    private readonly Dictionary<Combatant, (int Hp, int Block, int Poison)> _lastStats = new();
+    // Poison joined when CombatFx.Venom did, and it is the only status in here.
+    // That is not an oversight: a status with an *arrival* worth showing
+    // separately from its effect is what this field is for, and Poison is the
+    // one - every other status announces itself by changing a number the player
+    // is already watching, while Poison's whole cost lands on turns that have
+    // not happened yet.
+    //
+    // Absorbed is the odd one out: a monotonic counter rather than a level, and
+    // the only *cause* in the tuple. See PopupDelta - falling Block cannot tell
+    // an absorbed hit from an expired one, and they are the same two numbers
+    // moving the same way.
+    private readonly Dictionary<Combatant, (int Hp, int Block, int Poison, int Absorbed)>
+        _lastStats = new();
     private Dictionary<StatusType, int>? _lastPlayerStatuses;
 
     // RefreshHand()/RefreshEnemies() used to destroy and reinstantiate every
@@ -452,6 +458,18 @@ public partial class CombatScreen : Control
     // with how much HP was actually lost (capped) instead of being a flat
     // constant regardless of a tickle vs. a near-lethal hit; skipped
     // entirely under Settings > Reduce Motion.
+    //
+    // The waypoints are snapped to whole *canvas* pixels, at scale 1 rather
+    // than SpriteScale. This shakes the screen root, so every pixel asset on it
+    // rides along - and a Nearest-filtered texture translated by a whole number
+    // of canvas pixels samples exactly, whatever integer scale it is drawn at,
+    // while a fractional offset resamples all of them at once. It was
+    // rng.RandfRange straight into position, which is the one place in the
+    // project that could put a snapped sprite back off the grid after the fact.
+    //
+    // Only the endpoints, per ART_SPEC section 9's lunge rule: Godot still
+    // interpolates between them and a 0.03s step is faster than the lunge that
+    // rule was written for.
     private const float MaxShakeMagnitude = 14f;
 
     private void PlayScreenShake(int hpDeltaAbs)
@@ -465,7 +483,9 @@ public partial class CombatScreen : Control
         var rng = new RandomNumberGenerator();
         for (int i = 0; i < 5; i++)
         {
-            var offset = new Vector2(rng.RandfRange(-magnitude, magnitude), rng.RandfRange(-magnitude, magnitude));
+            var offset = PixelSpec.SnapTranslation(
+                new Vector2(rng.RandfRange(-magnitude, magnitude), rng.RandfRange(-magnitude, magnitude)),
+                1);
             tween.TweenProperty(this, "position", offset, 0.03);
         }
         tween.TweenProperty(this, "position", Vector2.Zero, 0.03);
@@ -1139,21 +1159,48 @@ public partial class CombatScreen : Control
     // (spawned under CombatScreen itself, at the HP label's position) and
     // enemies (spawned as a child of their freshly-rebuilt EnemyView).
     // hpDelta and blockDelta are correlated (not just branched on
-    // independently) so a hit that Block fully absorbed (blockDelta<0,
-    // hpDelta==0) reads as a distinct "blocked" beat instead of showing
-    // nothing at all, and a hit that broke through remaining Block
-    // (blockDelta<0 and hpDelta<0 together) still just plays the normal hit
-    // reaction - the correlation only changes what visual plays, it never
-    // reads engine state beyond the three fields already being diffed.
+    // independently) so a hit that Block fully absorbed reads as a distinct
+    // "blocked" beat instead of showing nothing at all, and a hit that broke
+    // through remaining Block (blockDelta<0 and hpDelta<0 together) still just
+    // plays the normal hit reaction.
     //
-    // **This is a state diff and it has no cause channel**, which is what
-    // decides where CombatFx.Venom fires. A Poison *tick* is an HP loss and
-    // arrives here indistinguishable from a sword, so it plays Impact; Venom
-    // fires when the stack goes up, i.e. when the Poison lands. Telling the two
-    // apart would mean CombatManager naming the cause of every HP change, which
-    // is a combat-layer change rather than an art one - and the beat that was
+    // **A state diff cannot recover a cause, and one of these four beats needed
+    // one.** The blocked beat used to gate on `blockDelta < 0 && hpDelta == 0`,
+    // which is *also* what an ordinary turn boundary looks like: both
+    // combatants clear their own Block at the top of their turn, so the beat
+    // fired every turn either side had leftover Block and nothing had attacked.
+    // That was survivable while it was a small text pop and stopped being
+    // survivable when it became a 160x160 ward burst. Combatant.HitsAbsorbed is
+    // the narrow cause channel that fixes it - incremented in the one place
+    // Block eats damage - and it is the only one of the three signals here that
+    // is a counter rather than a level.
+    //
+    // Poison deliberately did *not* get the same treatment. A Poison tick is an
+    // HP loss and arrives indistinguishable from a sword, so it plays Impact;
+    // Venom fires when the stack goes up, i.e. when the Poison lands. Naming
+    // the cause of every HP change is a much wider change than counting the one
+    // event Block absorption already funnels through - and the beat that was
     // actually missing is the arrival, since a tick already moves a number the
     // player is watching and an application moved nothing at all.
+    /// <summary>
+    /// Whether a combatant's diff describes a hit its Block ate whole — the
+    /// gate on the "Blocked!" beat and the ward burst.
+    /// </summary>
+    /// <remarks>
+    /// Public and separate from PopupDelta only so it can be asserted.
+    /// PopupDelta needs a live fight and a built screen to reach, so the rule it
+    /// turns on had no coverage at all while it was an inline condition — which
+    /// is how it spent several phases gated on `blockDelta &lt; 0`, firing on
+    /// every turn boundary that had leftover Block. The counter is what fixed
+    /// it; extracting the comparison is what lets a suite say so.
+    ///
+    /// blockDelta is deliberately *not* a parameter. It cannot contribute:
+    /// absorbing a hit always lowers Block, so the counter already implies it,
+    /// and reading it here is what the bug was.
+    /// </remarks>
+    public static bool IsAbsorbedHit(int hpDelta, int absorbedDelta) =>
+        absorbedDelta > 0 && hpDelta == 0;
+
     private void PopupDelta(Combatant c, Node popupParent, Vector2 localSpawnPos)
     {
         int poison = c.GetStatus(StatusType.Poison);
@@ -1162,6 +1209,7 @@ public partial class CombatScreen : Control
         {
             int hpDelta = c.CurrentHp - prev.Hp;
             int blockDelta = c.Block - prev.Block;
+            int absorbed = c.HitsAbsorbed - prev.Absorbed;
 
             if (hpDelta < 0)
             {
@@ -1180,7 +1228,7 @@ public partial class CombatScreen : Control
                     $"+{blockDelta} Block", new Color(0.6f, 0.8f, 1f));
                 if (popupParent is CanvasItem blockTarget) FlashBlock(blockTarget);
             }
-            else if (blockDelta < 0 && hpDelta == 0)
+            else if (IsAbsorbedHit(hpDelta, absorbed))
             {
                 PlayBlockAbsorbVfx(popupParent, localSpawnPos);
             }
@@ -1193,7 +1241,7 @@ public partial class CombatScreen : Control
                 SpawnBurst(poisoned, CombatFx.Venom);
             }
         }
-        _lastStats[c] = (c.CurrentHp, c.Block, poison);
+        _lastStats[c] = (c.CurrentHp, c.Block, poison, c.HitsAbsorbed);
     }
 
     // On a big hit, hold every reaction (damage number, flash, shake,

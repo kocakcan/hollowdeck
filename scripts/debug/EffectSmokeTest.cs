@@ -170,6 +170,51 @@ public partial class EffectSmokeTest : Node
 
         Check("block_absorbs_before_hp", target.Block == 0 && target.CurrentHp == 48,
             $"block={target.Block} hp={target.CurrentHp}");
+
+        TestAbsorbingAHitIsDistinguishableFromLosingBlock();
+    }
+
+    // Combatant.HitsAbsorbed is a *cause*, and it exists because falling Block
+    // is not one: both combatants clear their own Block at the top of their
+    // turn, so CombatScreen.PopupDelta saw the identical two numbers move the
+    // identical way whether a hit had been absorbed or the turn had simply
+    // ended. It gated the "Blocked!" beat on the wrong one and fired it every
+    // turn either side had leftover Block and nothing had attacked - which was
+    // survivable as a small text pop and stopped being survivable when it
+    // became a full-creature-sized ward burst.
+    //
+    // So the property worth asserting is the *difference*, not the increment:
+    // an absorbed hit moves the counter and an expiry does not. Checking only
+    // that damage increments it would stay green under the original bug.
+    private void TestAbsorbingAHitIsDistinguishableFromLosingBlock()
+    {
+        var attacker = new EnemyCombatant { Name = "Attacker", MaxHp = 50, CurrentHp = 50 };
+        var target = new EnemyCombatant { Name = "Target", MaxHp = 50, CurrentHp = 50, Block = 10 };
+        var ctx = new EffectContext
+        {
+            Source = attacker,
+            Targets = new List<Combatant> { target },
+            Combat = null!,
+        };
+
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 4 });
+        Check("absorbing_a_hit_counts_it", target.HitsAbsorbed == 1,
+            $"Block ate 4 damage and HitsAbsorbed is {target.HitsAbsorbed}, expected 1");
+
+        // A hit Block cannot reach must not count - otherwise the beat fires on
+        // damage that went straight through, which is the opposite mistake.
+        target.Block = 0;
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 4 });
+        Check("an_unblocked_hit_does_not_count", target.HitsAbsorbed == 1,
+            $"a hit against 0 Block moved HitsAbsorbed to {target.HitsAbsorbed}");
+
+        // And the turn boundary, which is the case that was actually wrong.
+        target.Block = 12;
+        int before = target.HitsAbsorbed;
+        target.Block = 0;
+        Check("expiring_block_does_not_count", target.HitsAbsorbed == before,
+            $"clearing Block moved HitsAbsorbed from {before} to {target.HitsAbsorbed} - the " +
+            "view layer cannot then tell an absorbed hit from an expired one");
     }
 
     private void TestGainBlockAndDraw()

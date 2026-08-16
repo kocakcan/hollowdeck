@@ -93,7 +93,7 @@ jobs:
       # regenerating must be a no-op.
       #
       # BOTH output directories, and the second one is the whole point of this
-      # comment. `generate` writes the seven icon categories into assets/icons/
+      # comment. `generate` writes the eight icon categories into assets/icons/
       # and the `chrome` category into assets/theme/ (main::output_dir), because
       # 9-slices are on the 16/24 grids rather than 32x32 and have to sit
       # somewhere validate::expected_grid reads differently. This step diffed
