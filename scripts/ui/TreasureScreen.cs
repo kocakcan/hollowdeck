@@ -85,9 +85,11 @@ public partial class TreasureScreen : Control
         art.Position += new Vector2(0, 12);
         var tween = art.CreateTween();
         tween.SetParallel();
-        tween.TweenProperty(art, "modulate:a", 1f, UiTheme.Motion.Slow);
-        tween.TweenProperty(art, "position:y", art.Position.Y - 12, UiTheme.Motion.Slow)
-            .SetTrans(UiTheme.Motion.EaseOvershoot);
+        // Alpha never takes Land: Back overshoots past its destination, and an
+        // alpha that overshoots 1 is clamped rather than sprung, so the art
+        // would simply arrive early and sit there.
+        tween.TweenTo(art, "modulate:a", 1f, Motion.Fade);
+        tween.TweenTo(art, "position:y", art.Position.Y - 12, Motion.Land.Over(Motion.Fade.Seconds));
     }
 
     private void OnContinuePressed() => RunManager.Instance.ChangeScreen(RunManager.ScreenState.Map);

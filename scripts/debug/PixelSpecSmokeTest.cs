@@ -58,6 +58,9 @@ public partial class PixelSpecSmokeTest : Node
         TestEveryCreatureHasItsFrames();
         TestEveryCombatEffectHasItsFrames();
         TestNoTweenTransformsAPixelSprite();
+        TestEveryTweenUsesTheMotionVocabulary();
+        TestEveryMotionCurveIsUsed();
+        TestTheMotionRegistryIsComplete();
         TestTheIdleClipActuallyAdvances();
         TestACombatEffectAdvancesAndFrees();
         TestTheGlowRingActuallyAdvances();
@@ -1309,8 +1312,20 @@ public partial class PixelSpecSmokeTest : Node
     {
         // Both the tween form and the direct assignment, since setting
         // _sprite.Scale outright is the same violation held still.
+        //
+        // **Both spellings of the tween form, and that alternation is the whole
+        // reason this comment is here.** This pattern was keyed to the literal
+        // `TweenProperty(` for three phases, which was every tween in the
+        // project - and then ART_SPEC section 11 renamed all thirty-four call
+        // sites to `TweenTo(` in one commit. Measured on that commit: this scan
+        // went from 9 matching lines in CardView.cs alone to 0, with the same 9
+        // call sites still there and all 23 suites green. A guard keyed to a
+        // spelling dies the day the spelling changes, and it dies silently,
+        // because a scan that finds nothing looks exactly like a codebase with
+        // nothing to find. The name is in a regex rather than in the type
+        // system, so nothing else could have caught it.
         var transform = new Regex(
-            """TweenProperty\(\s*(?<node>\w+|this)\s*, "(?<prop>scale|rotation|rotation_degrees|skew)"|(?<![\w.])(?<node>\w+|this)\.(?<prop>Scale|RotationDegrees|Rotation|Skew)\s*=""");
+            """(?:TweenProperty|TweenTo)\(\s*(?<node>\w+|this)\s*, "(?<prop>scale|rotation|rotation_degrees|skew)"|(?<![\w.])(?<node>\w+|this)\.(?<prop>Scale|RotationDegrees|Rotation|Skew)\s*=""");
 
         foreach (string path in FilesUnder("res://scripts/ui", ".cs"))
         {
@@ -1342,6 +1357,154 @@ public partial class PixelSpecSmokeTest : Node
                     yield return (path, i + 1, $"{node}.{match.Groups["prop"].Value}");
                 }
             }
+        }
+    }
+
+    // ART_SPEC section 11. The vocabulary only means anything if a call site
+    // cannot go around it, and going around it is one keystroke: TweenProperty
+    // is a public method on Tween that takes a raw duration and defaults to
+    // Linear/InOut, and SetTrans/SetEase are public on both Tween and
+    // PropertyTweener.
+    //
+    // So the check is structural rather than about the numbers. A site may pick
+    // its own *period* (through MotionCurve.Over, which is what the ambient
+    // loops and the content-branched durations use) and may not pick its own
+    // shape, because a shape is the thing the vocabulary exists to hold at
+    // eight rather than at thirty-four.
+    //
+    // A source scan for the same reason ScanSourceForFontSizes and
+    // ScanSourceForSpriteTransforms are: these are almost all behind combat
+    // events or ReduceMotion branches, so instantiating the screens reaches
+    // roughly none of them. Comment lines are skipped - Motion.cs's own prose
+    // names TweenProperty, and so does GlowRing's comment explaining why it is
+    // a frame timer instead of one.
+    private void TestEveryTweenUsesTheMotionVocabulary()
+    {
+        var findings = ScanSourceForRawTweens().ToList();
+        foreach (var (path, line, detail) in findings)
+        {
+            // The call name is in the key because one line can carry two
+            // violations - `TweenProperty(...).SetTrans(...)` is the exact shape
+            // this replaced - and two findings under one key print as one
+            // repeated failure rather than as two.
+            Check($"{path.GetFile()}_line_{line}_calls_{detail.TrimEnd('(', ')')}_by_hand", false,
+                $"{path}:{line} calls {detail} directly - a tween takes its duration, transition " +
+                "and ease from a Motion curve (Tween.TweenTo / TweenPingPong, ART_SPEC section 11)");
+        }
+
+        Check("every_tween_uses_the_motion_vocabulary", findings.Count == 0,
+            $"{findings.Count} site(s) found");
+    }
+
+    // Motion.cs is the only *file* exemption, because it is the thing being
+    // defined - every builder in it is a raw call by construction.
+    private static readonly HashSet<string> RawTweenExemptFiles = new() { "Motion.cs" };
+
+    // The audio exemption is a *property*, not a file, and the difference is
+    // the whole argument. What ART_SPEC section 11 actually says is that
+    // `volume_db` is not motion: nothing on screen moves, and the
+    // animation-speed setting Motion.Seconds exists to host must not cut a
+    // music crossfade short. Exempting AudioManager.cs wholesale would have
+    // covered a mute-indicator flash or a bus-meter nudge added to that file
+    // later - visible motion, silently outside the vocabulary and outside the
+    // future setting, with the exemption's own stated reason not applying to
+    // it. The predicate should be the reason.
+    private const string ExemptTweenProperty = "volume_db";
+
+    private static IEnumerable<(string Path, int Line, string Detail)> ScanSourceForRawTweens()
+    {
+        var raw = new Regex(@"\.(?<call>TweenProperty|TweenInterval|SetTrans|SetEase)\s*\(");
+
+        // Every directory under scripts/, not only ui and run. Section 11 opens
+        // with the unqualified claim that TweenTo and TweenPingPong are the only
+        // two ways a property is animated, and a scan rooted at two of the seven
+        // source directories does not back that sentence. There are no raw
+        // tweens outside ui/run today; this is what keeps that true rather than
+        // true-so-far.
+        foreach (string path in FilesUnder("res://scripts", ".cs"))
+        {
+            if (RawTweenExemptFiles.Contains(path.GetFile())) continue;
+
+            using var reader = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (reader is null) continue;
+
+            for (int line = 1; !reader.EofReached(); line++)
+            {
+                string text = reader.GetLine();
+                if (text.TrimStart().StartsWith("//")) continue;
+                if (text.Contains(ExemptTweenProperty)) continue;
+                foreach (Match match in raw.Matches(text))
+                {
+                    yield return (path, line, $"{match.Groups["call"].Value}()");
+                }
+            }
+        }
+    }
+
+    // The orphan direction, and the one that earns its keep - the scan above
+    // stays green over a vocabulary of thirty unused curves. This is the third
+    // set TestEveryCombatEffectHasItsFrames already carries for the same
+    // reason: a curve authored, documented and never used is a name the next
+    // reader has to rule out, and the whole point of eight is that eight is
+    // small enough to hold.
+    //
+    // Reflection over the field names rather than a hand-written list, because
+    // a hand-written list only knows the curves somebody already thought of -
+    // the lesson TestNoTweenTransformsAPixelSprite was rewritten over.
+    private void TestEveryMotionCurveIsUsed()
+    {
+        var declared = typeof(Motion)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(MotionCurve))
+            .Select(f => f.Name)
+            .ToList();
+
+        var used = ScanSourceForNames("res://scripts/ui", "Motion", "Motion.cs");
+        foreach (string name in ScanSourceForNames("res://scripts/run", "Motion", "Motion.cs"))
+        {
+            used.Add(name);
+        }
+
+        Check("motion_declares_curves", declared.Count > 0, "reflection found no MotionCurve fields");
+        foreach (string name in declared)
+        {
+            Check($"motion_curve_{name.ToLowerInvariant()}_is_used", used.Contains(name),
+                $"Motion.{name} is declared but nothing under scripts/ui or scripts/run uses it");
+        }
+    }
+
+    // Motion.All is what the two sweeps above and any future one drive, so a
+    // curve left out of it is invisible to all of them - the same seam
+    // CombatFx.All has, one asset class over. Reflection is the honest side of
+    // that comparison for the same reason it is above.
+    private void TestTheMotionRegistryIsComplete()
+    {
+        var declared = typeof(Motion)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(MotionCurve))
+            .Select(f => (Name: f.Name, Curve: (MotionCurve)f.GetValue(null)!))
+            .ToList();
+
+        foreach (var (name, curve) in declared)
+        {
+            Check($"motion_all_contains_{name.ToLowerInvariant()}", Motion.All.Contains(curve),
+                $"Motion.{name} is not in Motion.All, so every sweep driven by All is blind to it");
+        }
+
+        Check("motion_all_has_no_strays", Motion.All.Count == declared.Count,
+            $"Motion.All holds {Motion.All.Count} curves against {declared.Count} declared fields");
+
+        // Two curves with the same three values are one curve with two names,
+        // which is a vocabulary that does not distinguish anything. Compared as
+        // values rather than by name, since the record struct's equality is
+        // exactly the question being asked.
+        Check("motion_curves_are_distinct", Motion.All.Distinct().Count() == Motion.All.Count,
+            "two Motion curves share a duration, transition and ease");
+
+        foreach (var (name, curve) in declared)
+        {
+            Check($"motion_curve_{name.ToLowerInvariant()}_has_a_period", curve.Seconds > 0f,
+                $"Motion.{name} runs for {curve.Seconds}s - a zero-length tween is an assignment");
         }
     }
 

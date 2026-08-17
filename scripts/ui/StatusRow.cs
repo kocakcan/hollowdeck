@@ -85,8 +85,8 @@ public static class StatusRow
         var original = iconRect.Modulate;
         iconRect.Modulate = flashColor * 1.6f;
         var tween = iconRect.CreateTween();
-        tween.TweenProperty(iconRect, "modulate", flashColor, 0.1).SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(iconRect, "modulate", original, 0.3).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenTo(iconRect, "modulate", flashColor, Motion.Snap);
+        tween.TweenTo(iconRect, "modulate", original, Motion.Fade);
     }
 
     private static void PlayExpireGhost(HBoxContainer row, StatusType status, int iconSize)
@@ -103,7 +103,7 @@ public static class StatusRow
         };
         row.AddChild(ghost);
         var tween = ghost.CreateTween();
-        tween.TweenProperty(ghost, "modulate:a", 0f, 0.35).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenTo(ghost, "modulate:a", 0f, Motion.Fade);
         tween.TweenCallback(Callable.From(ghost.QueueFree));
     }
 

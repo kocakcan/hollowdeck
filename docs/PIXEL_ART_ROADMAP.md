@@ -23,6 +23,13 @@ creatures were the only thing animating and silently stopped being true the mome
 effect set existed. That sentence has been widened rather than quietly restated, since a document
 describing a rule the code has outgrown reads exactly like one describing a rule it never met.
 
+§6 has shipped, and it is the same drift arriving through a third door — not a spec ahead of its
+enforcement, but a *helper* ahead of its adoption. `UiTheme.Motion` existed for three phases and was
+used by two tween sites out of thirty-four; a constants bag nobody reaches for is indistinguishable
+from one nobody needs, and neither `ART_SPEC.md` nor any suite could tell the difference. The lesson
+generalises past this document: **shipping the abstraction is not the same as landing it, and only a
+sweep over the call sites can say which happened.**
+
 Worth carrying forward, because it is the pattern rather than three incidents: in every one of the
 three, the expensive part was not building the thing. It was that the spec had described it in the
 present tense for three phases, so nobody reading either document had a reason to check.
@@ -329,16 +336,97 @@ white `Line2D`. A streak spans player→enemy at an arbitrary angle and §2 forb
 asset, so replacing it needs an authored 8-direction set plus angle-bucketing at the call site —
 a different rule from the one every burst here follows, and one none of them needed.
 
-## 6. An easing vocabulary
+## 6. An easing vocabulary — **shipped**
 
 *(Easings)*
 
-~35 `CreateTween` sites pick `TransitionType` and duration ad hoc. saint11's Easings card is the
-reference for which curve reads as what; the codebase would benefit from a small named set
-(`Snap`, `Settle`, `Drift`) rather than per-site choices.
+Eight named curves in `scripts/ui/Motion.cs` — `Jolt`, `Flash`, `Snap`, `Pop`, `Settle`, `Land`,
+`Fade`, `Drift` — each a duration, a transition and an ease held together, applied through the only
+two builders any tween in the game now uses (`Tween.TweenTo`, `Tween.TweenPingPong`).
+`ART_SPEC.md` §11 is the rule. All 34 tween sites were migrated; nothing new was animated.
 
-Pairs naturally with `ROADMAP.md` Phase 11's animation-speed setting, which needs one place to scale
-durations from.
+What it replaced was a `UiTheme.Motion` that already half-existed and was **used by two sites out of
+thirty-four**. It offered `Fast`/`Normal`/`Slow` beside `EaseStandard`/`EaseOvershoot` as two
+independent lists, so a caller had to pair them itself and thirty-two callers didn't bother — `Fast`
+was re-spelled as the literal `0.12` four times, `Slow` as `0.35` three times. This is the §2 shape
+inverted: not a spec ahead of its enforcement, but a *helper* ahead of its adoption, which fails
+quietly in the same way. A constants bag nobody reaches for looks identical to one nobody needs.
+
+Five things are worth knowing before touching it:
+
+- **The single biggest change was an ease that did not exist.** There was no `SetEase` call anywhere
+  in the codebase, so all thirty-four sites ran Godot's default `InOut` — including seven `Back`
+  tweens, which therefore overshot on *both* ends. `CardView.SnapHome` pulled the card visibly
+  *away* from home before starting toward it. That was never a decision anyone made; it was the
+  default of a parameter nobody knew was there, which is the strongest argument in this item's
+  favour and was invisible until all thirty-four were listed side by side.
+- **The period stayed negotiable on purpose, and the shape did not.** `MotionCurve.Over(seconds)` is
+  the whole escape hatch. Ambient loop half-periods really are per-site (14s of fog against 0.7s of
+  map ring), and `CardView`'s exhaust branch really is faster *because* it is an exhaust — those are
+  content. Which curve they run on is not. A blanket "no literal durations" rule would have been
+  enforceable and wrong; it would have pushed six real facts into six invented constant names.
+- **`Fade` and `Drift` are the two `InOut` curves, and the ambient loops were already correct.**
+  Loops ping-pong, and an `Out` ease at both turns reads as a stutter rather than as breathing, so
+  the six looping sites came through *identical in feel* — Sine/InOut before and after. Worth stating
+  because "we changed the easing on every tween in the game" is true and would be the wrong thing to
+  go looking for in a playtest.
+
+  **`Fade` shipped as `Out` and was corrected in review, which is the one wrong call in this item.**
+  A disappearance is not an arrival: `sine::out` on a fade to zero spends most of its opacity in the
+  first third. `EnemyView`'s death clip is three frames at 0.12 against a 0.35s fade, so `Out` put
+  frame 1 at alpha 0.49 where the clip was authored against 0.74, and the escape clip — the one that
+  exists so a fleeing enemy finally *travels* — would have travelled behind a sprite already 72%
+  gone. The tell was in the table the whole time: "long enough to read, in either direction" is not
+  something an asymmetric ease can be, and every `Fade` site had been Sine/InOut before the change.
+- **`Back` never lands on alpha, and three sites had to be split to keep that true.** Back overshoots
+  past its destination; past `modulate:a` of 0 or 1 the value clamps, so the property arrives early
+  and sits. `PlayDrawTween`, `PlayDiscardTween`, `PlayResolveTween` and
+  `TreasureScreen.PlayEntrance` each animate a transform and an alpha together and now pair
+  `Land`/`Pop` with `Settle`/`Fade`.
+- **`Motion.Seconds` is a function, not a `Scale` field.** ROADMAP Phase 11's animation-speed setting
+  needs one place to multiply, and the tempting shape is a `public static float Scale = 1f`. That is
+  dead state no assertion can observe. A funnel with one caller is a place to put the multiply
+  without pretending the feature is half-built. (`Engine.TimeScale` is not available for it either —
+  `CombatScreen`'s hit-stop comment already argued that out, since the same dial rescales
+  `CombatManager`'s turn pacing.)
+
+Two things this cost that are worth recording:
+
+- **The rename silently disarmed §1's guard, and 23 green suites said nothing.**
+  `TestNoTweenTransformsAPixelSprite` was keyed to the literal `TweenProperty(`, which was every
+  tween in the project until this item renamed all thirty-four to `TweenTo(`. Measured on the first
+  commit: the scan went from 9 matching lines in `CardView.cs` alone to **0**, with all 9 call sites
+  still there. A `TweenTo(this, "scale", …)` added to `EnemyView.PlayDeath` — the exact violation §1
+  says that guard was rewritten to catch — passed. This is the second time this one assertion has
+  been found broken while three documents claimed it covered everything, and both times the failure
+  was that it named things rather than describing them. **A rename is a change to every regex holding
+  the old spelling, and nothing in the toolchain will say so.**
+- **The forward check cannot fail on the failure that actually matters.** Scanning for a hand-built
+  `TweenProperty` catches a site going around the vocabulary and is *completely green* over a
+  vocabulary of thirty curves nobody calls — which is the direction this feature rots in, since the
+  cost of a ninth curve is paid by the next reader rather than by the author. So two reflection
+  sweeps run the other way: every declared curve must be in `Motion.All`, and something under
+  `scripts/ui` or `scripts/run` must use it. Same third-set argument the combat bursts needed, and
+  each of the three was mutation-tested before this was called done — a raw `TweenProperty`
+  reintroduced into `StatusRow`, an unused curve added, and `Drift` dropped from `All`, each red.
+- **The exemption is a property and not a file, and the first draft had that backwards.**
+  `volume_db` is not motion; nothing on screen moves, and the speed setting this vocabulary exists to
+  host must not cut a music crossfade short. That argument is entirely about the *property*, so
+  exempting `AudioManager.cs` wholesale was a rule wider than its own reason — a mute-indicator flash
+  added to that file later would have been visible motion, outside the vocabulary and outside the
+  future setting, with the suite green. The scan roots at all of `scripts/` too, since §11's opening
+  sentence is unqualified and two of seven directories does not back it. `FloatingText` and
+  `CardView` are covered: their §9 transform exceptions are a different axis and confer nothing here.
+- **`TweenPingPong` had a latent do-nothing mode.** `SetParallel` is sticky on a `Tween` and five
+  callers elsewhere turn it on; under it the helper's two steps would blend simultaneously into one
+  crossfade, i.e. a `SetLoops()` loop running forever and visibly doing nothing. No current caller
+  does it. It sets `SetParallel(false)` itself now, which is the "compiles, passes, no motion" shape
+  closed for one line rather than left for whoever hits it.
+
+**What is deferred, and stated so it is not mistaken for finished:** *which* curve a site picked is
+unheld. The scan sees that a curve was used, not that `Land` was the right one where `Settle`
+belonged. That is §10's unheld-highlights situation exactly, and it is the honest boundary of what a
+source scan can say.
 
 ## 7. Backgrounds
 

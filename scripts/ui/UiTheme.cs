@@ -116,15 +116,13 @@ public static class UiTheme
         public const int Thick = 4;
     }
 
-    public static class Motion
-    {
-        public const float Fast = 0.12f;
-        public const float Normal = 0.2f;
-        public const float Slow = 0.35f;
-
-        public const Tween.TransitionType EaseStandard = Tween.TransitionType.Sine;
-        public const Tween.TransitionType EaseOvershoot = Tween.TransitionType.Back;
-    }
+    // Motion lives in Motion.cs, not here. It was a nested constants bag -
+    // Fast/Normal/Slow beside EaseStandard/EaseOvershoot - and a duration and
+    // the curve it runs on are one decision rather than two, which is exactly
+    // what a caller free to pair Slow with EaseStandard could get wrong. It is
+    // also a *type* now (MotionCurve) with builders on Tween, and a nested
+    // class inside a colour/spacing/font table is the wrong home for either.
+    // docs/ART_SPEC.md section 11.
 
     // Bitmap faces, replacing Cinzel/IM Fell English. Those were high-res
     // serif - anti-aliased sub-pixel curves - which is the exact opposite of

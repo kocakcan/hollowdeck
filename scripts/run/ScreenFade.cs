@@ -22,10 +22,10 @@ public partial class ScreenFade : CanvasLayer
     private const int OverlayLayer = 128;
 
     // Out is quicker than in: leaving reads as a cut you barely notice,
-    // arriving reads as the new screen resolving. Both are UiTheme.Motion
-    // constants rather than new numbers.
-    private const float FadeOutTime = UiTheme.Motion.Fast;
-    private const float FadeInTime = UiTheme.Motion.Normal;
+    // arriving reads as the new screen resolving. Both are Motion curves
+    // rather than new numbers.
+    private static readonly MotionCurve FadeOut = Motion.Snap;
+    private static readonly MotionCurve FadeIn = Motion.Settle;
 
     // ChangeSceneToFile is itself deferred to the end of the frame, so the
     // swap does not happen the instant the callback runs. Holding full black
@@ -88,11 +88,10 @@ public partial class ScreenFade : CanvasLayer
 
         var tween = _cover.CreateTween();
         _tween = tween;
-        tween.SetTrans(UiTheme.Motion.EaseStandard);
-        tween.TweenProperty(_cover, "color:a", 1f, FadeOutTime);
+        tween.TweenTo(_cover, "color:a", 1f, FadeOut);
         tween.TweenCallback(Callable.From(whileCovered));
-        tween.TweenInterval(HoldTime);
-        tween.TweenProperty(_cover, "color:a", 0f, FadeInTime);
+        tween.Wait(HoldTime);
+        tween.TweenTo(_cover, "color:a", 0f, FadeIn);
         tween.TweenCallback(Callable.From(ClearCover));
         return true;
     }

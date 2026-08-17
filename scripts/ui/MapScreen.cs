@@ -422,6 +422,8 @@ public partial class MapScreen : Control
     // A pulsing gold ring at the player's current position - previously
     // there was no rendering tied to RunState.CurrentNodeId at all, only
     // enabled/disabled buttons implied where the player was by elimination.
+    private const float CurrentNodeRingSeconds = 0.7f;
+
     private void BuildCurrentNodeRing()
     {
         if (string.IsNullOrEmpty(RunState.CurrentNodeId)) return;
@@ -463,9 +465,7 @@ public partial class MapScreen : Control
 
         var tween = ring.CreateTween();
         tween.SetLoops();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(ring, "modulate:a", 0.35f, 0.7);
-        tween.TweenProperty(ring, "modulate:a", 1f, 0.7);
+        tween.TweenPingPong(ring, "modulate:a", 0.35f, 1f, Motion.Drift.Over(CurrentNodeRingSeconds));
     }
 
     private HashSet<string> ReachableIds()

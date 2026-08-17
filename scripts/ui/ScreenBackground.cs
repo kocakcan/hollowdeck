@@ -128,11 +128,13 @@ public static class ScreenBackground
         // codebase's other short one-shot tweens, this one is virtually
         // guaranteed to still be running whenever the screen is torn down.
         var tween = fog.CreateTween();
+        // Three legs at three periods - the slowest motion in the game by two
+        // orders of magnitude, and the periods are prime-ish to each other on
+        // purpose so the wander never lands back on a beat the eye can count.
         tween.SetLoops();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(fog, "position", basePos + new Vector2(24, 14), 14.0);
-        tween.TweenProperty(fog, "position", basePos + new Vector2(-18, 10), 16.0);
-        tween.TweenProperty(fog, "position", basePos, 12.0);
+        tween.TweenTo(fog, "position", basePos + new Vector2(24, 14), Motion.Drift.Over(14f));
+        tween.TweenTo(fog, "position", basePos + new Vector2(-18, 10), Motion.Drift.Over(16f));
+        tween.TweenTo(fog, "position", basePos, Motion.Drift.Over(12f));
     }
 
     private static Texture2D BuildGroundPlane()

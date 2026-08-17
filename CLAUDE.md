@@ -918,6 +918,21 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
 - `scripts/ui/SpriteAnimator.cs` — the one frame-swap driver, for creature clips and effect bursts
   alike. `Attach` resolves frames from a sprite id and needs an `idle`; `AttachOneShot` takes frames
   outright and holds the last one, which is what a burst needs and what frees it
+- `scripts/ui/Motion.cs` — the eight named easing curves (`Jolt`/`Flash`/`Snap`/`Pop`/`Settle`/
+  `Land`/`Fade`/`Drift`) and the only two builders any tween uses, `TweenTo` and `TweenPingPong`.
+  A curve is a duration *and* a transition *and* an ease held together, because they are one
+  decision — `MotionCurve.Over` changes the period and cannot change the shape, which is what lets
+  a fog bank drift for 14 seconds without also picking its own easing. `Motion.Seconds` is the one
+  place a period becomes a number, and therefore the one place an animation-speed setting
+  multiplies — `Tween.Wait` routes bare delays through it too, since a stagger that did not scale
+  with the sequence around it would invert the readout it exists to create. Two curves are `InOut`
+  (`Fade`, `Drift`) and the rest are `Out`: a loop and a disappearance are the two cases where
+  "arriving" is the wrong verb. ART_SPEC §11; `PixelSpecSmokeTest` fails a bare
+  `TweenProperty`/`TweenInterval`/`SetTrans`/`SetEase` anywhere under `scripts/` (the exemption is
+  the **property** `volume_db`, not the `AudioManager` file — the argument is that nothing on screen
+  moves, so it has to be the predicate) and sweeps the other way for a curve nothing uses.
+  **Renaming a tween builder means editing §9's transform regex too**, which is keyed to the
+  spelling — that guard went silently dead when these call sites became `TweenTo`
 - `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic
   status block, framed panel, art plinth), attached from `_Ready` like `ScreenBackground` and
   `DeckViewButtons`. Owns those node paths; `ScreenChrome.HpLabelPath` and friends are what the

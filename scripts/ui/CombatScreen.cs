@@ -350,9 +350,12 @@ public partial class CombatScreen : Control
         var tween = _playerSprite.CreateTween();
         foreach (var wp in waypoints)
         {
-            tween.TweenProperty(_playerSprite, "position", SnapToPixelGrid(wp), stepDuration);
+            // Jolt, not Settle: the caller's stepDuration is the beat (0.035 for
+            // a hit-shake, 0.09 for a lunge) and easing each step would put a
+            // slow tail on every waypoint, turning a jitter into a wobble.
+            tween.TweenTo(_playerSprite, "position", SnapToPixelGrid(wp), Motion.Jolt.Over(stepDuration));
         }
-        tween.TweenProperty(_playerSprite, "position", _playerSpriteRestPos, stepDuration);
+        tween.TweenTo(_playerSprite, "position", _playerSpriteRestPos, Motion.Jolt.Over(stepDuration));
         tween.TweenCallback(Callable.From(StartPlayerIdleBob));
     }
 
@@ -434,6 +437,8 @@ public partial class CombatScreen : Control
 
     // Slides up + fades in, holds briefly, then fades out - a short beat
     // between turns rather than an instant label swap.
+    private const float BannerHoldSeconds = 0.5f;
+
     private void PlayTurnBanner(string text)
     {
         _turnBannerTween?.Kill();
@@ -444,11 +449,13 @@ public partial class CombatScreen : Control
         var tween = CreateTween();
         _turnBannerTween = tween;
         tween.SetParallel(true);
-        tween.TweenProperty(_turnBannerPanel, "modulate:a", 1f, 0.18).SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(_turnBannerPanel, "position", _turnBannerRestPos, 0.22).SetTrans(Tween.TransitionType.Back);
+        tween.TweenTo(_turnBannerPanel, "modulate:a", 1f, Motion.Settle);
+        tween.TweenTo(_turnBannerPanel, "position", _turnBannerRestPos, Motion.Land);
         tween.Chain();
-        tween.TweenInterval(0.5);
-        tween.TweenProperty(_turnBannerPanel, "modulate:a", 0f, 0.25).SetTrans(Tween.TransitionType.Sine);
+        // The hold is the banner - it is a thing to be read, so how long it
+        // stays legible is content rather than a curve.
+        tween.Wait(BannerHoldSeconds);
+        tween.TweenTo(_turnBannerPanel, "modulate:a", 0f, Motion.Fade);
     }
 
     // Screen shake: jitters the CombatScreen root itself - safe since it's
@@ -486,9 +493,9 @@ public partial class CombatScreen : Control
             var offset = PixelSpec.SnapTranslation(
                 new Vector2(rng.RandfRange(-magnitude, magnitude), rng.RandfRange(-magnitude, magnitude)),
                 1);
-            tween.TweenProperty(this, "position", offset, 0.03);
+            tween.TweenTo(this, "position", offset, Motion.Jolt);
         }
-        tween.TweenProperty(this, "position", Vector2.Zero, 0.03);
+        tween.TweenTo(this, "position", Vector2.Zero, Motion.Jolt);
     }
 
     // Control (unlike Node2D/Node3D) has no ToLocal() - invert its own
@@ -554,7 +561,7 @@ public partial class CombatScreen : Control
         line.AddPoint(ToLocalPoint(toGlobal));
         AddChild(line);
         var tween = line.CreateTween();
-        tween.TweenProperty(line, "modulate:a", 0f, 0.18).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenTo(line, "modulate:a", 0f, Motion.Settle);
         tween.TweenCallback(Callable.From(line.QueueFree));
     }
 
@@ -563,8 +570,8 @@ public partial class CombatScreen : Control
     {
         var original = target.Modulate;
         var tween = target.CreateTween();
-        tween.TweenProperty(target, "modulate", new Color(0.55f, 0.8f, 1f), 0.06);
-        tween.TweenProperty(target, "modulate", original, 0.14);
+        tween.TweenTo(target, "modulate", new Color(0.55f, 0.8f, 1f), Motion.Flash);
+        tween.TweenTo(target, "modulate", original, Motion.Snap);
     }
 
     // One StringName per slot, built once. IsActionPressed takes a StringName,
@@ -902,9 +909,7 @@ public partial class CombatScreen : Control
         if (pulse && current > 0)
         {
             orb.Modulate = new Color(2.2f, 2.2f, 2.2f);
-            orb.CreateTween()
-                .TweenProperty(orb, "modulate", Colors.White, 0.22)
-                .SetTrans(Tween.TransitionType.Sine);
+            orb.CreateTween().TweenTo(orb, "modulate", Colors.White, Motion.Settle);
         }
     }
 
@@ -1314,8 +1319,8 @@ public partial class CombatScreen : Control
     {
         var original = target.Modulate;
         var tween = target.GetTree().CreateTween();
-        tween.TweenProperty(target, "modulate", new Color(1f, 0.4f, 0.4f), 0.06);
-        tween.TweenProperty(target, "modulate", original, 0.12);
+        tween.TweenTo(target, "modulate", new Color(1f, 0.4f, 0.4f), Motion.Flash);
+        tween.TweenTo(target, "modulate", original, Motion.Snap);
     }
 
     // Always RunState.MaxPotionSlots slots, empty ones included. The belt used
@@ -1421,6 +1426,10 @@ public partial class CombatScreen : Control
     // _endTurnPulsing) rather than every RefreshStateUi() call, so the
     // breathing loop doesn't visibly reset its phase on every single card
     // played while the condition stays true.
+    // The fastest breath in the game, and deliberately: this one is a prompt
+    // ("you have nothing left to play"), not atmosphere.
+    private const float EndTurnPulseSeconds = 0.6f;
+
     private void SetEndTurnPulsing(bool shouldPulse)
     {
         if (shouldPulse == _endTurnPulsing) return;
@@ -1436,9 +1445,9 @@ public partial class CombatScreen : Control
         var tween = _endTurnButton.CreateTween();
         _endTurnPulseTween = tween;
         tween.SetLoops();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(_endTurnButton, "modulate", new Color(1f, 0.85f, 0.5f), 0.6);
-        tween.TweenProperty(_endTurnButton, "modulate", Colors.White, 0.6);
+        tween.TweenPingPong(
+            _endTurnButton, "modulate", new Color(1f, 0.85f, 0.5f), Colors.White,
+            Motion.Drift.Over(EndTurnPulseSeconds));
     }
 
     // Guards the whole Continue handler against being run twice. There are two

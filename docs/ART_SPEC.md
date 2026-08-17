@@ -347,6 +347,12 @@ generic art silently and forever with a stale file sitting beside it. Event icon
 only ones never drawn below 5x — `EventScreen` shows them at `SpriteScale` as its focal art —
 which is why they carry more structure than the 1x-budgeted HUD set.
 
+§11's motion vocabulary is checked the same three ways, and the third is the one that matters: a
+forward scan for a hand-built tween, plus two reflection sweeps asserting that every declared curve
+is in `Motion.All` and that something actually calls it. The forward scan alone stays green over a
+vocabulary nobody uses, which is the same orphan direction the event icons and the combat bursts
+each needed a separate set for.
+
 It also scans the theme, every `.tscn` and every `scripts/ui/*.cs` for a rendered font size and
 fails any that is not a multiple of §7's 8px em. That check exists because the sizes that drifted
 off-grid were all local `AddThemeFontSizeOverride` calls and `.tscn` overrides — none of which
@@ -516,3 +522,96 @@ The audit's honest finding is worth recording, because it is not what the roadma
 hand-drawn half was **already overwhelmingly up-left**, and the large majority of highlight-coloured
 draw calls turned out to be emblems, marks and materials rather than shading — a crown, a cross, a
 page block, a pale mask behind bars. The real offenders were few.
+
+## 11. Motion
+
+**A tween takes its duration, its transition and its ease from one named curve, and picks none of
+the three itself.** `scripts/ui/Motion.cs` holds eight of them; `Tween.TweenTo` and
+`Tween.TweenPingPong` are the only two ways a property is animated, and `Tween.Wait` the only way
+a delay is held. §9 already governs *what* a pixel asset may be tweened on — this section governs
+*how* anything is.
+
+The eight, in period order:
+
+| Curve | Period | Shape | What it is for |
+| --- | --- | --- | --- |
+| `Jolt` | 0.03s | Linear / Out | one step of a shake; a jitter that eases is a wobble |
+| `Flash` | 0.06s | Sine / Out | the in-half of an impact tint |
+| `Snap` | 0.12s | Sine / Out | an immediate answer to input — hover, the out-half of a flash |
+| `Pop` | 0.18s | Back / Out | a small overshoot: something leaving with a kick, a number punching in |
+| `Settle` | 0.20s | Sine / Out | a value arriving at a new resting place; the default |
+| `Land` | 0.28s | Back / Out | something arriving *with weight* — a dealt card, a relic onto its plinth |
+| `Fade` | 0.35s | Sine / **InOut** | an alpha ramp long enough to read, in either direction |
+| `Drift` | 1.40s | Sine / **InOut** | the half-period of an ambient loop |
+
+Five things about it are load-bearing:
+
+- **The period is negotiable and the shape is not.** `MotionCurve.Over(seconds)` returns the same
+  curve over a different period, and that is the whole escape hatch. It exists because a loop's
+  half-period is genuinely a per-site fact — a fog bank wanders for 14 seconds, a map ring pulses for
+  0.7, an exhausting card is faster than a discarded one *because* it is exhausting — while the shape
+  those run on is not. A site that needs its own number still cannot invent its own easing.
+- **`Fade` and `Drift` are the two symmetric curves, and neither is a style choice.** Every other
+  curve is `Out`, because a thing *arriving* decelerates into its rest. Those two are the cases where
+  "arriving" is the wrong verb. A loop does not arrive anywhere, and an `Out` ease on a ping-pong
+  snaps at both turns — a stutter rather than breathing; `TweenPingPong` exists so the six ambient
+  loops cannot disagree about the period of their halves. And a thing *disappearing* does not arrive
+  either: `sine::out` on a fade to zero spends most of its opacity in the first third, so the subject
+  is largely gone before the beat it is meant to occupy. That one is measured rather than argued —
+  `EnemyView`'s death clip is three frames at 0.12 against a 0.35s fade, and `Out` puts frame 1 at
+  alpha 0.49 where the clip was authored against 0.74. **This is the one curve in the table that
+  shipped wrong and was corrected in review**, and the tell was the table's own words: an `Out` ease
+  cannot be "long enough to read, in either direction", because it is asymmetric by construction.
+- **`Back` never lands on alpha.** Back overshoots *past* its destination, and past `modulate:a = 0`
+  or `1` there is nowhere to overshoot to — the value clamps, so the property simply arrives early and
+  waits. Four sites animate a transform and an alpha together and each pairs `Land`/`Pop` with
+  `Settle`/`Fade` for exactly this reason.
+- **`Motion.Seconds` is the one place a period becomes a number**, which is where ROADMAP Phase 11's
+  animation-speed setting multiplies. It is a function rather than a `Scale` field sitting at 1f,
+  because a field nothing writes is dead state no assertion can see. Note that the setting cannot be
+  `Engine.TimeScale` — `CombatScreen`'s hit-stop comment argued that out already, since the same dial
+  rescales `CombatManager`'s turn pacing.
+
+  **A bare delay goes through it too, and that is not tidiness.** `TweenInterval` takes a raw double,
+  so a hold, a stagger or a lag would sit *inside* an animated sequence and not scale with it. At
+  0.5x, a `ChromeStyles` ghost bar whose 0.4s drain scaled and whose 0.15s lag did not would begin
+  draining after the real bar had already finished — inverting the readout the lag exists to create.
+  `Tween.Wait` is the only sanctioned `TweenInterval` for that reason.
+- **The one exemption is a *property*, not a file.** `volume_db` is not motion: nothing on screen
+  moves, and an animation-speed dial must not cut a music crossfade short. Exempting `AudioManager.cs`
+  wholesale is the version of that sentence which stops being true the moment someone adds a
+  mute-indicator flash to it — visible motion, outside the vocabulary and outside the future setting,
+  with the exemption's stated reason not applying. The predicate is the reason.
+
+### What is enforced
+
+`PixelSpecSmokeTest` scans **all of `scripts/`** for a bare `TweenProperty`, `TweenInterval`,
+`SetTrans` or `SetEase`, and fails any it finds outside `Motion.cs` and any line touching
+`volume_db`. Rooted at the whole tree rather than at `ui` and `run`, because the opening sentence of
+this section is unqualified and a scan covering two of seven source directories does not back it. A
+source scan for the same reason §7's font-size scan and §9's transform scan are ones: nearly every
+tween here sits behind a combat event or a `ReduceMotion` branch, so instantiating the screens
+reaches almost none of them. Comment lines are skipped, per the rule §8 records — `GlowRing`'s
+comment explaining why it is a frame timer *instead* of a `TweenProperty` reads to a regex exactly
+like a `TweenProperty`.
+
+**§9's transform scan had to be widened in the same commit, and that is the sharpest thing this
+section has to teach.** That guard was keyed to the literal string `TweenProperty(` — every tween in
+the project, until this section renamed all thirty-four to `TweenTo(`. Measured: the scan went from
+9 matching lines in `CardView.cs` alone to **0**, with all 9 call sites still present and all 23
+suites green. A guard keyed to a spelling dies the day the spelling changes, and it dies *silently*,
+because a scan that finds nothing is indistinguishable from a codebase with nothing to find. It
+matches both spellings now. The general form: **a rename is a change to every regex that names the
+old spelling, and no compiler will say so.**
+
+Two sweeps run the other direction, and they are what stop the vocabulary rotting. Reflection over
+`Motion`'s own fields asserts that each declared curve is in `Motion.All` (a curve missing from the
+registry is invisible to every sweep driven by it — the seam `CombatFx.All` has one asset class
+over), that no two curves share all three values (two names for one curve distinguishes nothing),
+and that something under `scripts/` actually *uses* each one. That last is the
+half that earns its keep: the forward scan stays perfectly green over a vocabulary of thirty curves
+nobody calls, and eight is only a useful number while eight is the true one.
+
+**Not enforced:** which curve a site picked. `Land` where `Settle` belonged is a judgement call, and
+the check can only see that a curve was used at all — the same shape as §10's unheld hand-placed
+highlights, and stated here so it is not mistaken for covered.
