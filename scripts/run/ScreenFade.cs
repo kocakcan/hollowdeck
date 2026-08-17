@@ -90,7 +90,7 @@ public partial class ScreenFade : CanvasLayer
         _tween = tween;
         tween.TweenTo(_cover, "color:a", 1f, FadeOut);
         tween.TweenCallback(Callable.From(whileCovered));
-        tween.TweenInterval(HoldTime);
+        tween.Wait(HoldTime);
         tween.TweenTo(_cover, "color:a", 0f, FadeIn);
         tween.TweenCallback(Callable.From(ClearCover));
         return true;

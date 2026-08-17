@@ -191,7 +191,11 @@ public static class ChromeStyles
     // second hit can kill the still-draining ghost tween instead of two
     // tweens fighting over the same Value property.
     private const float GhostLagSeconds = 0.15f;
-    private const float GhostDrainSeconds = 0.4f;
+
+    // Derived, not 0.4: the drain reads as a separate bar because it is twice
+    // the main bar's, and a comment saying so is the only thing that would have
+    // known once Settle moved (it moved from 0.25 to 0.20 in this very change).
+    private static readonly float GhostDrainSeconds = Motion.Settle.Seconds * 2f;
 
     public static void TweenHpBar(ProgressBar bar, ProgressBar ghostBar, ref Tween? ghostTween, double newValue)
     {
@@ -210,9 +214,9 @@ public static class ChromeStyles
         ghostTween = tween;
         // The lag and the drain are both per-site facts about *this* readout:
         // the pause is what makes the ghost legible as a separate bar at all,
-        // and the drain is deliberately twice the main bar's Settle so the two
+        // and the drain is twice the main bar's Settle - derived, so the two
         // never look like one animation.
-        tween.TweenInterval(GhostLagSeconds);
+        tween.Wait(GhostLagSeconds);
         tween.TweenTo(ghostBar, "value", newValue, Motion.Settle.Over(GhostDrainSeconds));
     }
 

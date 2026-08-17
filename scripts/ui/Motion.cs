@@ -35,12 +35,22 @@ public readonly record struct MotionCurve(
 /// literal nobody else reads.
 public static class Motion
 {
-    // Everything below is Out except Drift. That is the single largest change
-    // this vocabulary made: *no* SetEase call existed anywhere in the codebase
-    // before it, so all thirty-four sites ran Godot's default InOut - which
-    // means every card that sprang home first pulled away from home, and every
-    // Back tween overshot on both ends. A thing arriving decelerates into its
-    // rest; only a loop is symmetric.
+    // Everything below is Out except Fade and Drift. That is the single largest
+    // change this vocabulary made: *no* SetEase call existed anywhere in the
+    // codebase before it, so all thirty-four sites ran Godot's default InOut -
+    // which means every card that sprang home first pulled away from home, and
+    // every Back tween overshot on both ends. A thing arriving decelerates into
+    // its rest.
+    //
+    // The two exceptions are both cases where "arriving" is the wrong verb. A
+    // loop does not arrive anywhere, and neither does a thing disappearing: an
+    // Out ease on a fade *to* zero spends most of its opacity in the first
+    // third, so the subject is mostly gone before the beat it is supposed to
+    // occupy. That is not hypothetical - EnemyView's death clip is three frames
+    // at 0.12 against a 0.35s fade, and Out puts frame 1 at alpha 0.49 where the
+    // clip was authored against 0.74. The escape clip, the one that exists so a
+    // fleeing enemy finally *travels*, would travel behind a sprite already 72%
+    // gone.
 
     /// One step of a shake. Uniform by design: a jitter that eases is a wobble.
     public static readonly MotionCurve Jolt =
@@ -71,9 +81,10 @@ public static class Motion
         new(0.28f, Tween.TransitionType.Back, Tween.EaseType.Out);
 
     /// An alpha ramp long enough to read, in either direction: a dying enemy, an
-    /// expiring status, art resolving onto a screen.
+    /// expiring status, art resolving onto a screen. Symmetric, and that is what
+    /// "either direction" costs - see the ease note above.
     public static readonly MotionCurve Fade =
-        new(0.35f, Tween.TransitionType.Sine, Tween.EaseType.Out);
+        new(0.35f, Tween.TransitionType.Sine, Tween.EaseType.InOut);
 
     /// The half-period of an ambient loop, and the one symmetric curve here -
     /// an Out ease on a ping-pong loop snaps at both turns, which reads as a
@@ -102,7 +113,15 @@ public static class Motion
     /// Note that a speed setting cannot be Engine.TimeScale - CombatScreen's
     /// hit-stop comment already argued that out, since the same dial would
     /// rescale CombatManager's turn pacing.
-    public static double Seconds(MotionCurve curve) => curve.Seconds;
+    public static double Seconds(MotionCurve curve) => Seconds(curve.Seconds);
+
+    /// The same funnel for a bare duration - a hold, a stagger, a lag. These do
+    /// not have a shape to pick, so they are not curves, but they are inside the
+    /// same *sequence* as things that are: at 0.5x, a ChromeStyles ghost bar
+    /// whose drain scaled and whose 0.15s lag did not would start draining after
+    /// the real bar had already finished, inverting the readout. Every
+    /// TweenInterval in the project goes through Tween.Wait for that reason.
+    public static double Seconds(float seconds) => seconds;
 
     /// The only way a tween in this project animates a property. Applies the
     /// curve's duration, transition and ease together, which is what makes
@@ -123,7 +142,18 @@ public static class Motion
         this Tween tween, GodotObject target, NodePath property,
         Variant away, Variant home, MotionCurve curve)
     {
+        // SetParallel is sticky on a Tween, and five callers elsewhere in the
+        // project turn it on. Under it these two steps would be appended to the
+        // *same* step and blend simultaneously - one crossfade from away to
+        // home on a property with two writers, i.e. a SetLoops() loop that runs
+        // forever and visibly does nothing. Compiles, passes, no motion.
+        tween.SetParallel(false);
         tween.TweenTo(target, property, away, curve);
         tween.TweenTo(target, property, home, curve);
     }
+
+    /// A hold, a stagger or a lag. The only sanctioned TweenInterval, so a
+    /// delay inside an animated sequence scales with the sequence.
+    public static void Wait(this Tween tween, float seconds) =>
+        tween.TweenInterval(Seconds(seconds));
 }

@@ -924,9 +924,15 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   decision — `MotionCurve.Over` changes the period and cannot change the shape, which is what lets
   a fog bank drift for 14 seconds without also picking its own easing. `Motion.Seconds` is the one
   place a period becomes a number, and therefore the one place an animation-speed setting
-  multiplies. ART_SPEC §11; `PixelSpecSmokeTest` fails a bare `TweenProperty`/`SetTrans`/`SetEase`
-  anywhere under `scripts/ui` or `scripts/run` (`AudioManager` is the one exemption — a `volume_db`
-  ramp is not motion) and sweeps the other way for a curve nothing uses
+  multiplies — `Tween.Wait` routes bare delays through it too, since a stagger that did not scale
+  with the sequence around it would invert the readout it exists to create. Two curves are `InOut`
+  (`Fade`, `Drift`) and the rest are `Out`: a loop and a disappearance are the two cases where
+  "arriving" is the wrong verb. ART_SPEC §11; `PixelSpecSmokeTest` fails a bare
+  `TweenProperty`/`TweenInterval`/`SetTrans`/`SetEase` anywhere under `scripts/` (the exemption is
+  the **property** `volume_db`, not the `AudioManager` file — the argument is that nothing on screen
+  moves, so it has to be the predicate) and sweeps the other way for a curve nothing uses.
+  **Renaming a tween builder means editing §9's transform regex too**, which is keyed to the
+  spelling — that guard went silently dead when these call sites became `TweenTo`
 - `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic
   status block, framed panel, art plinth), attached from `_Ready` like `ScreenBackground` and
   `DeckViewButtons`. Owns those node paths; `ScreenChrome.HpLabelPath` and friends are what the

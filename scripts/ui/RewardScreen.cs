@@ -690,7 +690,7 @@ public partial class RewardScreen : Control
     private static void PlayIdleSway(CardView view, float restRotation, float phaseDelay)
     {
         var tween = view.CreateTween();
-        tween.TweenInterval(phaseDelay);
+        tween.Wait(phaseDelay);
         tween.SetLoops();
         tween.TweenPingPong(
             view, "rotation_degrees", restRotation + SwayDegrees, restRotation - SwayDegrees,

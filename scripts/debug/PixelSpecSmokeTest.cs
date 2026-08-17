@@ -1312,8 +1312,20 @@ public partial class PixelSpecSmokeTest : Node
     {
         // Both the tween form and the direct assignment, since setting
         // _sprite.Scale outright is the same violation held still.
+        //
+        // **Both spellings of the tween form, and that alternation is the whole
+        // reason this comment is here.** This pattern was keyed to the literal
+        // `TweenProperty(` for three phases, which was every tween in the
+        // project - and then ART_SPEC section 11 renamed all thirty-four call
+        // sites to `TweenTo(` in one commit. Measured on that commit: this scan
+        // went from 9 matching lines in CardView.cs alone to 0, with the same 9
+        // call sites still there and all 23 suites green. A guard keyed to a
+        // spelling dies the day the spelling changes, and it dies silently,
+        // because a scan that finds nothing looks exactly like a codebase with
+        // nothing to find. The name is in a regex rather than in the type
+        // system, so nothing else could have caught it.
         var transform = new Regex(
-            """TweenProperty\(\s*(?<node>\w+|this)\s*, "(?<prop>scale|rotation|rotation_degrees|skew)"|(?<![\w.])(?<node>\w+|this)\.(?<prop>Scale|RotationDegrees|Rotation|Skew)\s*=""");
+            """(?:TweenProperty|TweenTo)\(\s*(?<node>\w+|this)\s*, "(?<prop>scale|rotation|rotation_degrees|skew)"|(?<![\w.])(?<node>\w+|this)\.(?<prop>Scale|RotationDegrees|Rotation|Skew)\s*=""");
 
         foreach (string path in FilesUnder("res://scripts/ui", ".cs"))
         {
@@ -1384,25 +1396,32 @@ public partial class PixelSpecSmokeTest : Node
             $"{findings.Count} site(s) found");
     }
 
-    // The files the scan covers, and the one it does not.
-    //
-    // AudioManager is exempt on purpose and it is the only exemption: its three
-    // tweens ramp `volume_db` on an AudioStreamPlayer. Nothing on screen moves,
-    // so a curve named for how a thing *arrives* says nothing about it - and
-    // more to the point, the animation-speed setting Motion.Seconds exists to
-    // host must not reach a music crossfade. A player who wants snappier card
-    // animations has not asked for the soundtrack to be cut short.
-    private static readonly HashSet<string> RawTweenExemptFiles = new()
-    {
-        "Motion.cs", "AudioManager.cs",
-    };
+    // Motion.cs is the only *file* exemption, because it is the thing being
+    // defined - every builder in it is a raw call by construction.
+    private static readonly HashSet<string> RawTweenExemptFiles = new() { "Motion.cs" };
+
+    // The audio exemption is a *property*, not a file, and the difference is
+    // the whole argument. What ART_SPEC section 11 actually says is that
+    // `volume_db` is not motion: nothing on screen moves, and the
+    // animation-speed setting Motion.Seconds exists to host must not cut a
+    // music crossfade short. Exempting AudioManager.cs wholesale would have
+    // covered a mute-indicator flash or a bus-meter nudge added to that file
+    // later - visible motion, silently outside the vocabulary and outside the
+    // future setting, with the exemption's own stated reason not applying to
+    // it. The predicate should be the reason.
+    private const string ExemptTweenProperty = "volume_db";
 
     private static IEnumerable<(string Path, int Line, string Detail)> ScanSourceForRawTweens()
     {
-        var raw = new Regex(@"\.(?<call>TweenProperty|SetTrans|SetEase)\s*\(");
+        var raw = new Regex(@"\.(?<call>TweenProperty|TweenInterval|SetTrans|SetEase)\s*\(");
 
-        foreach (string path in FilesUnder("res://scripts/ui", ".cs")
-                     .Concat(FilesUnder("res://scripts/run", ".cs")))
+        // Every directory under scripts/, not only ui and run. Section 11 opens
+        // with the unqualified claim that TweenTo and TweenPingPong are the only
+        // two ways a property is animated, and a scan rooted at two of the seven
+        // source directories does not back that sentence. There are no raw
+        // tweens outside ui/run today; this is what keeps that true rather than
+        // true-so-far.
+        foreach (string path in FilesUnder("res://scripts", ".cs"))
         {
             if (RawTweenExemptFiles.Contains(path.GetFile())) continue;
 
@@ -1413,6 +1432,7 @@ public partial class PixelSpecSmokeTest : Node
             {
                 string text = reader.GetLine();
                 if (text.TrimStart().StartsWith("//")) continue;
+                if (text.Contains(ExemptTweenProperty)) continue;
                 foreach (Match match in raw.Matches(text))
                 {
                     yield return (path, line, $"{match.Groups["call"].Value}()");

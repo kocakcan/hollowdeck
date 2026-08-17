@@ -454,7 +454,7 @@ public partial class CombatScreen : Control
         tween.Chain();
         // The hold is the banner - it is a thing to be read, so how long it
         // stays legible is content rather than a curve.
-        tween.TweenInterval(BannerHoldSeconds);
+        tween.Wait(BannerHoldSeconds);
         tween.TweenTo(_turnBannerPanel, "modulate:a", 0f, Motion.Fade);
     }
 

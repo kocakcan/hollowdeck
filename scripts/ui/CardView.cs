@@ -241,7 +241,7 @@ public partial class CardView : Panel
         // Paint over the neighbours the halo now overlaps. No tween and no
         // ReduceMotion gate needed: this is a static repaint, not motion -
         // which also retires the bug where arrow-keying faster than
-        // UiTheme.Motion.Fast left two live tweens fighting over "scale".
+        // Motion.Snap left two live tweens fighting over "scale".
         ZIndex = focused ? 10 : 0;
     }
 
@@ -684,7 +684,7 @@ public partial class CardView : Panel
         RotationDegrees = toRotation + (GD.Randf() * 20f - 10f);
 
         var tween = GetTree().CreateTween();
-        tween.TweenInterval(staggerDelaySec);
+        tween.Wait(staggerDelaySec);
         tween.SetParallel(true);
         tween.TweenTo(this, "position", toPos, Motion.Land);
         tween.TweenTo(this, "rotation_degrees", toRotation, Motion.Land);

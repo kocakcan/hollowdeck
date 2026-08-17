@@ -365,15 +365,24 @@ Five things are worth knowing before touching it:
   map ring), and `CardView`'s exhaust branch really is faster *because* it is an exhaust — those are
   content. Which curve they run on is not. A blanket "no literal durations" rule would have been
   enforceable and wrong; it would have pushed six real facts into six invented constant names.
-- **`Drift` is the one `InOut`, and every ambient loop was already correct.** Loops ping-pong, and an
-  `Out` ease at both turns of a ping-pong reads as a stutter rather than as breathing. So the six
-  looping sites came through this change *identical in feel* — Sine/InOut before and after — while
-  the one-shots are where the ease actually moved. Worth stating because "we changed the easing on
-  every tween in the game" is true and would be the wrong thing to go looking for in a playtest.
+- **`Fade` and `Drift` are the two `InOut` curves, and the ambient loops were already correct.**
+  Loops ping-pong, and an `Out` ease at both turns reads as a stutter rather than as breathing, so
+  the six looping sites came through *identical in feel* — Sine/InOut before and after. Worth stating
+  because "we changed the easing on every tween in the game" is true and would be the wrong thing to
+  go looking for in a playtest.
+
+  **`Fade` shipped as `Out` and was corrected in review, which is the one wrong call in this item.**
+  A disappearance is not an arrival: `sine::out` on a fade to zero spends most of its opacity in the
+  first third. `EnemyView`'s death clip is three frames at 0.12 against a 0.35s fade, so `Out` put
+  frame 1 at alpha 0.49 where the clip was authored against 0.74, and the escape clip — the one that
+  exists so a fleeing enemy finally *travels* — would have travelled behind a sprite already 72%
+  gone. The tell was in the table the whole time: "long enough to read, in either direction" is not
+  something an asymmetric ease can be, and every `Fade` site had been Sine/InOut before the change.
 - **`Back` never lands on alpha, and three sites had to be split to keep that true.** Back overshoots
   past its destination; past `modulate:a` of 0 or 1 the value clamps, so the property arrives early
-  and sits. `PlayDrawTween`, `PlayResolveTween` and `TreasureScreen.PlayEntrance` each animate a
-  transform and an alpha together and now pair `Land`/`Pop` with `Settle`/`Fade`.
+  and sits. `PlayDrawTween`, `PlayDiscardTween`, `PlayResolveTween` and
+  `TreasureScreen.PlayEntrance` each animate a transform and an alpha together and now pair
+  `Land`/`Pop` with `Settle`/`Fade`.
 - **`Motion.Seconds` is a function, not a `Scale` field.** ROADMAP Phase 11's animation-speed setting
   needs one place to multiply, and the tempting shape is a `public static float Scale = 1f`. That is
   dead state no assertion can observe. A funnel with one caller is a place to put the multiply
@@ -383,6 +392,15 @@ Five things are worth knowing before touching it:
 
 Two things this cost that are worth recording:
 
+- **The rename silently disarmed §1's guard, and 23 green suites said nothing.**
+  `TestNoTweenTransformsAPixelSprite` was keyed to the literal `TweenProperty(`, which was every
+  tween in the project until this item renamed all thirty-four to `TweenTo(`. Measured on the first
+  commit: the scan went from 9 matching lines in `CardView.cs` alone to **0**, with all 9 call sites
+  still there. A `TweenTo(this, "scale", …)` added to `EnemyView.PlayDeath` — the exact violation §1
+  says that guard was rewritten to catch — passed. This is the second time this one assertion has
+  been found broken while three documents claimed it covered everything, and both times the failure
+  was that it named things rather than describing them. **A rename is a change to every regex holding
+  the old spelling, and nothing in the toolchain will say so.**
 - **The forward check cannot fail on the failure that actually matters.** Scanning for a hand-built
   `TweenProperty` catches a site going around the vocabulary and is *completely green* over a
   vocabulary of thirty curves nobody calls — which is the direction this feature rots in, since the
@@ -391,12 +409,19 @@ Two things this cost that are worth recording:
   `scripts/ui` or `scripts/run` must use it. Same third-set argument the combat bursts needed, and
   each of the three was mutation-tested before this was called done — a raw `TweenProperty`
   reintroduced into `StatusRow`, an unused curve added, and `Drift` dropped from `All`, each red.
-- **The exemption list is one file and it had to be argued rather than assumed.** `AudioManager`'s
-  three tweens ramp `volume_db`; nothing on screen moves. Handing them a curve named for how a thing
-  *arrives* would be the drifted-telegraph shape one layer over — but more concretely, the speed
-  setting this vocabulary exists to host must not cut a music crossfade short. Everything else in
-  `scripts/ui` and `scripts/run` is covered, including `FloatingText` and `CardView`, whose §9
-  transform exceptions are a different axis and confer nothing here.
+- **The exemption is a property and not a file, and the first draft had that backwards.**
+  `volume_db` is not motion; nothing on screen moves, and the speed setting this vocabulary exists to
+  host must not cut a music crossfade short. That argument is entirely about the *property*, so
+  exempting `AudioManager.cs` wholesale was a rule wider than its own reason — a mute-indicator flash
+  added to that file later would have been visible motion, outside the vocabulary and outside the
+  future setting, with the suite green. The scan roots at all of `scripts/` too, since §11's opening
+  sentence is unqualified and two of seven directories does not back it. `FloatingText` and
+  `CardView` are covered: their §9 transform exceptions are a different axis and confer nothing here.
+- **`TweenPingPong` had a latent do-nothing mode.** `SetParallel` is sticky on a `Tween` and five
+  callers elsewhere turn it on; under it the helper's two steps would blend simultaneously into one
+  crossfade, i.e. a `SetLoops()` loop running forever and visibly doing nothing. No current caller
+  does it. It sets `SetParallel(false)` itself now, which is the "compiles, passes, no motion" shape
+  closed for one line rather than left for whoever hits it.
 
 **What is deferred, and stated so it is not mistaken for finished:** *which* curve a site picked is
 unheld. The scan sees that a curve was used, not that `Land` was the right one where `Settle`
