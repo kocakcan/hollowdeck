@@ -146,6 +146,8 @@ public partial class EnemyView : Button
 
     // Slow idle opacity breathing on the intent icon, same "still alive and
     // relevant" cue the sprite's idle bob gives the enemy itself.
+    private const float IntentPulseSeconds = 0.9f;
+
     private void StartIntentPulse()
     {
         _intentPulseTween?.Kill();
@@ -153,9 +155,7 @@ public partial class EnemyView : Button
         var tween = _intentIcon.CreateTween();
         _intentPulseTween = tween;
         tween.SetLoops();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(_intentIcon, "modulate:a", 0.6f, 0.9);
-        tween.TweenProperty(_intentIcon, "modulate:a", 1f, 0.9);
+        tween.TweenPingPong(_intentIcon, "modulate:a", 0.6f, 1f, Motion.Drift.Over(IntentPulseSeconds));
     }
 
     // Pop when the telegraphed intent actually changes between refreshes
@@ -173,8 +173,8 @@ public partial class EnemyView : Button
         _intentPulseTween?.Kill();
         _intentIcon.Modulate = Colors.White;
         var tween = _intentIcon.CreateTween();
-        tween.TweenProperty(_intentIcon, "modulate", new Color(2f, 2f, 2f), 0.06);
-        tween.TweenProperty(_intentIcon, "modulate", Colors.White, 0.18);
+        tween.TweenTo(_intentIcon, "modulate", new Color(2f, 2f, 2f), Motion.Flash);
+        tween.TweenTo(_intentIcon, "modulate", Colors.White, Motion.Settle);
         tween.TweenCallback(Callable.From(StartIntentPulse));
     }
 
@@ -192,7 +192,7 @@ public partial class EnemyView : Button
         AudioManager.Instance?.PlaySfx("enemy_death");
         _animator?.PlayTerminal("death");
         var tween = CreateTween();
-        tween.TweenProperty(this, "modulate:a", 0f, 0.35).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenTo(this, "modulate:a", 0f, Motion.Fade);
         tween.TweenCallback(Callable.From(onComplete));
     }
 
@@ -217,7 +217,7 @@ public partial class EnemyView : Button
     {
         _animator?.PlayTerminal("escape");
         var tween = CreateTween();
-        tween.TweenProperty(this, "modulate:a", 0f, 0.35).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenTo(this, "modulate:a", 0f, Motion.Fade);
         tween.TweenCallback(Callable.From(onComplete));
     }
 

@@ -684,14 +684,17 @@ public partial class RewardScreen : Control
     // staggered per card (same "spawn the loop with a random/staggered
     // start delay" idiom EnemyView's idle bob already uses) so a row of
     // reward cards doesn't sway in lockstep.
+    private const float SwayDegrees = 2.5f;
+    private const float SwaySeconds = 1.6f;
+
     private static void PlayIdleSway(CardView view, float restRotation, float phaseDelay)
     {
         var tween = view.CreateTween();
         tween.TweenInterval(phaseDelay);
         tween.SetLoops();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(view, "rotation_degrees", restRotation + 2.5f, 1.6);
-        tween.TweenProperty(view, "rotation_degrees", restRotation - 2.5f, 1.6);
+        tween.TweenPingPong(
+            view, "rotation_degrees", restRotation + SwayDegrees, restRotation - SwayDegrees,
+            Motion.Drift.Over(SwaySeconds));
     }
 
     // Picking a card closes the overlay and returns to the list rather than

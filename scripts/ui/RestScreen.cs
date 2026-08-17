@@ -97,13 +97,16 @@ public partial class RestScreen : Control
         // that physically bobs reads as a floating object. Modulate is a
         // multiply, so this only ever darkens - the plinth's own bezel goes
         // with it, which is what sells it as light falling off.
+        //
+        // The only ambient loop in the game that is not a ping-pong: four
+        // uneven steps are what stop a fire reading as a metronome, so this is
+        // Drift four times over four periods rather than TweenPingPong.
         var tween = plinth.CreateTween();
         tween.SetLoops();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(plinth, "modulate", new Color(0.86f, 0.86f, 0.9f), 1.3);
-        tween.TweenProperty(plinth, "modulate", Colors.White, 0.9);
-        tween.TweenProperty(plinth, "modulate", new Color(0.93f, 0.92f, 0.94f), 0.6);
-        tween.TweenProperty(plinth, "modulate", Colors.White, 1.1);
+        tween.TweenTo(plinth, "modulate", new Color(0.86f, 0.86f, 0.9f), Motion.Drift.Over(1.3f));
+        tween.TweenTo(plinth, "modulate", Colors.White, Motion.Drift.Over(0.9f));
+        tween.TweenTo(plinth, "modulate", new Color(0.93f, 0.92f, 0.94f), Motion.Drift.Over(0.6f));
+        tween.TweenTo(plinth, "modulate", Colors.White, Motion.Drift.Over(1.1f));
     }
 
     // Rest sites offer exactly one action (heal, upgrade, or neither) before

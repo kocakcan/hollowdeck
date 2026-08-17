@@ -918,6 +918,15 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
 - `scripts/ui/SpriteAnimator.cs` — the one frame-swap driver, for creature clips and effect bursts
   alike. `Attach` resolves frames from a sprite id and needs an `idle`; `AttachOneShot` takes frames
   outright and holds the last one, which is what a burst needs and what frees it
+- `scripts/ui/Motion.cs` — the eight named easing curves (`Jolt`/`Flash`/`Snap`/`Pop`/`Settle`/
+  `Land`/`Fade`/`Drift`) and the only two builders any tween uses, `TweenTo` and `TweenPingPong`.
+  A curve is a duration *and* a transition *and* an ease held together, because they are one
+  decision — `MotionCurve.Over` changes the period and cannot change the shape, which is what lets
+  a fog bank drift for 14 seconds without also picking its own easing. `Motion.Seconds` is the one
+  place a period becomes a number, and therefore the one place an animation-speed setting
+  multiplies. ART_SPEC §11; `PixelSpecSmokeTest` fails a bare `TweenProperty`/`SetTrans`/`SetEase`
+  anywhere under `scripts/ui` or `scripts/run` (`AudioManager` is the one exemption — a `volume_db`
+  ramp is not motion) and sweeps the other way for a curve nothing uses
 - `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic
   status block, framed panel, art plinth), attached from `_Ready` like `ScreenBackground` and
   `DeckViewButtons`. Owns those node paths; `ScreenChrome.HpLabelPath` and friends are what the

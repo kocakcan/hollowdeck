@@ -642,10 +642,10 @@ public partial class CardView : Panel
         if (Interactive)
         {
             ZIndex = 100;
-            var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
+            var tween = GetTree().CreateTween();
             tween.SetParallel(true);
-            tween.TweenProperty(this, "scale", HoverScale, 0.12);
-            tween.TweenProperty(this, "rotation_degrees", 0f, 0.12); // "stands up straight"
+            tween.TweenTo(this, "scale", HoverScale, Motion.Snap);
+            tween.TweenTo(this, "rotation_degrees", 0f, Motion.Snap); // "stands up straight"
             RepaintFrame();
         }
         RefreshKeywordTooltip();
@@ -658,10 +658,10 @@ public partial class CardView : Panel
         if (Interactive)
         {
             ZIndex = _restZIndex;
-            var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Sine);
+            var tween = GetTree().CreateTween();
             tween.SetParallel(true);
-            tween.TweenProperty(this, "scale", NormalScale, 0.12);
-            tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.12);
+            tween.TweenTo(this, "scale", NormalScale, Motion.Snap);
+            tween.TweenTo(this, "rotation_degrees", _homeRotation, Motion.Snap);
             RepaintFrame();
         }
         // Not necessarily a hide: a card the player focused themselves keeps
@@ -686,11 +686,13 @@ public partial class CardView : Panel
         var tween = GetTree().CreateTween();
         tween.TweenInterval(staggerDelaySec);
         tween.SetParallel(true);
-        tween.SetTrans(Tween.TransitionType.Back);
-        tween.TweenProperty(this, "position", toPos, 0.28);
-        tween.TweenProperty(this, "rotation_degrees", toRotation, 0.28);
-        tween.TweenProperty(this, "scale", Vector2.One, 0.28);
-        tween.TweenProperty(this, "modulate:a", 1f, 0.18).SetTrans(Tween.TransitionType.Sine);
+        tween.TweenTo(this, "position", toPos, Motion.Land);
+        tween.TweenTo(this, "rotation_degrees", toRotation, Motion.Land);
+        tween.TweenTo(this, "scale", Vector2.One, Motion.Land);
+        // Alpha finishes ahead of the transform on purpose - the card is fully
+        // opaque while it is still settling, so the overshoot is legible rather
+        // than happening behind a fade. And Land's Back on alpha would clamp.
+        tween.TweenTo(this, "modulate:a", 1f, Motion.Settle);
     }
 
     // Discard/exhaust without being played (end-of-turn hand clear, or a
@@ -706,22 +708,25 @@ public partial class CardView : Panel
         GlobalPosition = globalPos;
         ZIndex = 50;
 
+        // The exhaust branch is faster as well as hotter - that pair is the
+        // whole "this one is not coming back" signal, so the period is content
+        // rather than a curve choice and rides through Over.
         float duration = isExhaust ? 0.18f : 0.26f;
         var tween = GetTree().CreateTween();
         tween.SetParallel(true);
-        tween.TweenProperty(this, "global_position", toGlobalPos, duration).SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(this, "scale", Vector2.One * (isExhaust ? 0.1f : 0.3f), duration).SetTrans(Tween.TransitionType.Back);
-        tween.TweenProperty(this, "modulate", isExhaust ? new Color(1.6f, 1.3f, 0.7f, 0f) : new Color(1f, 1f, 1f, 0f), duration);
+        tween.TweenTo(this, "global_position", toGlobalPos, Motion.Settle.Over(duration));
+        tween.TweenTo(this, "scale", Vector2.One * (isExhaust ? 0.1f : 0.3f), Motion.Pop.Over(duration));
+        tween.TweenTo(this, "modulate", isExhaust ? new Color(1.6f, 1.3f, 0.7f, 0f) : new Color(1f, 1f, 1f, 0f), Motion.Settle.Over(duration));
         tween.Chain().TweenCallback(Callable.From(QueueFree));
     }
 
     private void SnapHome()
     {
         ZIndex = _restZIndex;
-        var tween = GetTree().CreateTween().SetTrans(Tween.TransitionType.Back);
+        var tween = GetTree().CreateTween();
         tween.SetParallel(true);
-        tween.TweenProperty(this, "position", _homePosition, 0.2);
-        tween.TweenProperty(this, "rotation_degrees", _homeRotation, 0.2);
+        tween.TweenTo(this, "position", _homePosition, Motion.Land);
+        tween.TweenTo(this, "rotation_degrees", _homeRotation, Motion.Land);
     }
 
     public override void _GuiInput(InputEvent @event)
@@ -873,8 +878,10 @@ public partial class CardView : Panel
         bool isExhaust = CardInstance?.Definition.Exhaust ?? false;
         var tween = GetTree().CreateTween();
         tween.SetParallel(true);
-        tween.TweenProperty(this, "scale", Vector2.One * (isExhaust ? 0.15f : 0.4f), 0.18).SetTrans(Tween.TransitionType.Back);
-        tween.TweenProperty(this, "modulate", isExhaust ? new Color(1.6f, 1.3f, 0.7f, 0f) : new Color(1, 1, 1, 0f), 0.18);
+        tween.TweenTo(this, "scale", Vector2.One * (isExhaust ? 0.15f : 0.4f), Motion.Pop);
+        // Scale pops, the tint does not: Back overshoots past its destination,
+        // and past alpha 0 there is nowhere to overshoot to.
+        tween.TweenTo(this, "modulate", isExhaust ? new Color(1.6f, 1.3f, 0.7f, 0f) : new Color(1, 1, 1, 0f), Motion.Settle);
         tween.Chain().TweenCallback(Callable.From(QueueFree));
     }
 

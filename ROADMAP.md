@@ -912,10 +912,13 @@ beside `ART_SPEC.md` the way a backlog sits beside a rule set. It is not a phase
 one. Its first three items have shipped — sprite frame animation, chrome 9-slices, then the animated
 glow ring — and all three closed a rule `ART_SPEC.md` already stated and nothing enforced rather than
 adding polish. That was the whole of that category, so what is left in that file is ordinary backlog.
-One light direction and the combat effect frames have since shipped too; the latter is the first
-ordinary-backlog entry to land, and it retired the last smooth-gradient art on the combat screen —
-a `CpuParticles2D` spark that broke three ART_SPEC rules in a spot where neither the transform scan
-nor `artgen validate` could reach it.
+One light direction, the combat effect frames and the easing vocabulary have since shipped too; the
+effect frames were the first ordinary-backlog entry to land, and they retired the last
+smooth-gradient art on the combat screen — a `CpuParticles2D` spark that broke three ART_SPEC rules
+in a spot where neither the transform scan nor `artgen validate` could reach it. The easing
+vocabulary (`scripts/ui/Motion.cs`, ART_SPEC §11) is the one **this** phase should read before
+touching a tween: eight named curves replaced thirty-four ad-hoc pairs of duration and transition,
+and the setting below now has one place to multiply.
 The 9-slices also paid off half of §7's "Known cost, accepted" below: the ornament that was supposed
 to carry the illuminated-manuscript identity after Cinzel and IM Fell English went. The rest of that
 file is worth reading before touching anything visual.
@@ -952,6 +955,14 @@ is the second half of this item; both entries need a replacement affordance, not
   combat bursts', both through `SpriteAnimator.FlashOpeningClips`. The moment-to-moment card and
   combat juice is ungated, which is exactly where a speed control starts to matter around the tenth
   run.
+
+  **Half the plumbing is now in.** `Motion.Seconds` is the single point every tween's duration passes
+  through, so the tween half of this is one multiply. What it does *not* cover is the three
+  `_Process`-driven frame steppers (`SpriteAnimator`'s per-clip cadence, `GlowRing.FrameSeconds`,
+  `CombatFx.FrameSeconds`) or `CombatManager`'s `PreActionDelaySec`/`PostActionDelaySec`, and
+  `Engine.TimeScale` is not the shortcut — `CombatScreen`'s hit-stop comment already rejected it,
+  because the same dial rescales turn pacing along with the animation. `AudioManager` is deliberately
+  outside the vocabulary and must stay outside this setting: a crossfade is not juice.
 
 **Already done — do not rebuild:** keyword tooltips over cards and intents, draw/discard/exhaust pile
 inspection, and a damage preview that resolves live Strength and Weak *and* the aimed enemy's

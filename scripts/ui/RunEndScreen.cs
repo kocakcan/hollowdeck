@@ -97,10 +97,9 @@ public partial class RunEndScreen : Control
         // A slow gold breath on the winning sprite. The one moment in the game
         // that is allowed to be self-congratulatory, and it costs one tween.
         var tween = plinth.CreateTween();
+        // Drift's own period, unmodified - this is the breath it is named for.
         tween.SetLoops();
-        tween.SetTrans(Tween.TransitionType.Sine);
-        tween.TweenProperty(plinth, "modulate", new Color(1.25f, 1.15f, 0.9f), 1.4);
-        tween.TweenProperty(plinth, "modulate", Colors.White, 1.4);
+        tween.TweenPingPong(plinth, "modulate", new Color(1.25f, 1.15f, 0.9f), Colors.White, Motion.Drift);
     }
 
     // Category on the left, points on the right, then a Total row - the
