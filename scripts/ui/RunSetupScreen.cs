@@ -82,7 +82,7 @@ public partial class RunSetupScreen : Control
 
     public override void _Ready()
     {
-        ScreenBackground.Attach(this, "etched", new Color(0.8f, 0.78f, 0.85f));
+        ScreenBackground.AttachMenu(this);
         // The deck is inspectable here on purpose: "remove a card" and "upgrade
         // a card" are both authored blessings, and neither is a decision if the
         // player cannot look at what they are choosing from.

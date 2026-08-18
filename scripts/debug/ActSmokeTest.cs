@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -40,6 +41,7 @@ public partial class ActSmokeTest : Node
 
         TestActsLoad();
         TestEveryActAuthorsItsPotionDropRates();
+        TestEveryActAuthorsItsOwnAtmosphere();
         TestActContentIsDistinct();
         TestNoSummonCrossesAnAct();
         TestNewRunStartsInFirstAct();
@@ -75,11 +77,86 @@ public partial class ActSmokeTest : Node
         // Backdrops degrade to no backdrop if the tile is missing, which is
         // silent - so the ids are checked here instead.
         var missingArt = ActDatabase.All
-            .SelectMany(a => new[] { a.MapBackground, a.CombatBackground })
+            .SelectMany(a => AuthoredTiles(a))
             .Where(tile => !ResourceLoader.Exists($"res://assets/backgrounds/{tile}.png"))
             .ToList();
         Check("every_act_backdrop_tile_exists", missingArt.Count == 0, string.Join(", ", missingArt));
     }
+
+    // Six pieces per act: the three floors it authors outright, and the wall,
+    // plinth and pillar derived from its backdrop prefix. The derived three are
+    // included here on purpose - a typo in `backdrop` loses a whole room's
+    // architecture at once and ScreenBackground falls back to the floor tile
+    // rather than throwing, which is exactly the silent degrade this sweep
+    // exists for.
+    private static IEnumerable<string> AuthoredTiles(ActDefinition act) =>
+        new[]
+        {
+            act.MapBackground, act.CombatBackground, act.RoomBackground,
+            $"{act.Backdrop}_wall", $"{act.Backdrop}_plinth", $"{act.Backdrop}_pillar",
+        };
+
+    // An act authors nine strings that decide what it looks like, and every one
+    // of them fails soft: a missing tile name leaves ScreenBackground a no-op
+    // (its own comment says so), and Color.FromString hands back the fallback
+    // rather than throwing on a malformed hex. So an act with a typo in it is a
+    // screen that renders, plays and looks like somewhere else, with every
+    // suite green - the same shape PotionDropPercent needed its own assertion
+    // for, one field group over.
+    private void TestEveryActAuthorsItsOwnAtmosphere()
+    {
+        var unnamed = ActDatabase.All
+            .Where(a => a.Backdrop.Length == 0 || AuthoredTiles(a).Any(t => t.Length == 0))
+            .Select(a => a.Id)
+            .ToList();
+        Check("every_act_names_a_tile_for_every_surface", unnamed.Count == 0, string.Join(", ", unnamed));
+
+        var badHex = ActDatabase.All
+            .SelectMany(a => AuthoredTints(a).Select(t => (a.Id, t)))
+            .Where(pair => !IsSixHexDigits(pair.t))
+            .Select(pair => $"{pair.Id} '{pair.t}'")
+            .ToList();
+        Check("every_act_tint_is_six_hex_digits", badHex.Count == 0, string.Join(", ", badHex));
+
+        // Per-act atmosphere copied identically across three acts compiles,
+        // passes, renders, and is the exact thing the feature exists to remove
+        // - so "did anyone actually author three places" is the assertion,
+        // rather than "is the field present".
+        var signatures = ActDatabase.All
+            .Select(a => string.Join("/", AuthoredTiles(a).Concat(AuthoredTints(a))))
+            .ToList();
+        Check("no_two_acts_share_an_atmosphere",
+            signatures.Distinct().Count() == signatures.Count, string.Join(" | ", signatures));
+
+        // The orphan direction, which nothing has ever covered: gulch.png sat
+        // in assets/backgrounds/ named by no act for six phases, on the ramp,
+        // on the grid, and reported as conforming by artgen validate. A tile
+        // no act stands on is art nobody will ever see.
+        var named = ActDatabase.All.SelectMany(a => AuthoredTiles(a)).ToHashSet();
+        var orphans = new List<string>();
+        using var dir = DirAccess.Open("res://assets/backgrounds");
+        if (dir is not null)
+        {
+            foreach (var file in dir.GetFiles())
+            {
+                if (!file.EndsWith(".png")) continue;
+                var stem = file.Substring(0, file.Length - 4);
+                if (!named.Contains(stem)) orphans.Add(stem);
+            }
+        }
+        Check("no_background_tile_is_an_orphan", dir is not null && orphans.Count == 0,
+            dir is null ? "assets/backgrounds is unreadable" : string.Join(", ", orphans));
+    }
+
+    private static IEnumerable<string> AuthoredTints(ActDefinition act) =>
+        new[] { act.MapTint, act.CombatTint, act.RoomTint, act.HazeTint, act.VignetteTint };
+
+    // Color.FromString accepts a great deal more than this, including named
+    // colours and 3/4/8-digit forms - but acts.json authors one shape and a
+    // value that parsed *differently* than intended is the failure this is
+    // aimed at, not a value that failed to parse at all.
+    private static bool IsSixHexDigits(string value) =>
+        value.Length == 6 && value.All(Uri.IsHexDigit);
 
     // The potion drop rates, and the reason these three checks exist at all:
     // both fields default to 0, and unlike every other absent-is-zero field in

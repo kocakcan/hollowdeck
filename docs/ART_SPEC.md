@@ -16,7 +16,7 @@ Every asset is authored on one of these grids. No in-between sizes.
 | Asset class | Grid | Notes |
 | --- | --- | --- |
 | Creatures (enemies, player) | **32x32** | Bosses may use 32x48 when the silhouette needs the height |
-| Background tiles | **64x64** | Must tile seamlessly |
+| Background tiles | **64x64** | Must tile seamlessly. Six per act: three floors, a wall, a plinth, a pillar |
 | Icons (card, relic, potion, map, status, intent) | **32x32** | |
 | Combat effect frames | **32x32** | In `assets/icons/fx/`. A creature's grid, because an effect lands *on* a creature |
 | Chrome 9-slices (frames, bezels, buttons) | **16x16** or **24x24** | In `assets/theme/`. Corners must be ≤ 1/3 of the slice |
@@ -58,7 +58,12 @@ happens to land on. Set an explicit `CustomMinimumSize` of `grid × factor`.
 art into mush at any scale.
 
 `ScreenBackground.cs` already does this for background tiles and documents why; that rule now
-applies to sprites, icons, chrome and particles alike. Use `PixelSpec.ApplyPixelFilter()`.
+applies to sprites, icons, chrome and particles alike — **including the dust motes**, which were a
+`CpuParticles2D` drawing a smooth 8x8 radial `GradientTexture2D` at `ScaleAmountMin 0.4 / Max 1.1`
+until §12 landed. That is the same node type and the same three violations as the hit spark §5's
+combat frames retired, and it survived the same way: a `CpuParticles2D` is not a `TextureRect`, so
+the transform scan skips it, and its texture is not a file under `assets/`, so `artgen validate`
+never reads it. Use `PixelSpec.ApplyPixelFilter()`.
 
 The one deliberate exception: smooth procedural gradients that are *not* pixel art — the vignette
 and ground-plane in `ScreenBackground` — stay on `Linear`, because `Nearest` would band them. They
@@ -615,3 +620,37 @@ nobody calls, and eight is only a useful number while eight is the true one.
 **Not enforced:** which curve a site picked. `Land` where `Settle` belonged is a judgement call, and
 the check can only see that a curve was used at all — the same shape as §10's unheld hand-placed
 highlights, and stated here so it is not mistaken for covered.
+
+## 12. Backdrops
+
+**A backdrop is a room, not a texture.** Four bands, back to front: a wall, a colonnade standing in
+front of it, the plinth where the wall meets the ground, and the floor. `scripts/ui/ScreenBackground.cs`
+composes them; `tools/artgen/src/icons/backgrounds.rs` draws them.
+
+The rule exists because the alternative was tried twice and failed identically both times. One tile
+filling all of 1152x648 is wallpaper *by construction*: repeated 9x5 it has no horizon, so nothing
+drawn in front of it acquires a position, and every screen in the game reads as the same flat sheet
+in a different colour. That was true of the seven sourced Dungeon Crawl floors this replaced, and it
+stayed true when they were swapped one-for-one for generated ones on the same ramp under the same
+lamp. **The tiles were never the problem.**
+
+Three things follow, and none is visible from a single tile:
+
+- **Which axes a piece must close is per band.** A floor and a wall tile both ways, a plinth is one
+  row so only x, a pillar repeats only up the wall so only y. Asking a piece for a seam it never
+  meets is a rule with no failure behind it; not asking is a line down the screen.
+- **A pillar is the one piece with transparent pixels, and that is what it is for.** Its flanks read
+  through to the wall behind, so a colonnade is a rhythm laid over the masonry rather than a second
+  wall with columns painted on it. §3 forbids *partial* alpha, not alpha — these are 0 or 255 like
+  everything else. It carries its own cast shadow, opaque, on the flank away from the lamp; without
+  one it renders as a stripe rather than as something standing in front of something.
+- **`sheen` is two ramp steps above `face` and only two pieces may use it** — the plinth's top
+  surface and a pillar's lit band, the two surfaces the lamp hits closest to square. Being *found*
+  is their whole job. Everything else stays inside `shade`/`face`/`lit`, which is the contrast
+  budget a surface with ten cards drawn on top of it gets, and `no_tile_spends_more_of_the_ramp_than_its_band_allows`
+  holds both budgets.
+
+Per-act identity lives in the art rather than in a `Modulate`. Each act authors one backdrop set
+(`ward`, `reach`, `throne`) drawn in its own ramp family, so the surface tints in `acts.json` are
+neutral greys carrying brightness alone — a tint with a hue in it would be tinting twice, and the
+second one lands off the ramp.

@@ -25,7 +25,7 @@ public partial class MetaProgressionScreen : Control
 
     public override void _Ready()
     {
-        ScreenBackground.Attach(this, "etched", new Color(0.75f, 0.75f, 0.8f));
+        ScreenBackground.AttachMenu(this);
         _progressLabel = GetNode<Label>("Margin/Root/ProgressLabel");
         _nextUnlockLabel = GetNode<Label>("Margin/Root/NextUnlockLabel");
         _nextUnlockBar = GetNode<ProgressBar>("Margin/Root/NextUnlockBar");

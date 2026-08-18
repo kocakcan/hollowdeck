@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bvyqirunscel5"
-path="res://.godot/imported/gulch.png-9d4873962b1b3ca7cc3b76225a17d9b7.ctex"
+uid="uid://sjjeobwh8fhx"
+path="res://.godot/imported/ward_wall.png-9c547272d2b057138e3621b2ca26f81c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/gulch.png"
-dest_files=["res://.godot/imported/gulch.png-9d4873962b1b3ca7cc3b76225a17d9b7.ctex"]
+source_file="res://assets/backgrounds/ward_wall.png"
+dest_files=["res://.godot/imported/ward_wall.png-9c547272d2b057138e3621b2ca26f81c.ctex"]
 
 [params]
 

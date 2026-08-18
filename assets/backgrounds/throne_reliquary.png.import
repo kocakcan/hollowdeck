@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://pdsdv0nvoalj"
-path="res://.godot/imported/dirt.png-2e7d3a088f6a05a65f5b56b1ffa573ec.ctex"
+uid="uid://bad7mrx2ruuhg"
+path="res://.godot/imported/throne_reliquary.png-3cb611584b5b01d334c51acc0358d540.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/dirt.png"
-dest_files=["res://.godot/imported/dirt.png-2e7d3a088f6a05a65f5b56b1ffa573ec.ctex"]
+source_file="res://assets/backgrounds/throne_reliquary.png"
+dest_files=["res://.godot/imported/throne_reliquary.png-3cb611584b5b01d334c51acc0358d540.ctex"]
 
 [params]
 

@@ -92,11 +92,13 @@ jobs:
       # matches the code that claims to produce it. Generation is pure, so
       # regenerating must be a no-op.
       #
-      # BOTH output directories, and the second one is the whole point of this
-      # comment. `generate` writes the eight icon categories into assets/icons/
-      # and the `chrome` category into assets/theme/ (main::output_dir), because
-      # 9-slices are on the 16/24 grids rather than 32x32 and have to sit
-      # somewhere validate::expected_grid reads differently. This step diffed
+      # ALL THREE output directories, and the ones after the first are the whole
+      # point of this comment. `generate` writes the eight icon categories into
+      # assets/icons/, the `chrome` category into assets/theme/ and the
+      # `backgrounds` category into assets/backgrounds/ (main::output_dir),
+      # because 9-slices are on the 16/24 grids and floor tiles on the 64x64
+      # one rather than 32x32, so each has to sit somewhere
+      # validate::expected_grid reads differently. This step diffed
       # only assets/icons from the day chrome landed, so every one of the
       # fourteen slices was outside the check - while three places said in the
       # present tense that it was covered: CLAUDE.md's chrome section,
@@ -110,8 +112,8 @@ jobs:
       - name: Generated art is up to date
         run: |
           cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
-          if ! git diff --exit-code -- assets/icons assets/theme; then
-            echo "::error::assets/icons or assets/theme differs from what tools/artgen generates." \
+          if ! git diff --exit-code -- assets/icons assets/theme assets/backgrounds; then
+            echo "::error::assets/icons, assets/theme or assets/backgrounds differs from what tools/artgen generates." \
                  "Run 'cargo run --release --manifest-path tools/artgen/Cargo.toml -- generate' and commit the result."
             exit 1
           fi

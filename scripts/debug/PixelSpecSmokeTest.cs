@@ -67,6 +67,9 @@ public partial class PixelSpecSmokeTest : Node
         TestEveryGlowFrameIsOnTheRamp();
         TestTheGlowRingOpensOnWhatItReplaced();
         TestOnlyARareCardCarriesAGlowRing();
+        TestNoScreenAuthorsItsOwnBackdrop();
+        TestTheBackdropIsBuiltToSpec();
+        TestDustMotesAreOnTheRampAtAnIntegerScale();
 
         GD.Print($"PixelSpecSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -1506,6 +1509,164 @@ public partial class PixelSpecSmokeTest : Node
             Check($"motion_curve_{name.ToLowerInvariant()}_has_a_period", curve.Seconds > 0f,
                 $"Motion.{name} runs for {curve.Seconds}s - a zero-length tween is an assignment");
         }
+    }
+
+    // A call-site sweep, and the reason it is the assertion this whole item
+    // turns on. ActDefinition has carried MapBackground/MapTint since acts
+    // landed, and for six phases *two* of the thirteen screens read them: the
+    // other eleven each passed a hardcoded tile name and a float Color literal,
+    // so a shop in the Hollow Throne was the same room as a shop in the Sunken
+    // Ward. Nothing could tell that from ScreenBackground's own source, which
+    // is the general lesson section 6 of PIXEL_ART_ROADMAP records - shipping
+    // the abstraction is not the same as landing it, and only a sweep over the
+    // call sites can say which happened.
+    //
+    // The entry points take no arguments, so the violation is expressible as a
+    // literal on the call line: either someone widened the API or someone went
+    // around it. Comment lines are skipped because prose about a call site
+    // reads to a regex exactly like one - the first version of the CombatFx
+    // spawn check counted the paragraph above the call and could not fail.
+    private void TestNoScreenAuthorsItsOwnBackdrop()
+    {
+        var call = new Regex(@"ScreenBackground\.\w+\s*\(");
+        var findings = new System.Collections.Generic.List<string>();
+
+        foreach (string path in FilesUnder("res://scripts", ".cs"))
+        {
+            if (path.GetFile() == "ScreenBackground.cs") continue;
+
+            using var reader = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (reader is null) continue;
+
+            for (int line = 1; !reader.EofReached(); line++)
+            {
+                string text = reader.GetLine();
+                if (text.TrimStart().StartsWith("//")) continue;
+                if (!call.IsMatch(text)) continue;
+                if (text.Contains('"') || text.Contains("new Color("))
+                {
+                    findings.Add($"{path.GetFile()}:{line} {text.Trim()}");
+                }
+            }
+        }
+
+        Check("no_screen_authors_its_own_backdrop", findings.Count == 0, string.Join(" | ", findings));
+    }
+
+    // Driven against a real backdrop rather than against the builders, because
+    // what can go wrong is the assembly in between: a 128x128 tile texture
+    // under StretchMode.Scale is stretched rather than tiled, and the texture
+    // check alone stays green through it. Same argument TestEveryGlowFrameIsOnTheRamp
+    // makes for reading the installed StyleBox instead of the cycle array.
+    private void TestTheBackdropIsBuiltToSpec()
+    {
+        ActDatabase.LoadAll();
+
+        var scratch = new Control();
+        AddChild(scratch);
+        ScreenBackground.AttachMap(scratch);
+
+        var rects = new System.Collections.Generic.List<TextureRect>();
+        foreach (var child in scratch.GetChildren())
+        {
+            if (child is TextureRect rect) rects.Add(rect);
+        }
+
+        Check("backdrop_builds_its_layers", rects.Count >= 4, $"{rects.Count} TextureRects");
+        if (rects.Count < 4) { scratch.QueueFree(); return; }
+
+        // Section 2's row says a background tile renders at 2x, and
+        // StretchMode.Tile repeats a texture at its *native* size - so tiling
+        // the 64x64 file draws it at 1x. PixelSpec.TileScale sat at 2 with no
+        // readers for six phases while three documents said 128x128.
+        var floor = rects[0];
+        Check("backdrop_floor_tiles_at_the_declared_scale",
+            floor.StretchMode == TextureRect.StretchModeEnum.Tile &&
+            floor.Texture is not null &&
+            floor.Texture.GetWidth() == PixelSpec.TileGrid * PixelSpec.TileScale &&
+            floor.Texture.GetHeight() == PixelSpec.TileGrid * PixelSpec.TileScale,
+            $"stretch={floor.StretchMode} size={floor.Texture?.GetWidth()}x{floor.Texture?.GetHeight()}");
+
+        Check("backdrop_floor_is_nearest_filtered",
+            floor.TextureFilter == CanvasItem.TextureFilterEnum.Nearest, $"{floor.TextureFilter}");
+
+        // Two haze layers, and the pair is the depth: one alone is weather.
+        // They are the tiled-and-Linear layers, since the floor is tiled and
+        // Nearest and the gradients are neither.
+        var haze = new System.Collections.Generic.List<TextureRect>();
+        foreach (var rect in rects)
+        {
+            if (rect.StretchMode == TextureRect.StretchModeEnum.Tile &&
+                rect.TextureFilter == CanvasItem.TextureFilterEnum.Linear)
+            {
+                haze.Add(rect);
+            }
+        }
+        Check("backdrop_carries_two_haze_layers", haze.Count == 2, $"{haze.Count}");
+
+        // The invariant a drifting layer needs and the one that is silent when
+        // missed: a layer that wanders inside its own rect exposes the screen
+        // edge on the leg that travels furthest, and it does so seconds after
+        // the screen opens rather than on the frame a screenshot is taken.
+        foreach (var layer in haze)
+        {
+            Check($"haze_layer_has_room_to_drift_{haze.IndexOf(layer)}",
+                layer.OffsetLeft < 0 && layer.OffsetTop < 0 &&
+                layer.OffsetRight > 0 && layer.OffsetBottom > 0,
+                $"offsets {layer.OffsetLeft}/{layer.OffsetTop}/{layer.OffsetRight}/{layer.OffsetBottom}");
+        }
+
+        // The vignette is last so nothing the backdrop draws sits over it, and
+        // every layer stays behind the screen's own _Draw output - MapScreen's
+        // connecting Beziers are drawn by the parent Control, so a layer that
+        // forgot ShowBehindParent would paint over the map's own edges.
+        var behind = 0;
+        foreach (var rect in rects) if (rect.ShowBehindParent) behind++;
+        Check("every_backdrop_layer_draws_behind_its_screen", behind == rects.Count, $"{behind}/{rects.Count}");
+
+        scratch.QueueFree();
+    }
+
+    // The dust motes, which were a CpuParticles2D drawing a smooth 8x8 radial
+    // GradientTexture2D at ScaleAmountMin 0.4 / Max 1.1 - an off-ramp gradient
+    // (section 5), a soft alpha edge (section 3) and a fractional scale
+    // (section 2) in one node. That is the same node type and the same three
+    // violations as CombatScreen.SpawnHitSpark, which PIXEL_ART_ROADMAP section
+    // 5 retired while calling it "the last smooth-gradient art on the combat
+    // screen"; it was not, and it survived for the same two reasons - a
+    // CpuParticles2D is not a TextureRect so ScanSourceForSpriteTransforms
+    // skips it, and its texture is not a file under assets/ so artgen validate
+    // never reads it. This is the check that covers the gap those two leave.
+    private void TestDustMotesAreOnTheRampAtAnIntegerScale()
+    {
+        var image = ScreenBackground.BuildMoteImage();
+
+        var offRamp = 0;
+        var softAlpha = 0;
+        for (int y = 0; y < image.GetHeight(); y++)
+        {
+            for (int x = 0; x < image.GetWidth(); x++)
+            {
+                var pixel = image.GetPixel(x, y);
+                if (pixel.A is not (0f or 1f)) softAlpha++;
+                else if (pixel.A > 0f && !PixelSpec.IsOnRamp(pixel)) offRamp++;
+            }
+        }
+        Check("mote_texture_is_hard_alpha", softAlpha == 0, $"{softAlpha} partially transparent pixels");
+        Check("mote_texture_is_on_the_ramp", offRamp == 0, $"{offRamp} off-ramp pixels");
+
+        // Godot samples continuously between min and max, so any min != max is
+        // a fractional-scale generator rather than a range of sizes - which is
+        // how 0.4/1.1 read as a taste decision for six phases.
+        var motes = ScreenBackground.BuildMotes();
+        Check("mote_scale_is_a_single_integer",
+            Mathf.IsEqualApprox(motes.ScaleAmountMin, motes.ScaleAmountMax) &&
+            motes.ScaleAmountMin >= 1f &&
+            Mathf.IsEqualApprox(motes.ScaleAmountMin, Mathf.Round(motes.ScaleAmountMin)),
+            $"min={motes.ScaleAmountMin} max={motes.ScaleAmountMax}");
+        Check("mote_texture_is_nearest_filtered",
+            motes.TextureFilter == CanvasItem.TextureFilterEnum.Nearest, $"{motes.TextureFilter}");
+        motes.QueueFree();
     }
 
     private static System.Collections.Generic.IEnumerable<string> FilesUnder(string root, string extension)

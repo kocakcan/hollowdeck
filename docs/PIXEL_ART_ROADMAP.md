@@ -23,6 +23,11 @@ creatures were the only thing animating and silently stopped being true the mome
 effect set existed. That sentence has been widened rather than quietly restated, since a document
 describing a rule the code has outgrown reads exactly like one describing a rule it never met.
 
+§7 closes the file. It is the one entry whose first, complete, tested implementation was simply the
+wrong thing — nine better tiles for seven worse ones, changing nothing, because the problem was
+composition and a tile cannot have any. Worth carrying with the three below: **the failures this
+document keeps recording are failures of knowing what is broken, not of building it.**
+
 §6 has shipped, and it is the same drift arriving through a third door — not a spec ahead of its
 enforcement, but a *helper* ahead of its adoption. `UiTheme.Motion` existed for three phases and was
 used by two tween sites out of thirty-four; a constants bag nobody reaches for is indistinguishable
@@ -428,14 +433,83 @@ unheld. The scan sees that a curve was used, not that `Land` was the right one w
 belonged. That is §10's unheld-highlights situation exactly, and it is the honest boundary of what a
 source scan can say.
 
-## 7. Backgrounds
+## 7. Backgrounds — **shipped**
 
 *(Parallax, Clouds, Darkness, Illumination Techniques)*
 
-Eight 64x64 tiles, drawn static under `ScreenBackground`'s vignette and ground-plane gradient. Depth
-here is cheap and per-act atmosphere is the payoff.
+Eighteen seamless 64x64 tiles in `tools/artgen/src/icons/backgrounds.rs` — six per act: three
+floors, a wall, a plinth and a pillar — composed by `scripts/ui/ScreenBackground.cs` into four
+bands, with two haze layers drifting at two rates in front of them. `ART_SPEC.md` §12 is the rule.
 
----
+**This item was built twice, and the first version is the whole lesson.** The entry above described
+the state as "eight 64x64 tiles, drawn static", so the obvious reading was that the tiles were the
+problem — they were seven sourced CC0 Dungeon Crawl dungeon floors, palette-clamped and tinted per
+act, and they read as generic wallpaper. So the first pass generated better ones: nine tiles on the
+43-colour ramp under §10's lamp, mortared flagstone and cut slabs and a carved inlay, with Rust
+tests for the seam and the tiling. They were, by any measure of a tile, much better art. **They
+changed almost nothing**, and the reason is worth stating flatly:
+
+> One tile filling 1152x648 is wallpaper by construction. Repeated 9x5 it has no horizon, so
+> nothing drawn in front of it acquires a position, and no amount of detail inside the tile
+> survives that.
+
+What was missing was never fidelity, it was **composition**. The second version keeps the floors
+and adds the three pieces that make a room — a wall behind, a plinth where the wall meets the
+ground, a colonnade standing in front of it — and that is what turned three colours of the same
+flat sheet into the Sunken Ward, the Ember Reach and the Hollow Throne. The generalisable form, and
+the reason this sits beside §6's: **an asset-quality problem and a composition problem look
+identical in a single screenshot, and only one of them is fixed by drawing better.**
+
+Six things are worth knowing before touching it:
+
+- **Which axes a piece must close is per band, and the test knows the difference.** A floor and a
+  wall tile both ways; a plinth is one row, so only x; a pillar repeats up the wall, so only y.
+  Asking a piece for a seam it never meets is a rule with no failure behind it.
+- **The seam test's first version could not pass.** It compared column 63 against column 0 and
+  failed every tile in the set — on the premise that a seamless tile's two edges look alike.
+  Adjacent columns of a mortared floor are *supposed* to differ; one can be a lit block face and its
+  neighbour the joint. Similarity is a property of a gradient, not of a pattern. What actually
+  separates a wrapped tile from a cut one is that its seam is an **ordinary** boundary — inside the
+  spread of every other column pair rather than above all of them. Mutation-tested: swapping `put`'s
+  `rem_euclid` for a `clamp` fails it.
+- **A pillar is the one piece with transparent pixels**, so its flanks show the wall behind rather
+  than carrying a copy of it, and it needs its own opaque cast shadow on the shaded flank — without
+  one it renders as a stripe painted on the masonry. `only_a_pillar_sees_through_itself` asserts
+  both directions, because a pillar that lost its transparency and a floor that gained some are the
+  same size of bug pointing opposite ways.
+- **`sheen` exists because the first composition was invisible.** Wall, plinth, floor and pillar all
+  drawn inside `shade`/`face`/`lit` produced a room whose horizon and colonnade you had to be told
+  were there. Two ramp steps above `face`, on exactly the two surfaces the lamp hits square, is what
+  made them read — and it is why those two bands carry a wider contrast budget than the floors do.
+- **Per-act identity moved out of `Modulate` and into the art.** The tints in `acts.json` are
+  neutral greys now; each act's set is drawn in its own ramp family. A hue in the tint as well would
+  be tinting twice, and the second one lands off the ramp — the same argument that keeps
+  `CardFrameStyle` flat and the combat bursts four sets rather than one tinted four ways.
+- **A new output directory is still a two-line change, and this is the third time that comment has
+  been load-bearing.** `main::output_dir` gained a `backgrounds` arm and CI's drift diff gained the
+  path. `validate.rs` needed nothing — its `/backgrounds/` 64x64 arm predates the category by six
+  phases.
+
+Two things this closed that were not part of the item, both found by opening the file:
+
+- **`ScreenBackground.AddDustMotes` was `SpawnHitSpark` again** — a `CpuParticles2D` drawing a
+  smooth radial `GradientTexture2D` at `ScaleAmountMin 0.4 / Max 1.1`, i.e. §5's ramp, §3's hard
+  alpha and §2's integer scale, in one node, on the combat screen. Item 5 above retired the hit
+  spark while calling it "the last smooth-gradient art on the combat screen"; **it was not**, and
+  the survivor was invisible for the identical two reasons. Min and max are one integer now (Godot
+  samples *continuously* between them, so any min ≠ max is a fractional-scale generator rather than
+  a range of sizes) and the texture is two opaque ramp pixels.
+- **`PixelSpec.TileScale = 2` had no readers.** §2's table said `128x128 tiled` and
+  `StretchMode.Tile` repeats a texture at its native size, so tiles drew at 1x for six phases. The
+  tile is upscaled once at attach time now, which is what makes the constant mean something —
+  scaling the `TextureRect` instead would be both a fractional-scale hazard and a transform on a
+  pixel holder.
+
+**What is deferred, and stated so it is not mistaken for finished:** the composition is one horizon
+and one colonnade rhythm for every screen in an act. There is no focal feature — no gate, forge or
+throne behind the fight — and no per-*room* variation beyond which of the three floors is under it.
+Depth is also still two haze layers rather than anything that moves with the content, because
+nothing in this game has a camera to move against.
 
 ## Out of scope, so it is not re-argued
 

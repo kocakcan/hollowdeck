@@ -14,7 +14,7 @@ public partial class TreasureScreen : Control
 {
     public override void _Ready()
     {
-        ScreenBackground.Attach(this, "gulch", new Color(0.8f, 0.85f, 0.8f));
+        ScreenBackground.AttachRoom(this);
         DeckViewButtons.Attach(this);
         ScreenChrome.AddTitle(this, "Treasure");
         ScreenChrome.AddRunStatus(this);

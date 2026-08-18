@@ -24,10 +24,43 @@ public class ActDefinition
     // act reads as a different place. Tints are hex strings parsed with
     // Color.FromString, which falls back to a default rather than throwing on
     // a malformed value - same tolerance the rest of the data layer has.
-    public string MapBackground { get; set; } = "black_cobalt";
-    public string MapTint { get; set; } = "d9d9e6";
-    public string CombatBackground { get; set; } = "crypt";
-    public string CombatTint { get; set; } = "99949e";
+    //
+    // The tints are neutral greys now and that is a change worth knowing about:
+    // the tiles used to be seven sourced dungeon floors shared between the
+    // acts, so the *tint* was the only thing that made act II warm. They are
+    // generated per act now (tools/artgen/src/icons/backgrounds.rs), authored
+    // in that act's own ramp family - so a tint carrying a hue as well would be
+    // tinting twice, and the second one lands off the ramp. What is left for
+    // this field is brightness per surface, which is a real dial: combat is
+    // dimmer than the map because ten cards and a HUD sit on top of it.
+    // The act's backdrop set. Its wall, plinth and pillar are derived from
+    // this prefix (`ward_wall`, `ward_plinth`, `ward_pillar`) rather than
+    // authored one field each: those three are one room, and an act that could
+    // author act I's wall against act III's plinth is expressing something
+    // nobody wants. The floors stay explicit below because they genuinely vary
+    // per surface.
+    public string Backdrop { get; set; } = "ward";
+
+    public string MapBackground { get; set; } = "ward_flags";
+    public string MapTint { get; set; } = "e0e0e0";
+    public string CombatBackground { get; set; } = "ward_drowned";
+    public string CombatTint { get; set; } = "b4b4b4";
+
+    // The floor for the six room screens - Reward, Rest, Shop, Event, Treasure
+    // and RunEnd. One pair rather than one per screen: those screens differ in
+    // what they offer, not in where they are, and six fields would be six
+    // chances for act III's shop to stay in act I.
+    public string RoomBackground { get; set; } = "ward_cistern";
+    public string RoomTint { get; set; } = "cccccc";
+
+    // The colour of the air, and the colour the edges fall off to. Both are
+    // read by ScreenBackground on every screen, which is why they are one pair
+    // for the act rather than a pair per surface: a place has one atmosphere.
+    // VignetteTint was black everywhere before acts authored it, and it is the
+    // single largest per-act lever there is - the corners are most of the
+    // screen and they cost nothing to paint.
+    public string HazeTint { get; set; } = "d9d9e6";
+    public string VignetteTint { get; set; } = "07060a";
 
     public List<List<string>> NormalEncounters { get; set; } = new();
     public List<List<string>> EliteEncounters { get; set; } = new();
