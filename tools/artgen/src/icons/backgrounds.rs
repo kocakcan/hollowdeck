@@ -67,7 +67,12 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "backgrounds", name: "ward_wall", draw: ward_wall },
         Icon { category: "backgrounds", name: "ward_plinth", draw: ward_plinth },
         Icon { category: "backgrounds", name: "ward_pillar", draw: ward_pillar },
-        Icon { category: "backgrounds", name: "ward_focal", draw: ward_gate },
+        Icon { category: "backgrounds", name: "ward_focal_monument", draw: ward_monument },
+        Icon { category: "backgrounds", name: "ward_focal_doorway", draw: ward_doorway },
+        Icon { category: "backgrounds", name: "ward_focal_hearth", draw: ward_hearth },
+        Icon { category: "backgrounds", name: "ward_focal_stall", draw: ward_stall },
+        Icon { category: "backgrounds", name: "ward_focal_shrine", draw: ward_shrine },
+        Icon { category: "backgrounds", name: "ward_focal_strongroom", draw: ward_strongroom },
         // Act II - The Ember Reach. Scorched brick, heat still in the cracks.
         Icon { category: "backgrounds", name: "reach_cinders", draw: reach_cinders },
         Icon { category: "backgrounds", name: "reach_scorch", draw: reach_scorch },
@@ -75,7 +80,12 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "backgrounds", name: "reach_wall", draw: reach_wall },
         Icon { category: "backgrounds", name: "reach_plinth", draw: reach_plinth },
         Icon { category: "backgrounds", name: "reach_pillar", draw: reach_pillar },
-        Icon { category: "backgrounds", name: "reach_focal", draw: reach_furnace },
+        Icon { category: "backgrounds", name: "reach_focal_monument", draw: reach_monument },
+        Icon { category: "backgrounds", name: "reach_focal_doorway", draw: reach_doorway },
+        Icon { category: "backgrounds", name: "reach_focal_hearth", draw: reach_hearth },
+        Icon { category: "backgrounds", name: "reach_focal_stall", draw: reach_stall },
+        Icon { category: "backgrounds", name: "reach_focal_shrine", draw: reach_shrine },
+        Icon { category: "backgrounds", name: "reach_focal_strongroom", draw: reach_strongroom },
         // Act III - The Hollow Throne. Black stone, gilt worked into it.
         Icon { category: "backgrounds", name: "throne_inlay", draw: throne_inlay },
         Icon { category: "backgrounds", name: "throne_obsidian", draw: throne_obsidian },
@@ -83,7 +93,12 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "backgrounds", name: "throne_wall", draw: throne_wall },
         Icon { category: "backgrounds", name: "throne_plinth", draw: throne_plinth },
         Icon { category: "backgrounds", name: "throne_pillar", draw: throne_pillar },
-        Icon { category: "backgrounds", name: "throne_focal", draw: throne_dais },
+        Icon { category: "backgrounds", name: "throne_focal_monument", draw: throne_monument },
+        Icon { category: "backgrounds", name: "throne_focal_doorway", draw: throne_doorway },
+        Icon { category: "backgrounds", name: "throne_focal_hearth", draw: throne_hearth },
+        Icon { category: "backgrounds", name: "throne_focal_stall", draw: throne_stall },
+        Icon { category: "backgrounds", name: "throne_focal_shrine", draw: throne_shrine },
+        Icon { category: "backgrounds", name: "throne_focal_strongroom", draw: throne_strongroom },
     ]
 }
 
@@ -98,6 +113,12 @@ pub fn icons() -> Vec<Icon> {
 /// *composition*: a horizon, a wall behind it, and something standing up in it.
 /// The sourced Dungeon Crawl floors were the same shape of wrong, which is why
 /// replacing them one-for-one changed so little.
+/// The room kinds a focal feature is drawn for. Mirrored by
+/// `ScreenBackground.BackdropRoom` on the engine side - a screen picks the
+/// *kind of room it is*, never a tile name.
+#[cfg(test)]
+const ROOMS: [&str; 6] = ["monument", "doorway", "hearth", "stall", "shrine", "strongroom"];
+
 #[cfg(test)]
 pub enum Band {
     Floor,
@@ -188,7 +209,7 @@ fn throne_pillar() -> Canvas { pillar(THRONE, 0x18f6) }
 /// rules, and a pillar is the only piece that is allowed to be see-through.
 #[cfg(test)]
 fn band_of(name: &str) -> Band {
-    if name.ends_with("_focal") {
+    if name.contains("_focal") {
         Band::Focal
     } else if name.ends_with("_wall") {
         Band::Wall
@@ -818,74 +839,103 @@ fn dress(canvas: &mut Canvas, stone: Stone) {
         }
     }
 }
+// ---------------------------------------------------------------------------
+// The interiors
+// ---------------------------------------------------------------------------
+//
+// **The arch is the act's and what stands in it is the room's**, which is the
+// axis this set is cut along. It shipped as one focal per act, so a shop, a
+// rest site and a boss fight in the Ember Reach all stood in front of the same
+// furnace - the act had a place and the rooms inside it did not.
+//
+// Splitting it the other way - one interior per room, one frame for the game -
+// would have been the same mistake mirrored: the frame is where the act's
+// stone, ramp family and lamp live, and a shared frame makes every room in the
+// game the same room. Six interiors across three acts is eighteen pieces from
+// six drawing functions, which is `fx`'s four bursts from one `burst` at a
+// larger size.
+//
+// Three of the six are the act monuments and are genuinely bespoke; the other
+// three - and the fire and the gold inside two of them - are shared shapes
+// taking the act's stone.
+
+fn focal(stone: Stone, seed: u32, interior: fn(&mut Canvas, Stone, &mut Jitter)) -> Canvas {
+    let mut canvas = archway(stone);
+    let mut rng = Jitter(seed);
+    interior(&mut canvas, stone, &mut rng);
+    rim(&mut canvas, stone);
+    dress(&mut canvas, stone);
+    canvas
+}
+
+/// The top of the opening, where an interior may start drawing.
+const OPEN_TOP: i32 = SPRING - INNER;
+
+/// Fills a run of the opening, clipped to the arch. Every interior below draws
+/// through this rather than through `rect`, so nothing spills onto the frame -
+/// which is invisible in isolation and reads as a chip out of the arch the
+/// moment the piece is composited against a wall.
+fn in_opening(canvas: &mut Canvas, x0: i32, y0: i32, x1: i32, y1: i32, colour: Rgb) {
+    for y in y0..y1 {
+        for x in x0..x1 {
+            if y >= OPEN_TOP && inside(x, y, INNER - 2) {
+                canvas.set(x, y, colour);
+            }
+        }
+    }
+}
+
+// --- Act monuments: the three interiors that are not shared ----------------
 
 /// **Act I - the drowned gate.** A portcullis still down in a hall that has
-/// taken water: bars in the opening, the tide line across them in verdigris, and
-/// the same verdigris weeping out of the joints of the frame.
-fn ward_gate() -> Canvas {
-    let mut canvas = archway(WARD);
-    let mut rng = Jitter(0x2c71);
+/// taken water: bars in the opening, the tide line across them in verdigris.
+fn gate(canvas: &mut Canvas, stone: Stone, rng: &mut Jitter) {
     let cx = focal_cx();
-
-    // Portcullis. Bars stop short of the crown so the arch still reads.
     let mut x = cx - INNER + 6;
     while x < cx + INNER - 4 {
-        for y in (SPRING - INNER + 10)..FOOT {
+        for y in (OPEN_TOP + 10)..FOOT {
             if inside(x, y, INNER - 2) {
-                canvas.set(x, y, WARD.shade);
-                canvas.set(x + 1, y, WARD.face);
-                canvas.set(x + 2, y, WARD.shade);
+                canvas.set(x, y, stone.shade);
+                canvas.set(x + 1, y, stone.face);
+                canvas.set(x + 2, y, stone.shade);
             }
         }
         x += 13;
     }
-    // Two ties across them.
     for y in [SPRING - 6, SPRING + 16] {
-        for x in (cx - INNER)..(cx + INNER) {
-            if inside(x, y, INNER - 2) {
-                canvas.set(x, y, WARD.face);
-                canvas.set(x, y + 1, WARD.shade);
-            }
-        }
+        in_opening(canvas, cx - INNER, y, cx + INNER, y + 1, stone.face);
+        in_opening(canvas, cx - INNER, y + 1, cx + INNER, y + 2, stone.shade);
     }
 
-    // The tide line: everything under it has been wet for a very long time.
+    // The tide line: everything under it has been wet a very long time.
     let tide = SPRING + 26;
     for x in 0..FOCAL_W {
         if inside(x, tide, OUTER + 12) || (tide >= FOOT && (x - cx).abs() <= OUTER + 12) {
-            canvas.set(x, tide, WARD.accent);
+            canvas.set(x, tide, stone.accent);
         }
     }
     for _ in 0..40 {
         let x = cx - OUTER + rng.below((OUTER * 2) as u32) as i32;
-        let y = tide + 1 + rng.below(10) as u32 as i32;
+        let y = tide + 1 + rng.below(10) as i32;
         if canvas.get(x, y).3 == 255 {
-            canvas.set(x, y, WARD.accent);
+            canvas.set(x, y, stone.accent);
         }
     }
-
-    rim(&mut canvas, WARD);
-    dress(&mut canvas, WARD);
-    canvas
 }
 
 /// **Act II - the furnace mouth.** The opening is not dark: it is the fire the
-/// act is named for, banked down to coals. The glow is drawn as nested bands
-/// rather than a gradient, because §5 admits 43 colours and a gradient wants
-/// several hundred - the same argument that keeps `GlowRing` stepping.
-fn reach_furnace() -> Canvas {
-    let mut canvas = archway(REACH);
-    let mut rng = Jitter(0x6ea4);
+/// act is named for, banked down to coals. Nested bands rather than a gradient,
+/// because §5 admits 43 colours and a gradient wants several hundred - the same
+/// argument that keeps `GlowRing` stepping.
+fn furnace(canvas: &mut Canvas, stone: Stone, rng: &mut Jitter) {
     let cx = focal_cx();
-    let hearth = FOOT - 2;
+    let coals = FOOT - 2;
 
-    // Concentric heat, hottest at the hearth. Radii chosen so each band is a
-    // few pixels wide at the mouth and the outermost still clears the frame.
-    for (radius, tone) in [(56, REACH.shade), (44, REACH.face), (32, REACH.lit), (20, REACH.sheen), (9, E4)] {
-        for y in 0..FOOT {
+    for (radius, tone) in [(56, stone.shade), (44, stone.face), (32, stone.lit), (20, stone.sheen), (9, E4)] {
+        for y in OPEN_TOP..FOOT {
             for x in 0..FOCAL_W {
                 let dx = x - cx;
-                let dy = (y - hearth) * 2; // flattened, so the glow pools rather than balls
+                let dy = (y - coals) * 2; // flattened, so the glow pools rather than balls
                 if dx * dx + dy * dy <= radius * radius && inside(x, y, INNER - 2) {
                     canvas.set(x, y, tone);
                 }
@@ -893,122 +943,270 @@ fn reach_furnace() -> Canvas {
         }
     }
 
-    // The grate the coals sit behind.
     let mut x = cx - INNER + 8;
     while x < cx + INNER - 6 {
-        for y in (hearth - 26)..FOOT {
+        for y in (coals - 26)..FOOT {
             if inside(x, y, INNER - 2) {
-                canvas.set(x, y, REACH.joint);
-                canvas.set(x + 1, y, REACH.shade);
+                canvas.set(x, y, stone.joint);
+                canvas.set(x + 1, y, stone.shade);
             }
         }
         x += 11;
     }
 
-    // Embers escaping into the opening's upper dark.
     for _ in 0..26 {
         let x = cx - INNER + rng.below((INNER * 2) as u32) as i32;
-        let y = SPRING - INNER + 12 + rng.below(60) as i32;
-        if inside(x, y, INNER - 4) && canvas.get(x, y).rgb() == REACH.joint {
-            canvas.set(x, y, if rng.chance(1, 3) { REACH.accent } else { REACH.lit });
+        let y = OPEN_TOP + 12 + rng.below(60) as i32;
+        if inside(x, y, INNER - 4) && canvas.get(x, y).rgb() == stone.joint {
+            canvas.set(x, y, if rng.chance(1, 3) { stone.accent } else { stone.lit });
         }
     }
-
-    rim(&mut canvas, REACH);
-    dress(&mut canvas, REACH);
-    canvas
 }
 
-/// **Act III - the hollow throne.** The act's name, finally on screen: a seat
-/// with a high back standing in the opening, gilt worked into black stone, and
-/// nobody in it.
-fn throne_dais() -> Canvas {
-    let mut canvas = archway(THRONE);
-    let mut rng = Jitter(0xa17f);
+/// **Act III - the hollow throne.** The act's name on screen: a seat with a
+/// high back, gilt worked into black stone, and nobody in it.
+fn seat(canvas: &mut Canvas, stone: Stone, rng: &mut Jitter) {
     let cx = focal_cx();
 
-    // Three steps up to the seat, each one narrower than the last.
     for (i, (half, top)) in [(46, FOOT - 6), (38, FOOT - 12), (30, FOOT - 18)].iter().enumerate() {
-        for y in *top..FOOT {
-            for x in (cx - half)..(cx + half) {
-                canvas.set(x, y, if i % 2 == 0 { THRONE.face } else { THRONE.lit });
-            }
-        }
-        for x in (cx - half)..(cx + half) {
-            canvas.set(x, *top, THRONE.sheen);
-        }
+        in_opening(canvas, cx - half, *top, cx + half, FOOT, if i % 2 == 0 { stone.lit } else { stone.face });
+        in_opening(canvas, cx - half, *top, cx + half, *top + 1, stone.sheen);
     }
 
-    // The back, rising most of the way into the arch. The first version stopped
-    // level with the springline and read as a crate on a staircase - a throne
-    // is a *height*, and the arch is there to be filled by it.
-    let back_top = SPRING - INNER + 6;
-    for y in back_top..(FOOT - 20) {
-        for x in (cx - 26)..(cx + 26) {
-            canvas.set(x, y, THRONE.face);
-        }
-    }
-    // Shoulders: the back steps out twice on its way down, so the silhouette
-    // has a profile instead of being a rectangle.
-    for y in (back_top + 26)..(FOOT - 20) {
-        for x in (cx - 34)..(cx + 34) {
-            canvas.set(x, y, THRONE.face);
-        }
-    }
-    // The seat, and the arms either side of it.
-    for y in (FOOT - 44)..(FOOT - 20) {
-        for x in (cx - 40)..(cx + 40) {
-            canvas.set(x, y, THRONE.lit);
-        }
-    }
+    let back_top = OPEN_TOP + 6;
+    in_opening(canvas, cx - 26, back_top, cx + 26, FOOT - 20, stone.lit);
+    in_opening(canvas, cx - 34, back_top + 26, cx + 34, FOOT - 20, stone.lit);
+    in_opening(canvas, cx - 40, FOOT - 44, cx + 40, FOOT - 20, stone.sheen);
     for x in [cx - 40, cx + 32] {
-        for y in (FOOT - 56)..(FOOT - 40) {
-            for dx in 0..8 {
-                canvas.set(x + dx, y, THRONE.face);
-            }
-        }
+        in_opening(canvas, x, FOOT - 56, x + 8, FOOT - 40, stone.lit);
     }
 
-    // Gilt: a spine down the back with cross-bars at a fixed pitch, and a
-    // finial at each shoulder. The one place in the whole backdrop set the
-    // accent is allowed to be a shape rather than a fleck, because this is the
-    // thing the act is named after.
-    for y in (back_top + 4)..(FOOT - 26) {
-        canvas.set(cx - 1, y, THRONE.accent);
-        canvas.set(cx, y, THRONE.accent);
-    }
+    in_opening(canvas, cx - 1, back_top + 4, cx + 1, FOOT - 26, stone.accent);
     let mut bar = back_top + 10;
     while bar < FOOT - 30 {
         let half = if bar < back_top + 26 { 12 } else { 20 };
-        for x in (cx - half)..(cx + half) {
-            canvas.set(x, bar, THRONE.accent);
-        }
+        in_opening(canvas, cx - half, bar, cx + half, bar + 1, stone.accent);
         bar += 18;
     }
     for x in [cx - 27, cx + 26] {
-        for y in back_top..(back_top + 10) {
-            canvas.set(x, y, THRONE.accent);
-        }
-    }
-    for x in [cx - 35, cx + 34] {
-        for y in (back_top + 26)..(back_top + 32) {
-            canvas.set(x, y, THRONE.accent);
-        }
+        in_opening(canvas, x, back_top, x + 1, back_top + 10, stone.accent);
     }
 
-    // Dust on the steps. Nobody has climbed them in a while.
     for _ in 0..24 {
         let x = cx - 46 + rng.below(92) as i32;
         let y = FOOT - 18 + rng.below(18) as i32;
         if canvas.get(x, y).3 == 255 {
-            canvas.set(x, y, THRONE.shade);
+            canvas.set(x, y, stone.shade);
+        }
+    }
+}
+
+// --- Room interiors: shared shapes, the act's stone -------------------------
+
+/// **The way on**, for the reward and run-end screens. An empty passage with
+/// something lit at the far end of it - the only interior that is deliberately
+/// mostly nothing, because both screens behind it are about leaving the room.
+fn doorway(canvas: &mut Canvas, stone: Stone, rng: &mut Jitter) {
+    let cx = focal_cx();
+
+    // Steps receding into the opening, each narrower than the last, which is
+    // the whole of the depth cue at this size.
+    for (i, (half, top)) in [(52, FOOT - 8), (40, FOOT - 16), (28, FOOT - 22), (18, FOOT - 27)].iter().enumerate() {
+        in_opening(canvas, cx - half, *top, cx + half, FOOT, if i % 2 == 0 { stone.face } else { stone.shade });
+        in_opening(canvas, cx - half, *top, cx + half, *top + 1, stone.lit);
+    }
+
+    // The light at the end. Banded rather than blended, per §5.
+    for (half, height, tone) in [(16, 30, stone.shade), (11, 24, stone.face), (6, 17, stone.lit), (2, 9, stone.sheen)] {
+        in_opening(canvas, cx - half, FOOT - 27 - height, cx + half, FOOT - 27, tone);
+    }
+
+    for _ in 0..14 {
+        let x = cx - 20 + rng.below(40) as i32;
+        let y = OPEN_TOP + 8 + rng.below(40) as i32;
+        if inside(x, y, INNER - 6) && canvas.get(x, y).rgb() == stone.joint {
+            canvas.set(x, y, stone.shade);
+        }
+    }
+}
+
+/// **The rest site.** A fire in a ring of stones with a bedroll beside it.
+///
+/// The flame keeps the ember pigments in all three acts rather than taking the
+/// act's family, and so does the gold in `stall` and `strongroom` below. A fire
+/// is the same fire in a flooded ward and a throne room: these are the places
+/// where a colour is a *material* rather than a place, which is the one
+/// exception §12's per-act rule has.
+fn campfire(canvas: &mut Canvas, stone: Stone, rng: &mut Jitter) {
+    let cx = focal_cx();
+    let base = FOOT - 6;
+
+    // Bedroll, on the shaded side so the fire lights it from the lamp's
+    // direction rather than against it.
+    in_opening(canvas, cx + 18, base - 8, cx + 50, base, stone.shade);
+    in_opening(canvas, cx + 18, base - 9, cx + 50, base - 8, stone.face);
+    in_opening(canvas, cx + 40, base - 13, cx + 50, base - 8, stone.face);
+
+    // The fire, as nested lobes: widest and coolest at the base.
+    for (half, height, tone) in [(20, 10, E0), (15, 26, E1), (10, 34, E2), (6, 28, E3), (2, 18, E4)] {
+        for y in (base - height)..base {
+            let taper = half - (half * (base - y)) / (height + 4);
+            in_opening(canvas, cx - taper - 1, y, cx + taper + 1, y + 1, tone);
         }
     }
 
-    rim(&mut canvas, THRONE);
-    dress(&mut canvas, THRONE);
-    canvas
+    // The ring of stones, after the fire so they sit in front of it.
+    let mut x = cx - 26;
+    while x < cx + 26 {
+        let w = 5 + rng.below(4) as i32;
+        in_opening(canvas, x, base - 4, x + w, base + 2, stone.face);
+        in_opening(canvas, x, base - 5, x + w, base - 4, stone.lit);
+        x += w + 2;
+    }
+
+    // Sparks going up.
+    for _ in 0..16 {
+        let x = cx - 12 + rng.below(24) as i32;
+        let y = OPEN_TOP + 6 + rng.below(((base - OPEN_TOP - 40).max(1)) as u32) as i32;
+        if inside(x, y, INNER - 6) && canvas.get(x, y).rgb() == stone.joint {
+            canvas.set(x, y, if rng.chance(1, 2) { E2 } else { E3 });
+        }
+    }
 }
+
+/// **The shop.** A counter under a hung valance, with wares on it.
+fn stall(canvas: &mut Canvas, stone: Stone, rng: &mut Jitter) {
+    let cx = focal_cx();
+    let counter = FOOT - 22;
+
+    // The valance, hung from the crown. Scalloped along its lower edge so it
+    // reads as cloth rather than as a second lintel.
+    in_opening(canvas, cx - INNER, OPEN_TOP, cx + INNER, OPEN_TOP + 14, stone.shade);
+    in_opening(canvas, cx - INNER, OPEN_TOP, cx + INNER, OPEN_TOP + 2, stone.lit);
+    let mut x = cx - INNER;
+    while x < cx + INNER {
+        in_opening(canvas, x, OPEN_TOP + 14, x + 5, OPEN_TOP + 18, stone.shade);
+        in_opening(canvas, x + 1, OPEN_TOP + 18, x + 4, OPEN_TOP + 20, G1);
+        x += 9;
+    }
+
+    // Wares hanging from it.
+    for (dx, len) in [(-34, 16), (-6, 24), (26, 19)] {
+        in_opening(canvas, cx + dx, OPEN_TOP + 20, cx + dx + 1, OPEN_TOP + 20 + len, stone.shade);
+        in_opening(canvas, cx + dx - 4, OPEN_TOP + 20 + len, cx + dx + 6, OPEN_TOP + 28 + len, G1);
+        in_opening(canvas, cx + dx - 4, OPEN_TOP + 20 + len, cx + dx + 6, OPEN_TOP + 21 + len, G3);
+    }
+
+    // The counter, and coins on it.
+    in_opening(canvas, cx - 46, counter, cx + 46, counter + 6, stone.face);
+    in_opening(canvas, cx - 46, counter, cx + 46, counter + 1, stone.sheen);
+    in_opening(canvas, cx - 38, counter + 6, cx + 38, FOOT, stone.shade);
+    for _ in 0..9 {
+        let x = cx - 40 + rng.below(80) as i32;
+        in_opening(canvas, x, counter - 3, x + 3, counter, G2);
+        in_opening(canvas, x, counter - 4, x + 3, counter - 3, G4);
+    }
+}
+
+/// **The event.** A standing idol on a stepped base with a candle either side.
+/// Faceless on purpose: the screen behind it is the one whose content differs
+/// every time, and a backdrop naming a specific god would be wrong on most of
+/// them.
+fn shrine(canvas: &mut Canvas, stone: Stone, rng: &mut Jitter) {
+    let cx = focal_cx();
+
+    in_opening(canvas, cx - 34, FOOT - 10, cx + 34, FOOT, stone.lit);
+    in_opening(canvas, cx - 34, FOOT - 11, cx + 34, FOOT - 10, stone.sheen);
+    in_opening(canvas, cx - 26, FOOT - 17, cx + 26, FOOT - 10, stone.lit);
+    in_opening(canvas, cx - 26, FOOT - 18, cx + 26, FOOT - 17, stone.sheen);
+
+    // The idol: a tapering column with a hooded head.
+    let top = OPEN_TOP + 10;
+    for y in top..(FOOT - 18) {
+        let half = 6 + (y - top) / 5;
+        in_opening(canvas, cx - half, y, cx + half, y + 1, stone.lit);
+        in_opening(canvas, cx - half, y, cx - half + 1, y + 1, stone.sheen);
+        in_opening(canvas, cx + half - 1, y, cx + half, y + 1, stone.face);
+    }
+    in_opening(canvas, cx - 7, top - 6, cx + 7, top + 2, stone.lit);
+    in_opening(canvas, cx - 7, top - 7, cx + 7, top - 6, stone.sheen);
+    in_opening(canvas, cx - 4, top - 4, cx + 4, top + 1, stone.joint);
+    in_opening(canvas, cx - 3, top - 2, cx + 3, top - 1, stone.accent);
+
+    // Candles, and offerings scattered on the base between them.
+    for dx in [-30i32, 28] {
+        in_opening(canvas, cx + dx, FOOT - 30, cx + dx + 4, FOOT - 18, stone.sheen);
+        in_opening(canvas, cx + dx + 1, FOOT - 34, cx + dx + 3, FOOT - 30, E3);
+        in_opening(canvas, cx + dx + 1, FOOT - 36, cx + dx + 3, FOOT - 34, E4);
+    }
+    for _ in 0..10 {
+        let x = cx - 20 + rng.below(40) as i32;
+        let y = FOOT - 16 + rng.below(6) as i32;
+        canvas.set(x, y, stone.accent);
+    }
+}
+
+/// **The treasure room.** A chest, open, on a low pedestal. The one interior
+/// whose job is to be legible at a glance rather than atmospheric, since the
+/// screen behind it is a single decision.
+///
+/// Named `strongroom` and not `vault` because `vault` is already the carved
+/// floor pattern above - a collision the compiler caught, and a reminder that
+/// this file now names both surfaces and subjects.
+fn strongroom(canvas: &mut Canvas, stone: Stone, rng: &mut Jitter) {
+    let cx = focal_cx();
+    let lip = FOOT - 26;
+
+    in_opening(canvas, cx - 40, FOOT - 10, cx + 40, FOOT, stone.face);
+    in_opening(canvas, cx - 40, FOOT - 11, cx + 40, FOOT - 10, stone.lit);
+
+    // Body, then the lid thrown back against the wall behind it.
+    in_opening(canvas, cx - 30, lip, cx + 30, FOOT - 10, G1);
+    in_opening(canvas, cx - 30, lip, cx + 30, lip + 2, G3);
+    in_opening(canvas, cx - 30, lip, cx - 28, FOOT - 10, G3);
+    in_opening(canvas, cx + 28, lip, cx + 30, FOOT - 10, G0);
+    in_opening(canvas, cx - 28, lip - 16, cx + 28, lip - 6, G0);
+    in_opening(canvas, cx - 28, lip - 17, cx + 28, lip - 16, G2);
+
+    for dx in [-18i32, 14] {
+        in_opening(canvas, cx + dx, lip, cx + dx + 4, FOOT - 10, G2);
+    }
+    in_opening(canvas, cx - 3, lip + 4, cx + 3, lip + 10, G4);
+
+    // What is in it, spilling over the lip.
+    for _ in 0..22 {
+        let x = cx - 26 + rng.below(52) as i32;
+        let y = lip - 5 + rng.below(6) as i32;
+        canvas.set(x, y, if rng.chance(1, 3) { G4 } else { G3 });
+    }
+    for _ in 0..8 {
+        let x = cx - 34 + rng.below(68) as i32;
+        canvas.set(x, FOOT - 12, G2);
+    }
+}
+
+// --- The eighteen -----------------------------------------------------------
+
+fn ward_monument() -> Canvas { focal(WARD, 0x2c71, gate) }
+fn ward_doorway() -> Canvas { focal(WARD, 0x4b19, doorway) }
+fn ward_hearth() -> Canvas { focal(WARD, 0x7f3c, campfire) }
+fn ward_stall() -> Canvas { focal(WARD, 0x1ad5, stall) }
+fn ward_shrine() -> Canvas { focal(WARD, 0x93e8, shrine) }
+fn ward_strongroom() -> Canvas { focal(WARD, 0x5c26, strongroom) }
+
+fn reach_monument() -> Canvas { focal(REACH, 0x6ea4, furnace) }
+fn reach_doorway() -> Canvas { focal(REACH, 0x2d90, doorway) }
+fn reach_hearth() -> Canvas { focal(REACH, 0xb471, campfire) }
+fn reach_stall() -> Canvas { focal(REACH, 0x08fd, stall) }
+fn reach_shrine() -> Canvas { focal(REACH, 0xe152, shrine) }
+fn reach_strongroom() -> Canvas { focal(REACH, 0x37ab, strongroom) }
+
+fn throne_monument() -> Canvas { focal(THRONE, 0xa17f, seat) }
+fn throne_doorway() -> Canvas { focal(THRONE, 0x5e04, doorway) }
+fn throne_hearth() -> Canvas { focal(THRONE, 0xc8b3, campfire) }
+fn throne_stall() -> Canvas { focal(THRONE, 0x41d7, stall) }
+fn throne_shrine() -> Canvas { focal(THRONE, 0x9026, shrine) }
+fn throne_strongroom() -> Canvas { focal(THRONE, 0x6bce, strongroom) }
 
 #[cfg(test)]
 mod tests {
@@ -1039,14 +1237,24 @@ mod tests {
 
     #[test]
     fn the_registry_covers_every_band_of_every_act() {
-        assert_eq!(icons().len(), 21, "seven pieces for each of three acts");
+        assert_eq!(icons().len(), 36, "twelve pieces for each of three acts");
 
         for act in ["ward", "reach", "throne"] {
-            for band in ["wall", "plinth", "pillar", "focal"] {
+            for band in ["wall", "plinth", "pillar"] {
                 let name = format!("{act}_{band}");
                 assert!(
                     icons().iter().any(|i| i.name == name),
                     "{name} is missing, so that act has no {band}"
+                );
+            }
+            // Every room kind, in every act. This is the check the split was
+            // for: one missing pair leaves that room falling back to another
+            // act's stone or to no focal at all, and the screen still renders.
+            for room in ROOMS {
+                let name = format!("{act}_focal_{room}");
+                assert!(
+                    icons().iter().any(|i| i.name == name),
+                    "{name} is missing, so that room has no focal in that act"
                 );
             }
             let floors = icons()
@@ -1165,7 +1373,7 @@ mod tests {
         }
     }
 
-    /// Twenty-one parameterised calls with a copy-pasted argument compile,
+    /// Thirty-six parameterised calls with a copy-pasted argument compile,
     /// generate, validate and ship as that many files of the same picture. This
     /// is the check that a palette or a seed was actually varied.
     #[test]

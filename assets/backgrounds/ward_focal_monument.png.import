@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://0gy1uhuwtdg0"
-path="res://.godot/imported/ward_focal.png-dbcdb2850877d98cf2286eebceaf11fd.ctex"
+uid="uid://7keeqwq7timq"
+path="res://.godot/imported/ward_focal_monument.png-ce3fce5150dcfa37f0b6457942f0862b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/ward_focal.png"
-dest_files=["res://.godot/imported/ward_focal.png-dbcdb2850877d98cf2286eebceaf11fd.ctex"]
+source_file="res://assets/backgrounds/ward_focal_monument.png"
+dest_files=["res://.godot/imported/ward_focal_monument.png-ce3fce5150dcfa37f0b6457942f0862b.ctex"]
 
 [params]
 

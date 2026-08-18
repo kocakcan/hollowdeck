@@ -770,9 +770,12 @@ composes four bands — a wall, a colonnade in front of it, the plinth where the
 ground, and the floor — plus two haze layers drifting at two rates. `ActDefinition.Backdrop` names
 the act's set (`ward`/`reach`/`throne`); its wall, plinth and pillar are *derived* from that prefix
 while the three floors are authored, because those three are one room and an act that could pair
-act I's wall with act III's plinth is expressing something nobody wants. A fifth piece, the **focal feature**, is placed once rather than tiled — act I's drowned
-gate, act II's furnace mouth, act III's throne — and it is the only thing back there that is a
-subject rather than a surface. It is 256x128 where every other backdrop asset is 64x64, which makes
+act I's wall with act III's plinth is expressing something nobody wants. A fifth piece, the **focal feature**, is placed once rather than tiled, and it is
+the only thing back there that is a subject rather than a surface. **The arch is the act's and what
+stands in it is the room's**: six interiors (`ScreenBackground.BackdropRoom` — Monument, Doorway,
+Hearth, Stall, Shrine, Strongroom) across three acts, so a shop is not a rest site and act II's shop
+is not act I's. A screen names the *kind of room it is*, never a tile — which is why the enum
+argument on `AttachRoom` is not a violation of the call-site sweep. It is 256x128 where every other backdrop asset is 64x64, which makes
 `assets/backgrounds/` the first directory holding two asset classes; that is why
 `PixelSpecSmokeTest`'s grid check calls `PixelSpec.IsLegalGrid` instead of comparing against
 `TileGrid`. `ART_SPEC.md` §12 is the rule. What this replaced was one tile filling the whole canvas, which is wallpaper by construction —

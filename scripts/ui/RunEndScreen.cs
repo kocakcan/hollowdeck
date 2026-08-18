@@ -19,7 +19,7 @@ public partial class RunEndScreen : Control
 {
     public override void _Ready()
     {
-        ScreenBackground.AttachRoom(this);
+        ScreenBackground.AttachRoom(this, ScreenBackground.BackdropRoom.Doorway);
         bool won = RunEndContext.Outcome == RunEndOutcome.Win;
 
         var breakdown = RunScore.EvaluateCurrentRun();

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://xinp41ays76p"
-path="res://.godot/imported/reach_focal.png-27b3ae3768b357d92218e05e5fd7c16c.ctex"
+uid="uid://dgjnh7p6ownmh"
+path="res://.godot/imported/throne_focal_hearth.png-55f3dc0d0e7455060a9ab6780eb447a9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/reach_focal.png"
-dest_files=["res://.godot/imported/reach_focal.png-27b3ae3768b357d92218e05e5fd7c16c.ctex"]
+source_file="res://assets/backgrounds/throne_focal_hearth.png"
+dest_files=["res://.godot/imported/throne_focal_hearth.png-55f3dc0d0e7455060a9ab6780eb447a9.ctex"]
 
 [params]
 

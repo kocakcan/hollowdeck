@@ -635,13 +635,30 @@ in a different colour. That was true of the seven sourced Dungeon Crawl floors t
 stayed true when they were swapped one-for-one for generated ones on the same ramp under the same
 lamp. **The tiles were never the problem.**
 
-The fifth piece is the one that makes an act a *place* rather than a palette. A **focal feature** —
-act I's drowned gate, act II's furnace mouth, act III's throne — is placed once, centred, standing
-on the plinth, and it is the only thing back there that is a subject rather than a surface. Depth is
-not a subject: three rooms built from the same four bands in three ramp families still read as one
-room recoloured, which is exactly how this looked before the gate went in. All three are the same
-archway with different things inside it, for the reason the four combat bursts are one shape in four
-pigments — three unrelated silhouettes would read as three games.
+The fifth piece is the one that makes a *room* rather than a palette. A **focal feature** is placed
+once, standing on the plinth, and it is the only thing back there that is a subject rather than a
+surface. Depth is not a subject: rooms built from the same four bands in three ramp families still
+read as one room recoloured, which is exactly how this looked before the first arch went in.
+
+**The arch is the act's and what stands in it is the room's**, which is the axis the set is cut
+along. It shipped as one feature per act, so a shop, a rest site and a boss fight in the Ember Reach
+all stood in front of the same furnace — the act had a place and the rooms inside it did not.
+Splitting it the other way would be the same mistake mirrored: the frame is where the act's stone,
+ramp family and lamp live, and one frame for the game makes every room the same room. So six
+interiors across three acts, eighteen pieces from six drawing functions plus three bespoke
+monuments — `fx`'s four bursts from one `burst`, one size up. The interiors are `Monument`,
+`Doorway`, `Hearth`, `Stall`, `Shrine` and `Strongroom`; `ScreenBackground.BackdropRoom` is the
+engine-side mirror, and **a screen names the kind of room it is, never a tile**.
+
+Fire and gold keep their own pigments in all three acts rather than taking the act's family. A fire
+is the same fire in a flooded ward and a throne room: those are the places where a colour is a
+*material* rather than a place, and they are the only exception the per-act rule has.
+
+Where it sits is per surface. The map and combat screens have an open middle and it belongs in it;
+the six room screens all centre their own content, so a centred feature behind a centred panel is a
+feature nobody sees — measured by rendering all five, the crown showed and the whole interior, which
+is the half that says which room this is, did not. They place it off-centre instead, where the arch
+running off the edge reads as the hall continuing.
 
 It is the one asset here on a different grid, and that is the point: 256x128 is placed rather than
 repeated, so seamlessness is meaningless for it and size is the whole argument. It is also exempt

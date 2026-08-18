@@ -82,7 +82,7 @@ public partial class RewardScreen : Control
 
     public override void _Ready()
     {
-        ScreenBackground.AttachRoom(this);
+        ScreenBackground.AttachRoom(this, ScreenBackground.BackdropRoom.Doorway);
         DeckViewButtons.Attach(this);
         BuildActClearedBanner();
 

@@ -42,7 +42,7 @@ public partial class EventScreen : Control
 
     public override void _Ready()
     {
-        ScreenBackground.AttachRoom(this);
+        ScreenBackground.AttachRoom(this, ScreenBackground.BackdropRoom.Shrine);
         DeckViewButtons.Attach(this);
         // Deliberately no ScreenChrome.AddTitle here, unlike the other five.
         // The event's own name is the title and it belongs under the

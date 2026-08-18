@@ -138,7 +138,7 @@ public partial class ShopScreen : Control
 
     public override void _Ready()
     {
-        ScreenBackground.AttachRoom(this);
+        ScreenBackground.AttachRoom(this, ScreenBackground.BackdropRoom.Stall);
         DeckViewButtons.Attach(this);
         ScreenChrome.AddTitle(this, "Shop");
         // Three relic columns rather than the default six, the same 3-wide grid
