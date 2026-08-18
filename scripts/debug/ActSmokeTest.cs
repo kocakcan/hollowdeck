@@ -7,6 +7,7 @@ using Hollowdeck.Combat;
 using Hollowdeck.Data;
 using Hollowdeck.Map;
 using Hollowdeck.Run;
+using Hollowdeck.UI;
 
 namespace Hollowdeck.Debug;
 
@@ -83,19 +84,23 @@ public partial class ActSmokeTest : Node
         Check("every_act_backdrop_tile_exists", missingArt.Count == 0, string.Join(", ", missingArt));
     }
 
-    // Seven pieces per act: the three floors it authors outright, and the
-    // wall, plinth, pillar and focal feature derived from its backdrop prefix. The derived three are
-    // included here on purpose - a typo in `backdrop` loses a whole room's
-    // architecture at once and ScreenBackground falls back to the floor tile
-    // rather than throwing, which is exactly the silent degrade this sweep
-    // exists for.
+    // Twelve pieces per act: the three floors it authors outright, the wall,
+    // plinth and pillar derived from its backdrop prefix, and one focal feature
+    // for each kind of room. The derived nine are included on purpose - a typo
+    // in `backdrop` loses a whole act's architecture at once, and
+    // ScreenBackground degrades to the floor tile or to no feature rather than
+    // throwing, which is exactly the silent failure this sweep exists for.
+    //
+    // The focal half is driven off `BackdropRoom` rather than a list beside it,
+    // so a seventh room kind fails here until its art exists in all three acts.
     private static IEnumerable<string> AuthoredTiles(ActDefinition act) =>
         new[]
         {
             act.MapBackground, act.CombatBackground, act.RoomBackground,
             $"{act.Backdrop}_wall", $"{act.Backdrop}_plinth", $"{act.Backdrop}_pillar",
-            $"{act.Backdrop}_focal",
-        };
+        }
+        .Concat(Enum.GetValues<ScreenBackground.BackdropRoom>()
+            .Select(room => $"{act.Backdrop}_focal_{room.ToString().ToLowerInvariant()}"));
 
     // An act authors nine strings that decide what it looks like, and every one
     // of them fails soft: a missing tile name leaves ScreenBackground a no-op

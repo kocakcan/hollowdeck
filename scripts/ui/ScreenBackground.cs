@@ -29,6 +29,29 @@ public static class ScreenBackground
     // reader rather than four more parameters at every call site.
     private readonly record struct Atmosphere(string Set, string Floor, Color Tint, Color Haze, Color Edge);
 
+    // What stands in the arch. The act owns the architecture - its stone, its
+    // ramp family, its lamp - and the *room* owns what is inside it, which is
+    // the axis this was split along after shipping one focal per act: a shop, a
+    // rest site and a boss fight in the Ember Reach all stood in front of the
+    // same furnace, so the act had a place and the rooms in it did not.
+    //
+    // A screen names the kind of room it is, never a tile. That keeps
+    // TestNoScreenAuthorsItsOwnBackdrop's rule intact - what a screen knows is
+    // that it is a shop, and which art a shop gets in act II is this class's
+    // business.
+    public enum BackdropRoom
+    {
+        /// The act's own monument, and the only interior that is bespoke per
+        /// act: a drowned gate, a furnace mouth, a throne.
+        Monument,
+        /// The way on, for the screens that are about leaving the room.
+        Doorway,
+        Hearth,
+        Stall,
+        Shrine,
+        Strongroom,
+    }
+
     // The menu look, and deliberately act-blind. MainMenu, Settings, Library
     // and MetaProgression are all reachable with no run in play, and
     // RunState.CurrentAct clamps rather than throwing - so an act-driven menu
@@ -42,17 +65,18 @@ public static class ScreenBackground
     // Entry points
     // ------------------------------------------------------------------
 
-    public static void AttachMap(Control screen) => Build(screen, MapAir(), combat: false);
+    // The map is the act, so it gets the act's monument.
+    public static void AttachMap(Control screen) => Build(screen, MapAir(), BackdropRoom.Monument, combat: false);
 
-    public static void AttachRoom(Control screen) => Build(screen, RoomAir(), combat: false);
+    public static void AttachRoom(Control screen, BackdropRoom room) => Build(screen, RoomAir(), room, combat: false);
 
     // The extra depth combat gets and nothing else does: a ground plane the
     // combatants read as standing on, dust motes in front of it, and a
     // stronger vignette. Kept apart from the other twelve screens because a
     // shop has no floor to stand on.
-    public static void AttachCombat(Control screen) => Build(screen, CombatAir(), combat: true);
+    public static void AttachCombat(Control screen) => Build(screen, CombatAir(), BackdropRoom.Monument, combat: true);
 
-    public static void AttachMenu(Control screen) => Build(screen, Menu, combat: false);
+    public static void AttachMenu(Control screen) => Build(screen, Menu, BackdropRoom.Monument, combat: false);
 
     private static Atmosphere MapAir()
     {
@@ -128,7 +152,22 @@ public static class ScreenBackground
 
     private static readonly Color FocalFalloff = new(0.96f, 0.97f, 1f);
 
-    private static void Build(Control screen, Atmosphere air, bool combat)
+    // Where the focal feature's centre sits, as a fraction of the canvas.
+    //
+    // The map and combat screens have an open middle and the feature belongs in
+    // it. The six room screens do not: every one of them centres its content -
+    // ScreenChrome's framed panel, the art plinth, the shop's card row - and a
+    // centred feature behind a centred panel is a feature nobody sees. Measured
+    // by rendering all five: the arch's crown showed and its whole interior,
+    // which is the half that says *which* room this is, did not.
+    //
+    // Off-centre also happens to read better than a compromise would. The arch
+    // running off the right edge says the hall continues, where a shrunk one
+    // centred behind a panel would just look timid.
+    private const float FocalCentre = 0.5f;
+    private const float RoomFocalCentre = 0.78f;
+
+    private static void Build(Control screen, Atmosphere air, BackdropRoom room, bool combat)
     {
         var floorTile = BackdropArt(air.Floor);
         if (floorTile is null) return;
@@ -183,7 +222,7 @@ public static class ScreenBackground
         // surface - this is the only thing that is a *subject*, and without it
         // three acts built from the same four bands in three palettes read as
         // one room recoloured rather than as three places.
-        var focalArt = BackdropArt($"{air.Set}_focal");
+        var focalArt = BackdropArt($"{air.Set}_focal_{room.ToString().ToLowerInvariant()}");
         var focal = focalArt is null ? null : new TextureRect
         {
             Texture = focalArt,
@@ -255,7 +294,8 @@ public static class ScreenBackground
             focal.AnchorRight = 0f;
             focal.AnchorTop = 0f;
             focal.AnchorBottom = 0f;
-            focal.OffsetLeft = (ScreenChrome.DesignWidth - width) / 2f;
+            float centre = room == BackdropRoom.Monument ? FocalCentre : RoomFocalCentre;
+            focal.OffsetLeft = ScreenChrome.DesignWidth * centre - width / 2f;
             focal.OffsetRight = focal.OffsetLeft + width;
             focal.OffsetBottom = horizon + FocalFoot;
             focal.OffsetTop = focal.OffsetBottom - height;

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://rqw0aw4ouwho"
-path="res://.godot/imported/throne_focal.png-13c2377f0edbf40499ed92f809590012.ctex"
+uid="uid://pt7lk0yn55bq"
+path="res://.godot/imported/throne_focal_doorway.png-bc4f0dae5f484a7c487db4eacba9c0e3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/throne_focal.png"
-dest_files=["res://.godot/imported/throne_focal.png-13c2377f0edbf40499ed92f809590012.ctex"]
+source_file="res://assets/backgrounds/throne_focal_doorway.png"
+dest_files=["res://.godot/imported/throne_focal_doorway.png-bc4f0dae5f484a7c487db4eacba9c0e3.ctex"]
 
 [params]
 

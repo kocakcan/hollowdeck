@@ -521,10 +521,34 @@ It also forced the horizon to become one number for every screen instead of two:
 design pixels tall and stands *on* the plinth, so the higher horizon the map and room screens used
 cropped its crown off.
 
-**What is deferred, and stated so it is not mistaken for finished:** one focal feature per act, not
-per room — a shop, a rest site and a boss fight in the Ember Reach all stand in front of the same
-furnace. Depth is also still two haze layers rather than anything that moves with the content,
-because nothing in this game has a camera to move against.
+**The focal feature is per room, not per act, and that took a second pass too.** It shipped as one
+per act, which left a shop, a rest site and a boss fight in the Ember Reach all standing in front of
+the same furnace: the act had a place and the rooms inside it did not. The split is that **the arch
+is the act's and what stands in it is the room's** — six interiors (`Monument`, `Doorway`, `Hearth`,
+`Stall`, `Shrine`, `Strongroom`) across three acts, eighteen pieces from six drawing functions plus
+three bespoke monuments. Splitting it the other way would have been the same mistake mirrored: the
+frame is where the act's stone, ramp family and lamp live.
+
+Three things about it:
+
+- **A screen names the kind of room it is, never a tile.** `ScreenBackground.BackdropRoom` is an
+  enum argument on `AttachRoom`, which is deliberately *not* a violation of the call-site sweep: a
+  screen knowing it is a shop is a fact about that screen, where a tile name is a fact about the art,
+  and only the second can drift. `ActSmokeTest` drives the enum rather than a list beside it, so a
+  seventh room kind fails until its art exists in all three acts.
+- **Fire and gold keep their own pigments in every act.** A fire is the same fire in a flooded ward
+  and a throne room — these are the two places where a colour is a material rather than a place, and
+  the only exception the per-act rule has.
+- **Where it sits is per surface, and that was measured rather than guessed.** Centred is right on
+  the map and in combat and wrong on all six room screens, every one of which centres its own
+  content: the first render showed the arch's crown and none of its interior, i.e. all of the frame
+  and none of the half that says which room it is. They place it off-centre now.
+
+**What is deferred, and stated so it is not mistaken for finished:** the shop is the one room screen
+with no free canvas — its card row and relic grid together span nearly the full width, so its stall
+is still mostly behind them. Fixing that is a shop-layout change, not a backdrop one. Depth is also
+still two haze layers rather than anything that moves with the content, because nothing in this game
+has a camera to move against.
 
 ## Out of scope, so it is not re-argued
 

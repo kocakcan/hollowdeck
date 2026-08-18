@@ -1525,9 +1525,11 @@ public partial class PixelSpecSmokeTest : Node
     // the abstraction is not the same as landing it, and only a sweep over the
     // call sites can say which happened.
     //
-    // The entry points take no arguments, so the violation is expressible as a
+    // The entry points take no art, so the violation is expressible as a
     // literal on the call line: either someone widened the API or someone went
-    // around it. Comment lines are skipped because prose about a call site
+    // around it. `AttachRoom`'s `BackdropRoom` argument is not one - a screen
+    // naming the kind of room it *is* is a fact about that screen, where a
+    // tile name is a fact about the art, and only the second can drift. Comment lines are skipped because prose about a call site
     // reads to a regex exactly like one - the first version of the CombatFx
     // spawn check counted the paragraph above the call and could not fail.
     private void TestNoScreenAuthorsItsOwnBackdrop()
