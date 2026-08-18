@@ -654,11 +654,21 @@ Fire and gold keep their own pigments in all three acts rather than taking the a
 is the same fire in a flooded ward and a throne room: those are the places where a colour is a
 *material* rather than a place, and they are the only exception the per-act rule has.
 
-Where it sits is per surface. The map and combat screens have an open middle and it belongs in it;
-the six room screens all centre their own content, so a centred feature behind a centred panel is a
-feature nobody sees — measured by rendering all five, the crown showed and the whole interior, which
-is the half that says which room this is, did not. They place it off-centre instead, where the arch
-running off the edge reads as the hall continuing.
+Where it sits is per surface, and **what is aimed at the clear canvas is the opening, not the
+centre**. The map and combat screens have an open middle and the feature belongs in it; the six room
+screens all centre their own content, so a centred feature behind a centred panel is a feature
+nobody sees — measured by rendering all five, the crown showed and the whole interior, which is the
+half that says which room this is, did not. They sit off-centre instead, where the arch running off
+the edge reads as the hall continuing.
+
+The shop is the extreme case and the one that makes the rule explicit. It is the densest screen in
+the game: its card row is packed as far left as it goes (x=194, where the run-status block ends —
+the same collision the three-column relic grid exists for) and its offers row spans x=80 to x=1072,
+so the clear canvas is the 194px strip right of the last card and **there is no 512px hole to be
+made** without rebuilding a layout that carries its own overlap assertions. Aiming the *opening* at
+that strip puts the valance, the wares and the counter in the clear and the frame behind the cards,
+which is the half that says "shop". Rearranging four cards and four offers to make room for backdrop
+art would be the tail wagging the dog.
 
 It is the one asset here on a different grid, and that is the point: 256x128 is placed rather than
 repeated, so seamlessness is meaningless for it and size is the whole argument. It is also exempt

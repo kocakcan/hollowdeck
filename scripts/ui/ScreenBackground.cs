@@ -152,6 +152,8 @@ public static class ScreenBackground
 
     private static readonly Color FocalFalloff = new(0.96f, 0.97f, 1f);
 
+    private const float FocalLift = 0.55f;
+
     // Where the focal feature's centre sits, as a fraction of the canvas.
     //
     // The map and combat screens have an open middle and the feature belongs in
@@ -166,6 +168,30 @@ public static class ScreenBackground
     // centred behind a panel would just look timid.
     private const float FocalCentre = 0.5f;
     private const float RoomFocalCentre = 0.78f;
+
+    // The shop is the densest screen in the game and gets its own number. Its
+    // card row is already packed as far left as it goes - it starts at x=194
+    // because that is where the run-status block ends, which is the same
+    // collision ScreenChrome's three-column relic grid exists for - and its
+    // offers row spans x=80 to x=1072. The clear canvas is the strip right of
+    // the last card, 194px of it, and there is no 512px hole to be made without
+    // rebuilding a layout that carries its own overlap assertions and a
+    // `shopfull` fixture.
+    //
+    // So this aims the arch's *opening* at that strip rather than its centre.
+    // The frame's left flank goes behind the cards, the right runs off the
+    // canvas, and what lands in the clear is the valance, the hanging wares and
+    // the counter - which is the half that says "shop". Rearranging four cards
+    // and four offers to make room for backdrop art would be the tail wagging
+    // the dog.
+    private const float ShopFocalCentre = 0.916f;
+
+    private static float FocalCentreFor(BackdropRoom room) => room switch
+    {
+        BackdropRoom.Monument => FocalCentre,
+        BackdropRoom.Stall => ShopFocalCentre,
+        _ => RoomFocalCentre,
+    };
 
     private static void Build(Control screen, Atmosphere air, BackdropRoom room, bool combat)
     {
@@ -228,10 +254,13 @@ public static class ScreenBackground
             Texture = focalArt,
             StretchMode = TextureRect.StretchModeEnum.Keep,
             TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
-            // Between the wall's falloff and full brightness: it is set into
-            // the back wall, so it recedes with it, but it is what the eye is
-            // meant to find back there.
-            Modulate = air.Tint * FocalFalloff,
+            // Lifted toward white rather than taking the surface tint whole.
+            // The tint is a per-surface brightness dial and the focal is the
+            // one thing back there the eye is meant to *find*, so it responds
+            // to that dial without being governed by it - and on the room
+            // screens it sits off-centre, which is where the vignette is
+            // darkest.
+            Modulate = air.Tint.Lerp(Colors.White, FocalLift) * FocalFalloff,
             MouseFilter = Control.MouseFilterEnum.Ignore,
             ShowBehindParent = true,
         };
@@ -294,8 +323,7 @@ public static class ScreenBackground
             focal.AnchorRight = 0f;
             focal.AnchorTop = 0f;
             focal.AnchorBottom = 0f;
-            float centre = room == BackdropRoom.Monument ? FocalCentre : RoomFocalCentre;
-            focal.OffsetLeft = ScreenChrome.DesignWidth * centre - width / 2f;
+            focal.OffsetLeft = ScreenChrome.DesignWidth * FocalCentreFor(room) - width / 2f;
             focal.OffsetRight = focal.OffsetLeft + width;
             focal.OffsetBottom = horizon + FocalFoot;
             focal.OffsetTop = focal.OffsetBottom - height;

@@ -543,12 +543,20 @@ Three things about it:
   the map and in combat and wrong on all six room screens, every one of which centres its own
   content: the first render showed the arch's crown and none of its interior, i.e. all of the frame
   and none of the half that says which room it is. They place it off-centre now.
+- **What is aimed at the clear canvas is the *opening*, not the centre**, and the shop is what
+  forced that distinction. It is the densest screen in the game — the card row is packed as far left
+  as it goes (x=194, where the run-status block ends) and the offers row spans x=80 to x=1072, so
+  the clear canvas is a 194px strip and **there is no 512px hole to be made**. The obvious reading
+  of "fix the shop layout so the stall shows" is to rearrange four cards and four offers; that is
+  the tail wagging the dog, and it would put a layout carrying its own overlap assertions and a
+  `shopfull` fixture at risk to make room for backdrop art. Aiming the arch's opening at the strip
+  instead puts the valance, the wares and the counter in the clear and the frame behind the cards —
+  which is the half that says "shop". The general form: **when a backdrop and a layout compete for
+  the same pixels, move the part of the backdrop that carries the meaning, not the layout.**
 
-**What is deferred, and stated so it is not mistaken for finished:** the shop is the one room screen
-with no free canvas — its card row and relic grid together span nearly the full width, so its stall
-is still mostly behind them. Fixing that is a shop-layout change, not a backdrop one. Depth is also
-still two haze layers rather than anything that moves with the content, because nothing in this game
-has a camera to move against.
+**What is deferred, and stated so it is not mistaken for finished:** depth is still two haze layers
+rather than anything that moves with the content, because nothing in this game has a camera to move
+against.
 
 ## Out of scope, so it is not re-argued
 

@@ -775,7 +775,10 @@ the only thing back there that is a subject rather than a surface. **The arch is
 stands in it is the room's**: six interiors (`ScreenBackground.BackdropRoom` — Monument, Doorway,
 Hearth, Stall, Shrine, Strongroom) across three acts, so a shop is not a rest site and act II's shop
 is not act I's. A screen names the *kind of room it is*, never a tile — which is why the enum
-argument on `AttachRoom` is not a violation of the call-site sweep. It is 256x128 where every other backdrop asset is 64x64, which makes
+argument on `AttachRoom` is not a violation of the call-site sweep. Placement is per surface, and
+what is aimed at a screen's clear canvas is the arch's **opening** rather than its centre: the shop
+has no 512px hole in it at all, so its frame goes behind the cards and its counter lands in the
+strip right of them. It is 256x128 where every other backdrop asset is 64x64, which makes
 `assets/backgrounds/` the first directory holding two asset classes; that is why
 `PixelSpecSmokeTest`'s grid check calls `PixelSpec.IsLegalGrid` instead of comparing against
 `TileGrid`. `ART_SPEC.md` §12 is the rule. What this replaced was one tile filling the whole canvas, which is wallpaper by construction —
