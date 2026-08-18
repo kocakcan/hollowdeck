@@ -140,7 +140,24 @@ struct Stone {
 }
 
 const WARD: Stone = Stone { joint: N1, shade: B0, face: B1, lit: B2, sheen: B3, accent: V2 };
-const REACH: Stone = Stone { joint: N1, shade: E0, face: E1, lit: E2, sheen: E3, accent: R3 };
+// Act II is the one act whose body is not its own hue family, and it took two
+// passes to get there. Bodied on `E1` it was half again as bright as the other
+// two acts before any tint multiplied it (luma 169 against act I's 97), which
+// is what a side-by-side kept showing. Dropping to `E0` fixed the luminance
+// exactly - 95 against 97 - and the screens still read hot, because the
+// problem was only half luminance. Measured across the three map screens, act
+// II sat at 0.78 mean saturation against 0.53 for both neighbours: `E0` is
+// 0.87 saturated where `B1` and `P1` are 0.58 and 0.61, since the ember family
+// is authored for a flame rather than for the largest surface on screen.
+//
+// A tint cannot fix that - a multiply by a grey scales all three channels and
+// leaves saturation exactly where it was - so the mass is neutral (`N3`) and
+// the ember does what a hue-shifted ramp is supposed to do: sit in the shadow
+// (`E0`) and in the light (`E1`, `E3`). Warm shadows and warm highlights over a
+// neutral body is a *more* legible way to say "scorched" than a solid orange
+// floor was, and it is the only act that needs it because it is the only one
+// whose family was authored for something emissive.
+const REACH: Stone = Stone { joint: N0, shade: E0, face: N3, lit: E1, sheen: E3, accent: R3 };
 const THRONE: Stone = Stone { joint: N0, shade: P0, face: P1, lit: P2, sheen: P3, accent: G2 };
 
 // Each act gets all three patterns rather than one pattern in three colours,

@@ -670,3 +670,13 @@ Per-act identity lives in the art rather than in a `Modulate`. Each act authors 
 (`ward`, `reach`, `throne`) drawn in its own ramp family, so the surface tints in `acts.json` are
 neutral greys carrying brightness alone — a tint with a hue in it would be tinting twice, and the
 second one lands off the ramp.
+
+**The ember family is the exception, and it is worth knowing why rather than reading as an
+oversight.** Act II's mass is neutral (`N3`) with the ember only in its shadow (`E0`) and its light
+(`E1`, `E3`). §5's families are not interchangeable at this size: `E` has five entries where `B` and
+`P` have six and its darkest is already a mid tone, so bodying act II in its own family put it at
+luma 169 against act I's 97 *and* at 0.78 mean saturation against 0.53 — the largest surface on
+screen painted in a ramp authored for a flame. Luminance is fixable by dropping a step; **saturation
+is not fixable by tint at all**, since a multiply by a grey scales all three channels and leaves it
+exactly where it was. Warm shadows and warm highlights over a neutral body is the ordinary
+hue-shifted answer, and it says "scorched" better than a solid orange floor did.
