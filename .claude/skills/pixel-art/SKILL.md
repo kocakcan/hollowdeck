@@ -94,7 +94,10 @@ drawn in front of it acquires a position. Four things:
   names the kind of room it is, never a tile. It is 256x128, the only non-64x64 asset in
   `assets/backgrounds/`, drawn before the plinth so the step covers its foot, and it closes no seam
   because it never repeats. Centred on the map and in combat, off-centre on the room screens — all
-  six of those centre their own content, so a centred feature is one nobody sees.
+  six of those centre their own content, so a centred feature is one nobody sees. What is aimed at
+  the clear canvas is the **opening**, not the centre: the shop is packed edge to edge and has no
+  512px hole, so its frame goes behind the cards and its counter lands in the strip beside them.
+  When a backdrop and a layout compete for the same pixels, move the backdrop.
 - **Fire and gold keep their own pigments in every act.** A fire is the same fire in a flooded ward
   and a throne room. The two places a colour is a material rather than a place, and the only
   exception the per-act rule has.
