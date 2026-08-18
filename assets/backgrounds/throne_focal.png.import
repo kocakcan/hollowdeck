@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bah6hvwany7u"
-path="res://.godot/imported/etched.png-cf1e038f65927f2760440fd3042fd547.ctex"
+uid="uid://rqw0aw4ouwho"
+path="res://.godot/imported/throne_focal.png-13c2377f0edbf40499ed92f809590012.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/etched.png"
-dest_files=["res://.godot/imported/etched.png-cf1e038f65927f2760440fd3042fd547.ctex"]
+source_file="res://assets/backgrounds/throne_focal.png"
+dest_files=["res://.godot/imported/throne_focal.png-13c2377f0edbf40499ed92f809590012.ctex"]
 
 [params]
 

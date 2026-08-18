@@ -29,7 +29,11 @@ public static class ScreenChrome
     // so a long act name centres on the screen instead of on whatever space
     // is left over.
     private const float TitleWidth = 560f;
-    private const float DesignWidth = 1152f;
+    // Internal rather than private since ScreenBackground's colonnade became a
+    // second reader: the canvas is letterboxed to exactly this at every window
+    // size (ART_SPEC section 4), so a screen laying out in design pixels is
+    // right by construction and a second copy of the number would not be.
+    internal const float DesignWidth = 1152f;
 
     private const int HpBarWidth = 128;
     private const int HpBarHeight = 10;

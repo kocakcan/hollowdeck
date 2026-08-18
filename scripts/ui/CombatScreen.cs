@@ -172,9 +172,11 @@ public partial class CombatScreen : Control
     public override void _Ready()
     {
         // Per-act backdrop, so a fight in the Ember Reach doesn't look like the
-        // same room as a fight in the Sunken Ward.
-        var act = RunState.CurrentAct;
-        ScreenBackground.AttachCombat(this, act.CombatBackground, Color.FromString(act.CombatTint, Colors.White));
+        // same room as a fight in the Sunken Ward. Which act, and what that
+        // act's air and darkness look like, is ScreenBackground's to read -
+        // this screen used to pass a tile name and a tint, which is the shape
+        // the other eleven screens turned into eleven hardcoded literals.
+        ScreenBackground.AttachCombat(this);
         _pileCounters = DeckViewButtons.Attach(this, includeCombatPiles: true);
         _combat = GetNode<CombatManager>("CombatManager");
         _enemyRow = GetNode<HBoxContainer>("EnemyRow");

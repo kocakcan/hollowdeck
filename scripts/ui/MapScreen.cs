@@ -124,7 +124,7 @@ public partial class MapScreen : Control
     public override void _Ready()
     {
         var act = RunState.CurrentAct;
-        ScreenBackground.Attach(this, act.MapBackground, Color.FromString(act.MapTint, Colors.White));
+        ScreenBackground.AttachMap(this);
         DeckViewButtons.Attach(this);
         _nodeButtons = GetNode<Control>("NodeButtons");
         GetNode<Button>("BackButton").Pressed += OnBackPressed;

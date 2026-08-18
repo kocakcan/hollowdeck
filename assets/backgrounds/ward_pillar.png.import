@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://t6y2s4bhk8d8"
-path="res://.godot/imported/black_cobalt.png-589c32aa7a8c242f7960647bef96b7b2.ctex"
+uid="uid://bbvso3o7qvb6d"
+path="res://.godot/imported/ward_pillar.png-6fbf498c45f1b3b40f39a8296e330847.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/black_cobalt.png"
-dest_files=["res://.godot/imported/black_cobalt.png-589c32aa7a8c242f7960647bef96b7b2.ctex"]
+source_file="res://assets/backgrounds/ward_pillar.png"
+dest_files=["res://.godot/imported/ward_pillar.png-6fbf498c45f1b3b40f39a8296e330847.ctex"]
 
 [params]
 

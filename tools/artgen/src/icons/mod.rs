@@ -1,10 +1,10 @@
-//! The generated set — 222 PNGs across nine categories, replacing the
+//! The generated set — 231 PNGs across ten categories, replacing the
 //! game-icons.net SVGs (79 of them) plus the five event illustrations that
 //! never had a vector equivalent at all.
 //!
-//! Seven of the nine are icons in the ordinary sense: one file per definition
-//! id, under `assets/icons/<category>/`. The other two each break one half of
-//! that and are worth knowing apart, because they break *different* halves:
+//! Seven of the ten are icons in the ordinary sense: one file per definition
+//! id, under `assets/icons/<category>/`. The other three each break some part
+//! of that and are worth knowing apart, because they break *different* parts:
 //!
 //! - **`chrome`** breaks the location. It is 9-slice border art on the 16/24
 //!   grids and writes to `assets/theme/`, which is what puts it under
@@ -18,6 +18,13 @@
 //!   are a *frame sequence* (`impact_0.png` … `venom_3.png`) rather than one
 //!   per content id, so the smoke test's `AssertIconsMatch` sweep does not
 //!   apply to it and it carries a coverage check of its own.
+//! - **`backgrounds`** breaks both, and the grid as well. Nine seamless 64x64
+//!   floor tiles under `assets/backgrounds/` (§1's tile row), named for an
+//!   act's surface rather than for a content id, so it needs the arm in
+//!   `output_dir` *and* a line in CI's drift diff - the two-line price that
+//!   docstring names. Its coverage runs through the content instead: every act
+//!   in `acts.json` names three of them, and `ActSmokeTest` fails both an
+//!   unnamed tile and an orphaned one.
 //!
 //! Why generate rather than hand-place pixels in an editor: `ArtAssets.cs`
 //! resolves art by convention (`assets/icons/cards/<card_id>.png`), so the
@@ -37,6 +44,7 @@
 use crate::canvas::Canvas;
 use crate::palette::*;
 
+mod backgrounds;
 mod cards;
 mod chrome;
 mod events;
@@ -88,5 +96,6 @@ pub fn all() -> Vec<Icon> {
     icons.extend(events::icons());
     icons.extend(chrome::icons());
     icons.extend(fx::icons());
+    icons.extend(backgrounds::icons());
     icons
 }

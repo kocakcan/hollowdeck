@@ -765,12 +765,34 @@ one of its own **normals** as an escort — `rot_hound` (act 1), `ember_wisp` (a
 entirely — `ActSmokeTest.TestNoSummonCrossesAnAct` is what stops it being the one way act 3 content
 turns up in an act 1 room.
 
+**A backdrop is a room, not a texture, and that is the load-bearing half.** `ScreenBackground`
+composes four bands — a wall, a colonnade in front of it, the plinth where the wall meets the
+ground, and the floor — plus two haze layers drifting at two rates. `ActDefinition.Backdrop` names
+the act's set (`ward`/`reach`/`throne`); its wall, plinth and pillar are *derived* from that prefix
+while the three floors are authored, because those three are one room and an act that could pair
+act I's wall with act III's plinth is expressing something nobody wants. A fifth piece, the **focal feature**, is placed once rather than tiled — act I's drowned
+gate, act II's furnace mouth, act III's throne — and it is the only thing back there that is a
+subject rather than a surface. It is 256x128 where every other backdrop asset is 64x64, which makes
+`assets/backgrounds/` the first directory holding two asset classes; that is why
+`PixelSpecSmokeTest`'s grid check calls `PixelSpec.IsLegalGrid` instead of comparing against
+`TileGrid`. `ART_SPEC.md` §12 is the rule. What this replaced was one tile filling the whole canvas, which is wallpaper by construction —
+and the expensive thing to know is that *generating better tiles for it changed nothing*, because
+a tile repeated 9x5 has no horizon and nothing drawn in front of it acquires a position.
+
+**Every screen goes through one of four argument-free entry points** — `AttachMap`, `AttachCombat`,
+`AttachRoom`, `AttachMenu` — and no call site names a tile or a colour. Eleven of the thirteen used
+to hardcode both, so act III's shop was act I's shop; `PixelSpecSmokeTest.TestNoScreenAuthorsItsOwnBackdrop`
+sweeps the call sites, because a vocabulary two sites out of thirteen use looks exactly like one
+nobody needs (the `UiTheme.Motion` lesson, one asset class over). Per-act identity lives in the art,
+so the tints in `acts.json` are neutral greys carrying brightness alone.
+
 **Icons are generated; sprites are sourced. Nothing in `assets/` is drawn by hand, and nothing is
 an SVG.** Don't reintroduce SVG source art — `docs/ART_SPEC.md` fails an SVG anywhere under
 `assets/`, and vector downscaled onto a 32x32 grid is mush rather than a sprite. Any non-integer
 scale on a pixel asset is a bug, not a judgement call (ART_SPEC §2); alpha/`modulate` is the only
 property a pixel asset may be tweened on. Enemy and player sprites are the one **sourced** class
-(CC0 Dungeon Crawl tiles, palette-clamped, mapped act by act in `CREDITS.md`). There is **no
+(CC0 Dungeon Crawl tiles, palette-clamped, mapped act by act in `CREDITS.md`) — the backdrop tiles
+were the second until §12, and their CC0 entry is now in that file's *Retired* section. There is **no
 `artgen` on `PATH`** and no `tools/artgen` wrapper — always invoke it through `cargo run`.
 
 The full pipeline — artgen's three subcommands and how to add an icon, the four combat FX frame
@@ -933,6 +955,14 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   moves, so it has to be the predicate) and sweeps the other way for a curve nothing uses.
   **Renaming a tween builder means editing §9's transform regex too**, which is keyed to the
   spelling — that guard went silently dead when these call sites became `TweenTo`
+- `scripts/ui/ScreenBackground.cs` — the four-band room behind every screen, and the four
+  argument-free entry points that are the only way to attach one. Also the two drifting haze layers
+  (`Motion.Drift`, ungated on `ReduceMotion` per the gate-the-flash-not-the-loop rule) and the dust
+  motes, whose `CpuParticles2D` was a smooth-gradient §2/§3/§5 violation for six phases in the one
+  spot neither the transform scan nor `artgen validate` can reach
+- `tools/artgen/src/icons/backgrounds.rs` — the twenty-one pieces, and the only category that breaks
+  the grid, the location *and* the naming at once. Its Rust tests hold what `validate` is blind to:
+  seam continuity per band, a pillar's transparency, and the per-band contrast budget
 - `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic
   status block, framed panel, art plinth), attached from `_Ready` like `ScreenBackground` and
   `DeckViewButtons`. Owns those node paths; `ScreenChrome.HpLabelPath` and friends are what the

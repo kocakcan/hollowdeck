@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cxinwrxkc876a"
-path="res://.godot/imported/crypt.png-fdcd359957a80009fe5d550015b830bd.ctex"
+uid="uid://cf51eeystaqai"
+path="res://.godot/imported/ward_cistern.png-64ba0c8a29edc025da827cb11057463b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/crypt.png"
-dest_files=["res://.godot/imported/crypt.png-fdcd359957a80009fe5d550015b830bd.ctex"]
+source_file="res://assets/backgrounds/ward_cistern.png"
+dest_files=["res://.godot/imported/ward_cistern.png-64ba0c8a29edc025da827cb11057463b.ctex"]
 
 [params]
 

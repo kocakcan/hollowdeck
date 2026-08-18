@@ -32,7 +32,10 @@ fn expected_grid(path: &Path) -> Option<&'static [(u32, u32)]> {
         // 32x48 is the tall-boss allowance from §1.
         Some(&[(32, 32), (32, 48)])
     } else if text.contains("/backgrounds/") {
-        Some(&[(64, 64)])
+        // 256x128 is the backdrop-feature allowance from §1: a focal piece is
+        // placed once rather than tiled, so it is a different asset class from
+        // the 64x64 floors, walls, plinths and pillars beside it.
+        Some(&[(64, 64), (256, 128)])
     } else if text.contains("/icons/") {
         Some(&[(32, 32)])
     } else if text.contains("/theme/") {

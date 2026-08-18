@@ -54,7 +54,7 @@ public partial class LibraryScreen : Control
 
     public override void _Ready()
     {
-        ScreenBackground.Attach(this, "etched", new Color(0.85f, 0.85f, 0.9f));
+        ScreenBackground.AttachMenu(this);
         ScreenChrome.AddTitle(this, "Library");
 
         var content = new VBoxContainer

@@ -68,9 +68,9 @@ fn usage() {
         "usage: artgen <command> [--dry-run]
 
   generate [category]   write generated icons into assets/icons/ (chrome into
-                        assets/theme/)
+                        assets/theme/, backgrounds into assets/backgrounds/)
                         category: cards relics potions map status intents
-                                  events chrome fx
+                                  events chrome fx backgrounds
   animate               derive sprite animation frames into assets/sprites/anim/
   clamp [paths...]      snap PNGs onto the shared ramp (default: all of assets/)
   validate              enforce ART_SPEC §1/§3/§5/§8; nonzero exit on failure"
@@ -142,6 +142,7 @@ fn generate(assets: &Path, category: Option<&str>, dry_run: bool) -> ExitCode {
 fn output_dir(assets: &Path, category: &str) -> PathBuf {
     match category {
         "chrome" => assets.join("theme"),
+        "backgrounds" => assets.join("backgrounds"),
         other => assets.join("icons").join(other),
     }
 }

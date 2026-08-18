@@ -30,8 +30,8 @@ to catch committed art drifting from its source. The one command, for all three 
 
 ```bash
 cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
-#   generate [cards|relics|potions|map|status|intents|events|chrome|fx]
-#                      category optional; omitted = all 222
+#   generate [cards|relics|potions|map|status|intents|events|chrome|fx|backgrounds]
+#                      category optional; omitted = all 243
 #   animate            derive sprite frames into assets/sprites/anim/ (438 across 37 sprites)
 #   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
 #   validate           what run-smoke-tests.sh calls; nonzero exit on failure
@@ -67,6 +67,38 @@ them, since `modulate` resamples nothing. Five things:
   burst that repeats a frame, contracts, or thickens as it dies is on the ramp, on the grid and
   hard-alpha. Four rules: frames differ, extent never shrinks, mass falls after the ring, every
   frame is centred.
+
+**A backdrop is a room, and the tiles were never the problem.** `tools/artgen/src/icons/backgrounds.rs`
+draws twenty-one pieces — per act: three floors, a wall, a plinth, a pillar and a 256x128 focal
+feature — and `scripts/ui/ScreenBackground.cs` composes them into four bands plus one placed piece,
+with two haze layers in front.
+ART_SPEC §12 is the rule. This item shipped twice and the first version is why it is worth a
+section: it replaced seven sourced CC0 Dungeon Crawl floors with nine generated ones, on the ramp,
+under §10's lamp, with seam tests — genuinely better art that **changed almost nothing**, because
+one tile filling 1152x648 is wallpaper by construction. Repeated 9x5 it has no horizon, so nothing
+drawn in front of it acquires a position. Four things:
+
+- **Which axes a piece must close is per band.** Floors and walls tile both ways, a plinth is one
+  row (x only), a pillar repeats up the wall (y only). And the seam test does not measure whether
+  the two edges *look alike* — its first version did and failed every tile, since adjacent columns
+  of a mortared floor are supposed to differ. It measures that the wrap is an *ordinary* boundary,
+  inside the spread of every other column pair.
+- **A pillar is the one piece with transparent flanks**, so a colonnade lies over the wall instead
+  of replacing it, and it carries its own opaque cast shadow — without one it reads as a painted
+  stripe. §3 forbids partial alpha, not alpha.
+- **`sheen` is two ramp steps above `face` and only the plinth's top and a pillar's lit band may use
+  it.** Everything drawn inside `shade`/`face`/`lit` produced a room you had to be told was there.
+- **The focal feature is the only thing back there that is a subject.** A drowned gate, a furnace
+  mouth, a throne — placed once, centred, standing on the plinth, drawn before the plinth so the
+  step covers its foot. It is 256x128, the only non-64x64 asset in `assets/backgrounds/`, and it
+  closes no seam because it never repeats. Without it, four bands in three ramp families is one room
+  recoloured three times.
+- **Per-act identity is in the art, not in a `Modulate`.** `acts.json`'s tints are neutral greys
+  carrying brightness; a hue there would tint twice and land off the ramp. `ActDefinition.Backdrop`
+  names the set, and the wall/plinth/pillar are derived from that prefix.
+
+Adding it cost the two infrastructure lines the `chrome` note below names — `main::output_dir` and
+CI's drift diff. `validate.rs` needed nothing; its `/backgrounds/` 64x64 arm predates the category.
 
 **`chrome` is the one category that does not write into `assets/icons/`.** It is 9-slice border art
 on the 16/24 grids rather than 32x32 icons, so `main::output_dir` routes it to `assets/theme/` —

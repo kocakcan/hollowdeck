@@ -21,7 +21,7 @@ public partial class RestScreen : Control
 
     public override void _Ready()
     {
-        ScreenBackground.Attach(this, "dirt", new Color(0.5f, 0.42f, 0.35f));
+        ScreenBackground.AttachRoom(this);
         DeckViewButtons.Attach(this);
         ScreenChrome.AddTitle(this, "Rest Site");
         ScreenChrome.AddRunStatus(this);

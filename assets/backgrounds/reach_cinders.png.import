@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://n6qiqbcenf5r"
-path="res://.godot/imported/cobble.png-a8a5e7d5a14431e4f36576a5aef6f8fc.ctex"
+uid="uid://bwruysmy8s1mi"
+path="res://.godot/imported/reach_cinders.png-a5a74f24fe5fc5c45eadedec487d4fd2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/cobble.png"
-dest_files=["res://.godot/imported/cobble.png-a8a5e7d5a14431e4f36576a5aef6f8fc.ctex"]
+source_file="res://assets/backgrounds/reach_cinders.png"
+dest_files=["res://.godot/imported/reach_cinders.png-a5a74f24fe5fc5c45eadedec487d4fd2.ctex"]
 
 [params]
 

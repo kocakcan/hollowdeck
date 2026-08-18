@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://pdsdv0nvoalj"
-path="res://.godot/imported/dirt.png-2e7d3a088f6a05a65f5b56b1ffa573ec.ctex"
+uid="uid://xinp41ays76p"
+path="res://.godot/imported/reach_focal.png-27b3ae3768b357d92218e05e5fd7c16c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/backgrounds/dirt.png"
-dest_files=["res://.godot/imported/dirt.png-2e7d3a088f6a05a65f5b56b1ffa573ec.ctex"]
+source_file="res://assets/backgrounds/reach_focal.png"
+dest_files=["res://.godot/imported/reach_focal.png-27b3ae3768b357d92218e05e5fd7c16c.ctex"]
 
 [params]
 
