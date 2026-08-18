@@ -17,6 +17,7 @@ Every asset is authored on one of these grids. No in-between sizes.
 | --- | --- | --- |
 | Creatures (enemies, player) | **32x32** | Bosses may use 32x48 when the silhouette needs the height |
 | Background tiles | **64x64** | Must tile seamlessly. Six per act: three floors, a wall, a plinth, a pillar |
+| Backdrop features | **256x128** | In `assets/backgrounds/`. Placed once, never tiled — one per act |
 | Icons (card, relic, potion, map, status, intent) | **32x32** | |
 | Combat effect frames | **32x32** | In `assets/icons/fx/`. A creature's grid, because an effect lands *on* a creature |
 | Chrome 9-slices (frames, bezels, buttons) | **16x16** or **24x24** | In `assets/theme/`. Corners must be ≤ 1/3 of the slice |
@@ -634,7 +635,19 @@ in a different colour. That was true of the seven sourced Dungeon Crawl floors t
 stayed true when they were swapped one-for-one for generated ones on the same ramp under the same
 lamp. **The tiles were never the problem.**
 
-Three things follow, and none is visible from a single tile:
+The fifth piece is the one that makes an act a *place* rather than a palette. A **focal feature** —
+act I's drowned gate, act II's furnace mouth, act III's throne — is placed once, centred, standing
+on the plinth, and it is the only thing back there that is a subject rather than a surface. Depth is
+not a subject: three rooms built from the same four bands in three ramp families still read as one
+room recoloured, which is exactly how this looked before the gate went in. All three are the same
+archway with different things inside it, for the reason the four combat bursts are one shape in four
+pigments — three unrelated silhouettes would read as three games.
+
+It is the one asset here on a different grid, and that is the point: 256x128 is placed rather than
+repeated, so seamlessness is meaningless for it and size is the whole argument. It is also exempt
+from the contrast budget below — it is the subject, it is drawn once, and nothing sits on top of it.
+
+Four things follow, and none is visible from a single tile:
 
 - **Which axes a piece must close is per band.** A floor and a wall tile both ways, a plinth is one
   row so only x, a pillar repeats only up the wall so only y. Asking a piece for a seam it never
@@ -644,6 +657,9 @@ Three things follow, and none is visible from a single tile:
   wall with columns painted on it. §3 forbids *partial* alpha, not alpha — these are 0 or 255 like
   everything else. It carries its own cast shadow, opaque, on the flank away from the lamp; without
   one it renders as a stripe rather than as something standing in front of something.
+- **Which axes a piece must close is per band, and a focal feature closes none.** Asking a placed
+  piece for a seam is a rule with no failure behind it — the same reason a plinth is not asked for a
+  vertical one.
 - **`sheen` is two ramp steps above `face` and only two pieces may use it** — the plinth's top
   surface and a pillar's lit band, the two surfaces the lamp hits closest to square. Being *found*
   is their whole job. Everything else stays inside `shade`/`face`/`lit`, which is the contrast

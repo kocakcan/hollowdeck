@@ -20,6 +20,13 @@ public static class PixelSpec
     public const int CreatureGrid = 32;
     public const int TallCreatureHeight = 48; // bosses whose silhouette needs it
     public const int TileGrid = 64;
+
+    // A backdrop *feature* - the gate, the furnace, the throne - is placed once
+    // rather than tiled, so it is a different asset class from the floors and
+    // walls beside it in assets/backgrounds/ and gets its own grid. 256x128
+    // renders to 512x256 at TileScale, a bit under half the canvas.
+    public const int FocalWidth = 256;
+    public const int FocalHeight = 128;
     public const int IconGrid = 32;
     public const int ChromeSlice = 16;
 
@@ -229,6 +236,7 @@ public static class PixelSpec
         (width == CreatureGrid && height == CreatureGrid) ||
         (width == CreatureGrid && height == TallCreatureHeight) ||
         (width == TileGrid && height == TileGrid) ||
+        (width == FocalWidth && height == FocalHeight) ||
         (width == ChromeSlice && height == ChromeSlice) ||
         (width == ChromeSlice + 8 && height == ChromeSlice + 8); // 24x24 chrome
 }

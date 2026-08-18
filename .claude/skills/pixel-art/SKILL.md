@@ -31,7 +31,7 @@ to catch committed art drifting from its source. The one command, for all three 
 ```bash
 cargo run --release --quiet --manifest-path tools/artgen/Cargo.toml -- generate
 #   generate [cards|relics|potions|map|status|intents|events|chrome|fx|backgrounds]
-#                      category optional; omitted = all 240
+#                      category optional; omitted = all 243
 #   animate            derive sprite frames into assets/sprites/anim/ (438 across 37 sprites)
 #   clamp [paths...]   snap sourced PNGs onto the ramp (this is what enemy sprites go through)
 #   validate           what run-smoke-tests.sh calls; nonzero exit on failure
@@ -69,8 +69,9 @@ them, since `modulate` resamples nothing. Five things:
   frame is centred.
 
 **A backdrop is a room, and the tiles were never the problem.** `tools/artgen/src/icons/backgrounds.rs`
-draws eighteen seamless 64x64 tiles — six per act: three floors, a wall, a plinth, a pillar — and
-`scripts/ui/ScreenBackground.cs` composes them into four bands with two haze layers in front.
+draws twenty-one pieces — per act: three floors, a wall, a plinth, a pillar and a 256x128 focal
+feature — and `scripts/ui/ScreenBackground.cs` composes them into four bands plus one placed piece,
+with two haze layers in front.
 ART_SPEC §12 is the rule. This item shipped twice and the first version is why it is worth a
 section: it replaced seven sourced CC0 Dungeon Crawl floors with nine generated ones, on the ramp,
 under §10's lamp, with seam tests — genuinely better art that **changed almost nothing**, because
@@ -87,6 +88,11 @@ drawn in front of it acquires a position. Four things:
   stripe. §3 forbids partial alpha, not alpha.
 - **`sheen` is two ramp steps above `face` and only the plinth's top and a pillar's lit band may use
   it.** Everything drawn inside `shade`/`face`/`lit` produced a room you had to be told was there.
+- **The focal feature is the only thing back there that is a subject.** A drowned gate, a furnace
+  mouth, a throne — placed once, centred, standing on the plinth, drawn before the plinth so the
+  step covers its foot. It is 256x128, the only non-64x64 asset in `assets/backgrounds/`, and it
+  closes no seam because it never repeats. Without it, four bands in three ramp families is one room
+  recoloured three times.
 - **Per-act identity is in the art, not in a `Modulate`.** `acts.json`'s tints are neutral greys
   carrying brightness; a hue there would tint twice and land off the ramp. `ActDefinition.Backdrop`
   names the set, and the wall/plinth/pillar are derived from that prefix.

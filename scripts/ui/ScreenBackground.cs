@@ -92,8 +92,18 @@ public static class ScreenBackground
     // its horizon lower than the other screens because combatants stand on the
     // floor and the fight wants room in front of them; a menu or a map is
     // looking at the room rather than standing in it.
-    private const float CombatHorizon = 232f;
-    private const float FlatHorizon = 168f;
+    // One horizon for every screen. It was lower on the map and the room
+    // screens until the focal feature landed - a gate is 256 design pixels tall
+    // and stands *on* the plinth, so a horizon high enough to look good empty
+    // cropped its crown off. A shared horizon also means the three acts are the
+    // same room from screen to screen, which is the point of an act having a
+    // place at all.
+    private const float Horizon = 232f;
+
+    // How far the focal feature's foot sinks behind the plinth. It is drawn
+    // before the plinth, so this much of its base is covered - which is what
+    // makes it stand *behind* the step rather than on top of the floor.
+    private const float FocalFoot = 40f;
 
     // One plinth tile tall at ART_SPEC section 2's 2x. Derived rather than
     // written as 128, because the two move together and a literal here is the
@@ -116,12 +126,14 @@ public static class ScreenBackground
     // the same reason they are.
     private static readonly Color WallFalloff = new(0.5f, 0.52f, 0.6f);
 
+    private static readonly Color FocalFalloff = new(0.96f, 0.97f, 1f);
+
     private static void Build(Control screen, Atmosphere air, bool combat)
     {
-        var floorTile = TileTexture(air.Floor);
+        var floorTile = BackdropArt(air.Floor);
         if (floorTile is null) return;
 
-        float horizon = combat ? CombatHorizon : FlatHorizon;
+        const float horizon = Horizon;
 
         // A backdrop is a room, not a texture. Four bands rather than one fill:
         // a wall, the colonnade standing in front of it, the plinth where the
@@ -133,8 +145,8 @@ public static class ScreenBackground
         // Crawl floors and stayed true when they were replaced one-for-one with
         // generated ones, which is the lesson worth keeping: the tiles were
         // never the problem.
-        var wall = Tiled(TileTexture($"{air.Set}_wall") ?? floorTile, air.Tint * WallFalloff);
-        var plinth = Tiled(TileTexture($"{air.Set}_plinth") ?? floorTile, air.Tint);
+        var wall = Tiled(BackdropArt($"{air.Set}_wall") ?? floorTile, air.Tint * WallFalloff);
+        var plinth = Tiled(BackdropArt($"{air.Set}_plinth") ?? floorTile, air.Tint);
         var floor = Tiled(floorTile, air.Tint);
 
         // The colonnade is its own container so the pillars can be positioned
@@ -145,7 +157,7 @@ public static class ScreenBackground
             MouseFilter = Control.MouseFilterEnum.Ignore,
             ShowBehindParent = true,
         };
-        var pillarTile = TileTexture($"{air.Set}_pillar");
+        var pillarTile = BackdropArt($"{air.Set}_pillar");
         if (pillarTile is not null)
         {
             for (float x = PillarInset; x < ScreenChrome.DesignWidth; x += PillarSpacing)
@@ -166,7 +178,28 @@ public static class ScreenBackground
         var far = HazeLayer(FarHaze, air.Haze, FarAlpha);
         var near = HazeLayer(NearHaze, air.Haze, NearAlpha);
 
-        var layers = new List<CanvasItem> { wall, colonnade, plinth, floor, far, near };
+        // The act's one placed piece, centred behind the action: a drowned
+        // gate, a furnace mouth, a throne. Everything else back here is a
+        // surface - this is the only thing that is a *subject*, and without it
+        // three acts built from the same four bands in three palettes read as
+        // one room recoloured rather than as three places.
+        var focalArt = BackdropArt($"{air.Set}_focal");
+        var focal = focalArt is null ? null : new TextureRect
+        {
+            Texture = focalArt,
+            StretchMode = TextureRect.StretchModeEnum.Keep,
+            TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
+            // Between the wall's falloff and full brightness: it is set into
+            // the back wall, so it recedes with it, but it is what the eye is
+            // meant to find back there.
+            Modulate = air.Tint * FocalFalloff,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            ShowBehindParent = true,
+        };
+
+        var layers = new List<CanvasItem> { wall, colonnade };
+        if (focal is not null) layers.Add(focal);
+        layers.AddRange(new CanvasItem[] { plinth, floor, far, near });
 
         if (combat)
         {
@@ -214,6 +247,20 @@ public static class ScreenBackground
         // whole canvas to cut down from.
         SpanFrom(wall, 0f, horizon);
         SpanFrom(colonnade, 0f, horizon);
+        if (focal is not null && focalArt is not null)
+        {
+            float width = focalArt.GetWidth();
+            float height = focalArt.GetHeight();
+            focal.AnchorLeft = 0f;
+            focal.AnchorRight = 0f;
+            focal.AnchorTop = 0f;
+            focal.AnchorBottom = 0f;
+            focal.OffsetLeft = (ScreenChrome.DesignWidth - width) / 2f;
+            focal.OffsetRight = focal.OffsetLeft + width;
+            focal.OffsetBottom = horizon + FocalFoot;
+            focal.OffsetTop = focal.OffsetBottom - height;
+        }
+
         SpanFrom(plinth, horizon, horizon + PlinthHeight);
         floor.OffsetTop = horizon + PlinthHeight;
 
@@ -303,7 +350,7 @@ public static class ScreenBackground
     // change is not a place to spend an image resize.
     private static readonly Dictionary<string, Texture2D> TileCache = new();
 
-    private static Texture2D? TileTexture(string name)
+    private static Texture2D? BackdropArt(string name)
     {
         if (TileCache.TryGetValue(name, out var cached)) return cached;
 

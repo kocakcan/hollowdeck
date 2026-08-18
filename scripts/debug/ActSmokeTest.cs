@@ -83,8 +83,8 @@ public partial class ActSmokeTest : Node
         Check("every_act_backdrop_tile_exists", missingArt.Count == 0, string.Join(", ", missingArt));
     }
 
-    // Six pieces per act: the three floors it authors outright, and the wall,
-    // plinth and pillar derived from its backdrop prefix. The derived three are
+    // Seven pieces per act: the three floors it authors outright, and the
+    // wall, plinth, pillar and focal feature derived from its backdrop prefix. The derived three are
     // included here on purpose - a typo in `backdrop` loses a whole room's
     // architecture at once and ScreenBackground falls back to the floor tile
     // rather than throwing, which is exactly the silent degrade this sweep
@@ -94,6 +94,7 @@ public partial class ActSmokeTest : Node
         {
             act.MapBackground, act.CombatBackground, act.RoomBackground,
             $"{act.Backdrop}_wall", $"{act.Backdrop}_plinth", $"{act.Backdrop}_pillar",
+            $"{act.Backdrop}_focal",
         };
 
     // An act authors nine strings that decide what it looks like, and every one

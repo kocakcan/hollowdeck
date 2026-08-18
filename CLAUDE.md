@@ -770,8 +770,12 @@ composes four bands — a wall, a colonnade in front of it, the plinth where the
 ground, and the floor — plus two haze layers drifting at two rates. `ActDefinition.Backdrop` names
 the act's set (`ward`/`reach`/`throne`); its wall, plinth and pillar are *derived* from that prefix
 while the three floors are authored, because those three are one room and an act that could pair
-act I's wall with act III's plinth is expressing something nobody wants. `ART_SPEC.md` §12 is the
-rule. What this replaced was one tile filling the whole canvas, which is wallpaper by construction —
+act I's wall with act III's plinth is expressing something nobody wants. A fifth piece, the **focal feature**, is placed once rather than tiled — act I's drowned
+gate, act II's furnace mouth, act III's throne — and it is the only thing back there that is a
+subject rather than a surface. It is 256x128 where every other backdrop asset is 64x64, which makes
+`assets/backgrounds/` the first directory holding two asset classes; that is why
+`PixelSpecSmokeTest`'s grid check calls `PixelSpec.IsLegalGrid` instead of comparing against
+`TileGrid`. `ART_SPEC.md` §12 is the rule. What this replaced was one tile filling the whole canvas, which is wallpaper by construction —
 and the expensive thing to know is that *generating better tiles for it changed nothing*, because
 a tile repeated 9x5 has no horizon and nothing drawn in front of it acquires a position.
 
@@ -956,7 +960,7 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   (`Motion.Drift`, ungated on `ReduceMotion` per the gate-the-flash-not-the-loop rule) and the dust
   motes, whose `CpuParticles2D` was a smooth-gradient §2/§3/§5 violation for six phases in the one
   spot neither the transform scan nor `artgen validate` can reach
-- `tools/artgen/src/icons/backgrounds.rs` — the eighteen tiles, and the only category that breaks
+- `tools/artgen/src/icons/backgrounds.rs` — the twenty-one pieces, and the only category that breaks
   the grid, the location *and* the naming at once. Its Rust tests hold what `validate` is blind to:
   seam continuity per band, a pillar's transparency, and the per-band contrast budget
 - `scripts/ui/ScreenChrome.cs` — the furniture every non-combat screen shares (title, HP/gold/relic

@@ -106,9 +106,13 @@ public partial class PixelSpecSmokeTest : Node
         {
             var texture = GD.Load<Texture2D>(path);
             int w = texture.GetWidth(), h = texture.GetHeight();
+            // IsLegalGrid rather than a hardcoded 64x64, because this
+            // directory holds two asset classes now: the tiles that repeat and
+            // the focal feature that is placed once, which is 256x128.
             Check($"tile_grid_{path.GetFile()}",
-                w == PixelSpec.TileGrid && h == PixelSpec.TileGrid,
-                $"{path} is {w}x{h}, expected {PixelSpec.TileGrid}x{PixelSpec.TileGrid}");
+                PixelSpec.IsLegalGrid(w, h) &&
+                (w == PixelSpec.TileGrid || w == PixelSpec.FocalWidth),
+                $"{path} is {w}x{h}, which is neither a background tile nor a focal feature");
         }
     }
 

@@ -49,6 +49,15 @@ use crate::canvas::Canvas;
 /// §1's background grid. Not `shapes::GRID`, which is the 32x32 icon one.
 pub const TILE: i32 = 64;
 
+/// §1's backdrop-feature grid, and the only thing in `assets/backgrounds/`
+/// that is not 64x64. A focal piece is a different asset class from a tile -
+/// it is placed once rather than repeated, so seamlessness is meaningless for
+/// it and size is the whole point. 256x128 renders to 512x256 at §2's 2x,
+/// which is a bit under half the 1152px canvas and tall enough to reach from
+/// above the wall band down onto the plinth.
+pub const FOCAL_W: i32 = 256;
+pub const FOCAL_H: i32 = 128;
+
 pub fn icons() -> Vec<Icon> {
     vec![
         // Act I - The Sunken Ward. Cold wet stone, verdigris in the joints.
@@ -58,6 +67,7 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "backgrounds", name: "ward_wall", draw: ward_wall },
         Icon { category: "backgrounds", name: "ward_plinth", draw: ward_plinth },
         Icon { category: "backgrounds", name: "ward_pillar", draw: ward_pillar },
+        Icon { category: "backgrounds", name: "ward_focal", draw: ward_gate },
         // Act II - The Ember Reach. Scorched brick, heat still in the cracks.
         Icon { category: "backgrounds", name: "reach_cinders", draw: reach_cinders },
         Icon { category: "backgrounds", name: "reach_scorch", draw: reach_scorch },
@@ -65,6 +75,7 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "backgrounds", name: "reach_wall", draw: reach_wall },
         Icon { category: "backgrounds", name: "reach_plinth", draw: reach_plinth },
         Icon { category: "backgrounds", name: "reach_pillar", draw: reach_pillar },
+        Icon { category: "backgrounds", name: "reach_focal", draw: reach_furnace },
         // Act III - The Hollow Throne. Black stone, gilt worked into it.
         Icon { category: "backgrounds", name: "throne_inlay", draw: throne_inlay },
         Icon { category: "backgrounds", name: "throne_obsidian", draw: throne_obsidian },
@@ -72,6 +83,7 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "backgrounds", name: "throne_wall", draw: throne_wall },
         Icon { category: "backgrounds", name: "throne_plinth", draw: throne_plinth },
         Icon { category: "backgrounds", name: "throne_pillar", draw: throne_pillar },
+        Icon { category: "backgrounds", name: "throne_focal", draw: throne_dais },
     ]
 }
 
@@ -86,11 +98,19 @@ pub fn icons() -> Vec<Icon> {
 /// *composition*: a horizon, a wall behind it, and something standing up in it.
 /// The sourced Dungeon Crawl floors were the same shape of wrong, which is why
 /// replacing them one-for-one changed so little.
+#[cfg(test)]
 pub enum Band {
     Floor,
     Wall,
     Plinth,
     Pillar,
+    /// The one thing back here that is placed rather than repeated, and the
+    /// only reason a backdrop has a *subject* rather than only a depth. The
+    /// registry name is `<set>_focal` for all three so `ScreenBackground` can
+    /// derive it alongside the wall, plinth and pillar; what each act's
+    /// actually is - a drowned gate, a furnace mouth, a throne - lives in the
+    /// drawing function's name and its doc comment.
+    Focal,
 }
 
 /// The five tones a floor is built from. Five rather than three because a
@@ -149,8 +169,11 @@ fn throne_pillar() -> Canvas { pillar(THRONE, 0x18f6) }
 
 /// Which band each tile belongs to, for the tests below - they hold different
 /// rules, and a pillar is the only piece that is allowed to be see-through.
+#[cfg(test)]
 fn band_of(name: &str) -> Band {
-    if name.ends_with("_wall") {
+    if name.ends_with("_focal") {
+        Band::Focal
+    } else if name.ends_with("_wall") {
         Band::Wall
     } else if name.ends_with("_plinth") {
         Band::Plinth
@@ -633,6 +656,343 @@ fn pillar(stone: Stone, seed: u32) -> Canvas {
     canvas
 }
 
+// ---------------------------------------------------------------------------
+// The focal features
+// ---------------------------------------------------------------------------
+//
+// One placed piece per act, centred behind the action: a drowned gate, a
+// furnace mouth, a throne. This is what a backdrop has been missing since it
+// stopped being wallpaper - the wall, plinth and colonnade give a screen depth,
+// but depth is not a *subject*, and three rooms built from the same three bands
+// in three palettes still read as one room recoloured. A gate the player is
+// fighting in front of is the difference between an act having a look and an
+// act having a place.
+//
+// All three are the same archway with different things inside it, for the same
+// reason the four combat bursts are one shape in four pigments: the arch is the
+// architecture this backdrop already has (the plinth's step, the pillar's
+// drum), and three unrelated silhouettes would read as three games.
+
+/// Where the arch springs from, measured down the 128px canvas: the semicircular
+/// head occupies everything above it, straight jambs everything below.
+const SPRING: i32 = 88;
+const OUTER: i32 = 88;
+const INNER: i32 = 60;
+/// The step the whole piece stands on, which is what stops it floating when the
+/// plinth band draws across its feet.
+const FOOT: i32 = 112;
+
+fn focal_cx() -> i32 {
+    FOCAL_W / 2
+}
+
+/// True inside the arch's outer silhouette: a semicircle above the springline,
+/// a pair of straight jambs below it. Written as a predicate rather than drawn
+/// with `disc` because the lower half of a disc is round, and a gate whose jambs
+/// bulge is a keyhole.
+fn inside(x: i32, y: i32, radius: i32) -> bool {
+    let cx = focal_cx();
+    if y < SPRING {
+        let dx = x - cx;
+        let dy = y - SPRING;
+        dx * dx + dy * dy <= radius * radius
+    } else {
+        (x - cx).abs() <= radius
+    }
+}
+
+/// The shared shell: foot, frame, opening. `void` is what fills the opening -
+/// each act replaces most of it with something, but a gate with nothing behind
+/// it still has to be darker than the frame or the arch reads as a solid slab.
+fn archway(stone: Stone) -> Canvas {
+    let mut canvas = Canvas::new(FOCAL_W as u32, FOCAL_H as u32);
+
+    for y in 0..FOCAL_H {
+        for x in 0..FOCAL_W {
+            if y >= FOOT {
+                // The foot spreads wider than the jambs, so the piece sits on
+                // the ground rather than being stuck into it.
+                if (x - focal_cx()).abs() <= OUTER + 12 {
+                    canvas.set(x, y, stone.face);
+                }
+            } else if inside(x, y, INNER) && y >= 8 {
+                canvas.set(x, y, stone.joint);
+            } else if inside(x, y, OUTER) {
+                canvas.set(x, y, stone.face);
+            }
+        }
+    }
+
+    canvas
+}
+
+/// Rims every silhouette edge and every reveal, from §10's lamp rather than by
+/// hand. A neighbour that is *clear* means this pixel faces out of the piece
+/// and is a raised face; a neighbour that is the opening means it faces into a
+/// cut, where the lit and shaded sides swap. Reading from a copy so the rim does
+/// not cascade into itself one pixel at a time.
+fn rim(canvas: &mut Canvas, stone: Stone) {
+    let before: Vec<crate::palette::Rgba> = canvas.pixels().to_vec();
+    let at = |x: i32, y: i32| -> crate::palette::Rgba {
+        if x < 0 || y < 0 || x >= FOCAL_W || y >= FOCAL_H {
+            crate::palette::TRANSPARENT
+        } else {
+            before[(y * FOCAL_W + x) as usize]
+        }
+    };
+
+    for y in 0..FOCAL_H {
+        for x in 0..FOCAL_W {
+            let here = at(x, y);
+            if here.3 != 255 || here.rgb() == stone.joint {
+                continue;
+            }
+            for (normal, dx, dy) in [(TOP, 0, -1), (BOTTOM, 0, 1), (LEFT, -1, 0), (RIGHT, 1, 0)] {
+                let neighbour = at(x + dx, y + dy);
+                if neighbour.3 != 255 {
+                    canvas.set(x, y, face_tone(normal, true, stone));
+                } else if neighbour.rgb() == stone.joint {
+                    canvas.set(x, y, face_tone(normal, false, stone));
+                }
+            }
+        }
+    }
+}
+
+/// The keystone, and the course marks down the jambs. Every arch gets them, so
+/// the frame reads as cut stone rather than as a cardboard cutout of an arch.
+fn dress(canvas: &mut Canvas, stone: Stone) {
+    let cx = focal_cx();
+    // Keystone: the wedge at the crown, the one block of an arch that is
+    // supposed to draw the eye.
+    for y in 0..(SPRING - INNER + 6) {
+        let half = 7 + y / 6;
+        for x in (cx - half)..(cx + half) {
+            if inside(x, y, OUTER) && !inside(x, y, INNER) {
+                canvas.set(x, y, stone.lit);
+            }
+        }
+    }
+    for y in 0..(SPRING - INNER + 6) {
+        let half = 7 + y / 6;
+        canvas.set(cx - half, y, stone.joint);
+        canvas.set(cx + half - 1, y, stone.joint);
+    }
+
+    // Voussoir joints radiating out of the arch's centre, and course lines down
+    // the jambs at the same pitch.
+    for step in 1..7 {
+        let angle = std::f32::consts::PI * (step as f32) / 7.0;
+        let (sin, cos) = angle.sin_cos();
+        for r in INNER..=OUTER {
+            let x = focal_cx() - (cos * r as f32).round() as i32;
+            let y = SPRING - (sin * r as f32).round() as i32;
+            if y >= 0 {
+                canvas.set(x, y, stone.joint);
+            }
+        }
+    }
+    for y in [SPRING + 8, SPRING + 20] {
+        for x in 0..FOCAL_W {
+            if inside(x, y, OUTER) && !inside(x, y, INNER) {
+                canvas.set(x, y, stone.joint);
+                canvas.set(x, y + 1, face_tone(TOP, true, stone));
+            }
+        }
+    }
+}
+
+/// **Act I - the drowned gate.** A portcullis still down in a hall that has
+/// taken water: bars in the opening, the tide line across them in verdigris, and
+/// the same verdigris weeping out of the joints of the frame.
+fn ward_gate() -> Canvas {
+    let mut canvas = archway(WARD);
+    let mut rng = Jitter(0x2c71);
+    let cx = focal_cx();
+
+    // Portcullis. Bars stop short of the crown so the arch still reads.
+    let mut x = cx - INNER + 6;
+    while x < cx + INNER - 4 {
+        for y in (SPRING - INNER + 10)..FOOT {
+            if inside(x, y, INNER - 2) {
+                canvas.set(x, y, WARD.shade);
+                canvas.set(x + 1, y, WARD.face);
+                canvas.set(x + 2, y, WARD.shade);
+            }
+        }
+        x += 13;
+    }
+    // Two ties across them.
+    for y in [SPRING - 6, SPRING + 16] {
+        for x in (cx - INNER)..(cx + INNER) {
+            if inside(x, y, INNER - 2) {
+                canvas.set(x, y, WARD.face);
+                canvas.set(x, y + 1, WARD.shade);
+            }
+        }
+    }
+
+    // The tide line: everything under it has been wet for a very long time.
+    let tide = SPRING + 26;
+    for x in 0..FOCAL_W {
+        if inside(x, tide, OUTER + 12) || (tide >= FOOT && (x - cx).abs() <= OUTER + 12) {
+            canvas.set(x, tide, WARD.accent);
+        }
+    }
+    for _ in 0..40 {
+        let x = cx - OUTER + rng.below((OUTER * 2) as u32) as i32;
+        let y = tide + 1 + rng.below(10) as u32 as i32;
+        if canvas.get(x, y).3 == 255 {
+            canvas.set(x, y, WARD.accent);
+        }
+    }
+
+    rim(&mut canvas, WARD);
+    dress(&mut canvas, WARD);
+    canvas
+}
+
+/// **Act II - the furnace mouth.** The opening is not dark: it is the fire the
+/// act is named for, banked down to coals. The glow is drawn as nested bands
+/// rather than a gradient, because §5 admits 43 colours and a gradient wants
+/// several hundred - the same argument that keeps `GlowRing` stepping.
+fn reach_furnace() -> Canvas {
+    let mut canvas = archway(REACH);
+    let mut rng = Jitter(0x6ea4);
+    let cx = focal_cx();
+    let hearth = FOOT - 2;
+
+    // Concentric heat, hottest at the hearth. Radii chosen so each band is a
+    // few pixels wide at the mouth and the outermost still clears the frame.
+    for (radius, tone) in [(56, REACH.shade), (44, REACH.face), (32, REACH.lit), (20, REACH.sheen), (9, E4)] {
+        for y in 0..FOOT {
+            for x in 0..FOCAL_W {
+                let dx = x - cx;
+                let dy = (y - hearth) * 2; // flattened, so the glow pools rather than balls
+                if dx * dx + dy * dy <= radius * radius && inside(x, y, INNER - 2) {
+                    canvas.set(x, y, tone);
+                }
+            }
+        }
+    }
+
+    // The grate the coals sit behind.
+    let mut x = cx - INNER + 8;
+    while x < cx + INNER - 6 {
+        for y in (hearth - 26)..FOOT {
+            if inside(x, y, INNER - 2) {
+                canvas.set(x, y, REACH.joint);
+                canvas.set(x + 1, y, REACH.shade);
+            }
+        }
+        x += 11;
+    }
+
+    // Embers escaping into the opening's upper dark.
+    for _ in 0..26 {
+        let x = cx - INNER + rng.below((INNER * 2) as u32) as i32;
+        let y = SPRING - INNER + 12 + rng.below(60) as i32;
+        if inside(x, y, INNER - 4) && canvas.get(x, y).rgb() == REACH.joint {
+            canvas.set(x, y, if rng.chance(1, 3) { REACH.accent } else { REACH.lit });
+        }
+    }
+
+    rim(&mut canvas, REACH);
+    dress(&mut canvas, REACH);
+    canvas
+}
+
+/// **Act III - the hollow throne.** The act's name, finally on screen: a seat
+/// with a high back standing in the opening, gilt worked into black stone, and
+/// nobody in it.
+fn throne_dais() -> Canvas {
+    let mut canvas = archway(THRONE);
+    let mut rng = Jitter(0xa17f);
+    let cx = focal_cx();
+
+    // Three steps up to the seat, each one narrower than the last.
+    for (i, (half, top)) in [(46, FOOT - 6), (38, FOOT - 12), (30, FOOT - 18)].iter().enumerate() {
+        for y in *top..FOOT {
+            for x in (cx - half)..(cx + half) {
+                canvas.set(x, y, if i % 2 == 0 { THRONE.face } else { THRONE.lit });
+            }
+        }
+        for x in (cx - half)..(cx + half) {
+            canvas.set(x, *top, THRONE.sheen);
+        }
+    }
+
+    // The back, rising most of the way into the arch. The first version stopped
+    // level with the springline and read as a crate on a staircase - a throne
+    // is a *height*, and the arch is there to be filled by it.
+    let back_top = SPRING - INNER + 6;
+    for y in back_top..(FOOT - 20) {
+        for x in (cx - 26)..(cx + 26) {
+            canvas.set(x, y, THRONE.face);
+        }
+    }
+    // Shoulders: the back steps out twice on its way down, so the silhouette
+    // has a profile instead of being a rectangle.
+    for y in (back_top + 26)..(FOOT - 20) {
+        for x in (cx - 34)..(cx + 34) {
+            canvas.set(x, y, THRONE.face);
+        }
+    }
+    // The seat, and the arms either side of it.
+    for y in (FOOT - 44)..(FOOT - 20) {
+        for x in (cx - 40)..(cx + 40) {
+            canvas.set(x, y, THRONE.lit);
+        }
+    }
+    for x in [cx - 40, cx + 32] {
+        for y in (FOOT - 56)..(FOOT - 40) {
+            for dx in 0..8 {
+                canvas.set(x + dx, y, THRONE.face);
+            }
+        }
+    }
+
+    // Gilt: a spine down the back with cross-bars at a fixed pitch, and a
+    // finial at each shoulder. The one place in the whole backdrop set the
+    // accent is allowed to be a shape rather than a fleck, because this is the
+    // thing the act is named after.
+    for y in (back_top + 4)..(FOOT - 26) {
+        canvas.set(cx - 1, y, THRONE.accent);
+        canvas.set(cx, y, THRONE.accent);
+    }
+    let mut bar = back_top + 10;
+    while bar < FOOT - 30 {
+        let half = if bar < back_top + 26 { 12 } else { 20 };
+        for x in (cx - half)..(cx + half) {
+            canvas.set(x, bar, THRONE.accent);
+        }
+        bar += 18;
+    }
+    for x in [cx - 27, cx + 26] {
+        for y in back_top..(back_top + 10) {
+            canvas.set(x, y, THRONE.accent);
+        }
+    }
+    for x in [cx - 35, cx + 34] {
+        for y in (back_top + 26)..(back_top + 32) {
+            canvas.set(x, y, THRONE.accent);
+        }
+    }
+
+    // Dust on the steps. Nobody has climbed them in a while.
+    for _ in 0..24 {
+        let x = cx - 46 + rng.below(92) as i32;
+        let y = FOOT - 18 + rng.below(18) as i32;
+        if canvas.get(x, y).3 == 255 {
+            canvas.set(x, y, THRONE.shade);
+        }
+    }
+
+    rim(&mut canvas, THRONE);
+    dress(&mut canvas, THRONE);
+    canvas
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -662,10 +1022,10 @@ mod tests {
 
     #[test]
     fn the_registry_covers_every_band_of_every_act() {
-        assert_eq!(icons().len(), 18, "six pieces for each of three acts");
+        assert_eq!(icons().len(), 21, "seven pieces for each of three acts");
 
         for act in ["ward", "reach", "throne"] {
-            for band in ["wall", "plinth", "pillar"] {
+            for band in ["wall", "plinth", "pillar", "focal"] {
                 let name = format!("{act}_{band}");
                 assert!(
                     icons().iter().any(|i| i.name == name),
@@ -683,11 +1043,11 @@ mod tests {
     #[test]
     fn every_tile_is_on_the_background_grid() {
         for (name, canvas) in every_tile() {
-            assert_eq!(
-                (canvas.width, canvas.height),
-                (TILE as u32, TILE as u32),
-                "{name} is not 64x64"
-            );
+            let expected = match band_of(name) {
+                Band::Focal => (FOCAL_W as u32, FOCAL_H as u32),
+                _ => (TILE as u32, TILE as u32),
+            };
+            assert_eq!((canvas.width, canvas.height), expected, "{name} is off its grid");
         }
     }
 
@@ -709,6 +1069,18 @@ mod tests {
                     clear > 0,
                     "{name} is fully opaque, so its flanks hide the wall instead of showing it"
                 ),
+                // A focal piece is a silhouette standing against the wall, so
+                // most of its canvas is meant to be clear - the check that
+                // earns its keep is the other way round, that it has a
+                // substantial body rather than being a rounding error.
+                Band::Focal => {
+                    let solid = canvas.pixels().len() - clear;
+                    assert!(clear > 0, "{name} fills its whole rectangle, so it is a slab and not a gate");
+                    assert!(
+                        solid > canvas.pixels().len() / 5,
+                        "{name} is only {solid} opaque pixels; nothing that small reads at 2x"
+                    );
+                }
                 _ => assert_eq!(clear, 0, "{name} has {clear} non-opaque pixels"),
             }
         }
@@ -736,10 +1108,14 @@ mod tests {
     #[test]
     fn every_tile_meets_itself_on_the_axes_it_repeats() {
         for (name, canvas) in every_tile() {
+            // A focal piece is placed once and never repeated, so it has no
+            // seam to meet - asking it for one would be a rule with no failure
+            // behind it, which is the same reason a plinth is not asked for y.
             let axes: &[&str] = match band_of(name) {
                 Band::Floor | Band::Wall => &["x", "y"],
                 Band::Plinth => &["x"],
                 Band::Pillar => &["y"],
+                Band::Focal => &[],
             };
 
             for axis in axes {
@@ -772,8 +1148,8 @@ mod tests {
         }
     }
 
-    /// Eighteen parameterised calls with a copy-pasted argument compile,
-    /// generate, validate and ship as eighteen files of the same picture. This
+    /// Twenty-one parameterised calls with a copy-pasted argument compile,
+    /// generate, validate and ship as that many files of the same picture. This
     /// is the check that a palette or a seed was actually varied.
     #[test]
     fn no_two_tiles_are_the_same_picture() {
@@ -798,6 +1174,7 @@ mod tests {
     #[test]
     fn no_tile_carries_an_icon_outline() {
         for (name, canvas) in every_tile() {
+            if matches!(band_of(name), Band::Focal) { continue; }
             let uniform = (0..TILE).all(|i| canvas.get(i, 0) == canvas.get(0, 0))
                 && (0..TILE).all(|i| canvas.get(0, i) == canvas.get(0, 0));
             assert!(
@@ -838,6 +1215,11 @@ mod tests {
         for (name, canvas) in every_tile() {
             let tones = tones(&canvas);
             let span = tones.iter().max().unwrap() - tones.iter().min().unwrap();
+            // A focal piece is exempt, and it is the only thing back here
+            // that is: it is the subject rather than the surface, it is placed
+            // once, and nothing is drawn on top of it - the reasons the budget
+            // exists all point the other way for it.
+            if matches!(band_of(name), Band::Focal) { continue; }
             let budget = match band_of(name) {
                 Band::Plinth | Band::Pillar => 470,
                 _ => 420,

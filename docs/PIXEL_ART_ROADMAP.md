@@ -505,11 +505,26 @@ Two things this closed that were not part of the item, both found by opening the
   scaling the `TextureRect` instead would be both a fractional-scale hazard and a transform on a
   pixel holder.
 
-**What is deferred, and stated so it is not mistaken for finished:** the composition is one horizon
-and one colonnade rhythm for every screen in an act. There is no focal feature — no gate, forge or
-throne behind the fight — and no per-*room* variation beyond which of the three floors is under it.
-Depth is also still two haze layers rather than anything that moves with the content, because
-nothing in this game has a camera to move against.
+**The focal feature is the seventh piece and the one that finished the item.** A drowned gate, a
+furnace mouth and a throne, 256x128 each, placed once behind the action rather than tiled. Everything
+else back there is a *surface*; this is the only thing that is a *subject*, and the difference is
+what the first composition was still missing — four bands in three ramp families is one room
+recoloured three times, and it looked like it. All three are the same archway with different things
+inside it, for the reason the four combat bursts are one shape in four pigments: the arch is
+architecture the backdrop already has, in the plinth's step and the pillar's drum, and three
+unrelated silhouettes would read as three games.
+
+It needed a second grid in `assets/backgrounds/` (ART_SPEC §1), which is the first time that
+directory has held two asset classes. That cost one arm in `validate::expected_grid`, one entry in
+`PixelSpec.IsLegalGrid`, and turning `PixelSpecSmokeTest`'s hardcoded 64x64 check into a call to it.
+It also forced the horizon to become one number for every screen instead of two: a gate is 256
+design pixels tall and stands *on* the plinth, so the higher horizon the map and room screens used
+cropped its crown off.
+
+**What is deferred, and stated so it is not mistaken for finished:** one focal feature per act, not
+per room — a shop, a rest site and a boss fight in the Ember Reach all stand in front of the same
+furnace. Depth is also still two haze layers rather than anything that moves with the content,
+because nothing in this game has a camera to move against.
 
 ## Out of scope, so it is not re-argued
 
