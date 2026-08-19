@@ -206,9 +206,11 @@ which is how a missing entry announces itself. If it is a *debuff*, it needs a f
 lifts 18 snapped pixels and paints a halo; it does not scale, and the fan does not tilt. Damage
 numbers step between two legal font rungs; they do not punch in from 2.2x. Reward cards breathe on
 `modulate:a`; they do not sway on `rotation_degrees`. `PixelSpecSmokeTest`'s transform scan treats
-`this` as a pixel surface in any file declaring a `TextureRect` or deriving from `Label`, and treats
-instances of those classes as pixel surfaces wherever they are declared — so a violation reaching in
-from another file is caught too. A **static integer** scale is still legal and goes through
+`this` as a pixel surface in any file declaring a `TextureRect`, deriving from `Label`, or assigning
+`Icon` from `ArtAssets` (thirteen files today), and treats instances of those classes as pixel
+surfaces wherever they are declared — so a violation reaching in from another file is caught too. It
+reads **code lines only**, because this file and its neighbours are dense prose about pixel art and
+the scan matches source text: keyed to comments, coverage moved when a comment was reworded. A **static integer** scale is still legal and goes through
 `PixelSpec.ApplyIntegerScale`, which takes an `int` so the scan does not have to evaluate one.
 ART_SPEC §9; `docs/PIXEL_ART_ROADMAP.md` §1 carries the four holes that were found closing this, all
 of them by mutating the guard rather than by reading it.

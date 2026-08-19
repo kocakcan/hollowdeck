@@ -105,6 +105,7 @@ public partial class CombatTargetingSmokeTest : Node
         await TestCancelTargetingRestoresACleanBoard();
         await TestInspectPeekOpensAndCloses();
         await TestSelectingACardDoesNotOpenAPeek();
+        await TestAPreemptedCardCannotCloseTheNewPeek();
         await TestClickingAnEnemyResolvesAnAimedPotion();
         await TestHitTestSkipsCorpsesAndIgnoresUntargetedCards();
         await TestASummonBuildsAnEnemyViewMidFight();
@@ -338,12 +339,29 @@ public partial class CombatTargetingSmokeTest : Node
     // top of the card it is quoting.
     private async System.Threading.Tasks.Task TestInspectPeekOpensAndCloses()
     {
-        var (screen, _, handArea) = await StartFight("strike");
+        // **Bash, not Strike**, and that is the whole assertion below working.
+        // Strike reads "Deal 6 damage." and mentions no keyword, so
+        // ShowKeywordTooltip returns before assigning and _keywordTooltip is
+        // null whether or not the peek hides anything. Measured: with Strike,
+        // deleting the `if (_inspecting) HideKeywordTooltip()` arm this check is
+        // named after left the suite at 147 passed, 0 failed. Bash applies
+        // Vulnerable, so the panel is really up and really has to go.
+        var (screen, _, handArea) = await StartFight("bash");
         var card = FirstCard(handArea);
 
         Check("no_peek_before_inspect", !CardInspectView.IsOpen, "a peek was already open");
 
         card.SetHighlighted(true);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        // The transition, not the end state. Asserting only that the panel is
+        // down while the peek is up passes for free on any card that never
+        // raised one.
+        Check("a_keyword_card_raises_its_panel_when_looked_at",
+            Private<HoverTooltip?>(card, "_keywordTooltip") is not null,
+            "Bash mentions Vulnerable but raised no keyword panel - this fixture can no longer " +
+            "tell whether the peek hides one");
+
         card.BeginInspect();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
@@ -356,6 +374,51 @@ public partial class CombatTargetingSmokeTest : Node
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
         Check("release_closes_the_peek", !CardInspectView.IsOpen, "the peek outlived the hold");
+
+        await EndFight(screen);
+    }
+
+    // The two input paths can be on different cards at once, and a Show that
+    // replaced one peek with another used to leave the old raiser believing it
+    // still owned one - so that card's own mouse-exit killed the *new* card's
+    // peek while its key was still held, unrecoverably, since IsActionPressed
+    // fires on the press edge only.
+    private async System.Threading.Tasks.Task TestAPreemptedCardCannotCloseTheNewPeek()
+    {
+        // Bash again, so the keyword-panel half below has a panel to be about.
+        var (screen, _, handArea) = await StartFight("bash");
+        var cards = handArea.GetChildren().OfType<CardView>().ToList();
+        var a = cards[0];
+        var b = cards[1];
+
+        // A is hovered as well as inspecting, which is the state the mouse
+        // leaves a card in - and the only state in which the panel returning is
+        // observable at all.
+        a.SetHighlighted(true);
+        a.BeginInspect();
+        b.BeginInspect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("the_second_card_owns_the_peek", CardInspectView.RaisedBy(b),
+            "the peek is not owned by the card that raised it last");
+
+        // The quieter half of the same bug. A card that lost the peek but still
+        // believes it owns one keeps suppressing its own keyword panel, with no
+        // peek left to justify the suppression - a panel the player cannot get
+        // back by any means, on the card the mouse is resting on.
+        Check("a_preempted_card_gets_its_keyword_panel_back",
+            Private<HoverTooltip?>(a, "_keywordTooltip") is not null,
+            "the pre-empted card is still hiding its keyword panel for a peek it no longer owns");
+
+        a.EndInspect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("a_preempted_card_does_not_close_the_new_peek", CardInspectView.IsOpen,
+            "the card that lost the peek took the replacement down with it");
+
+        b.EndInspect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Check("the_owner_still_closes_the_peek", !CardInspectView.IsOpen, "the peek outlived its owner");
 
         await EndFight(screen);
     }

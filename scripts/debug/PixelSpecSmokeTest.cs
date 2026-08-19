@@ -1274,11 +1274,32 @@ public partial class PixelSpecSmokeTest : Node
     // resolving any of them, this fails here rather than going quiet over there.
     private void TestTheTransformScanSeesEveryPixelSurface()
     {
-        foreach (string fileName in new[] { "EnemyView.cs", "CardView.cs", "FloatingText.cs" })
+        foreach (string fileName in new[]
+                 { "EnemyView.cs", "CardView.cs", "FloatingText.cs", "PotionView.cs" })
         {
             Check($"{fileName}_is_scanned_as_a_pixel_surface", ThisIsAPixelSurfaceIn(fileName),
                 $"scripts/ui/{fileName} no longer resolves as a pixel surface, so a transform on " +
                 "`this` in it would go unseen (ART_SPEC section 9)");
+        }
+
+        // Four probes, one per door, so a regex edit cannot take out an arm
+        // unnoticed: EnemyView and CardView through the TextureRect they
+        // declare, FloatingText through Label, PotionView through its
+        // ArtAssets-backed Icon.
+        //
+        // And the other direction, which is the one that actually went wrong.
+        // Nothing in this scan reads a comment, because everything it reads is
+        // matched out of source text and this codebase's comments are prose
+        // *about* pixel art. HoverTooltip is the probe for it: it names
+        // TextureRect nowhere and is not a surface, while its neighbours
+        // discuss them at length - and the polluted version of this predicate
+        // called almost every file in the directory a surface off comment text
+        // alone.
+        foreach (string fileName in new[] { "HoverTooltip.cs", "Motion.cs", "ChromeStyles.cs" })
+        {
+            Check($"{fileName}_is_not_a_pixel_surface", !ThisIsAPixelSurfaceIn(fileName),
+                $"scripts/ui/{fileName} resolves as a pixel surface, which it is not - the " +
+                "predicate is matching prose rather than declarations");
         }
     }
 
@@ -1291,16 +1312,10 @@ public partial class PixelSpecSmokeTest : Node
         var lines = new List<string>();
         while (!reader.EofReached()) lines.Add(reader.GetLine());
 
-        var holders = new HashSet<string>();
-        foreach (string text in lines)
-        {
-            foreach (Match declaration in PixelHolderDeclaration.Matches(text))
-            {
-                holders.Add(declaration.Groups["name"].Value);
-            }
-        }
-
-        return ThisIsAPixelSurface(holders, lines);
+        // The scan's own predicate, called rather than re-implemented. It was
+        // re-implemented, which is two copies of the holder rule and two
+        // chances for this probe to keep passing after the scan stops working.
+        return ThisIsAPixelSurface(CodeLines(lines));
     }
 
     private void TestNoTweenTransformsAPixelSprite()
@@ -1359,20 +1374,67 @@ public partial class PixelSpecSmokeTest : Node
     //                                 arrives this way, and no list would have
     //                                 predicted it - it holds no texture at all.
     //
-    // Measured when this replaced the list: across scripts/ui it resolves
-    // exactly EnemyView.cs, CardView.cs and FloatingText.cs, which is every file
-    // the two doors describe and nothing else.
+    // Measured across scripts/ui: **thirteen** files are pixel surfaces -
+    // CardView, CombatFx, CombatScreen, EnemyView, FloatingText,
+    // MetaProgressionScreen, PileCounterBar, PixelSpec, PotionView,
+    // ScreenBackground, ScreenChrome, SpriteAnimator, StatusRow. Three of those
+    // are the ones this replaced an exception list for; the rest were always in
+    // scope and simply had nothing to catch.
+    //
+    // That distinction is written out because the first version of this comment
+    // got it wrong in the other direction, claiming the predicate resolved
+    // "exactly three files and nothing else" - which was a measurement of how
+    // many files *transform* `this`, not of how many are surfaces. A coverage
+    // claim that is off by ten is the same species as the exception list it
+    // replaced: a reader deciding whether a new view needs the predicate
+    // widened would have trusted it.
     private static readonly Regex BitmapTypeDeclaration = new(@"\bclass\s+\w+\s*:\s*Label\b");
 
-    private static bool ThisIsAPixelSurface(IReadOnlyCollection<string> textureRectHolders, IEnumerable<string> lines) =>
-        textureRectHolders.Count > 0 || lines.Any(line => BitmapTypeDeclaration.IsMatch(line));
+    // A Control that paints a pixel texture through a property rather than by
+    // holding a TextureRect. PotionView is the one today - a Button whose Icon
+    // comes from ArtAssets - and it is here because the two doors above do not
+    // describe it: it declares no TextureRect and is not a Label, so scaling it
+    // would have gone unseen. Keyed to ArtAssets rather than to the property
+    // alone, because an Icon is only a pixel surface when what it holds is.
+    private static readonly Regex PixelIconAssignment = new(@"\b(?:Icon|TextureNormal)\s*=\s*ArtAssets\.");
 
-    private static readonly Regex ClassDeclaration = new(@"\bclass\s+(?<name>\w+)\b");
+    // **Every one of these reads code lines only, and that is not tidiness.**
+    // This scan discovers what to look at by matching source text, and this
+    // codebase's comments are dense prose *about* pixel art - so a comment
+    // saying "a `TextureRect` is what holds a pixel texture" declares a holder
+    // called `is`, and one saying "one asset class over" declares a type called
+    // `over`. Measured before this filter existed: the derived type set held
+    // `of`, `over`, `and`, `rather` and `supported`, each of which was then
+    // interpolated into a holder pattern that matched ordinary prose in almost
+    // every file. Coverage therefore moved when a comment was *reworded* -
+    // demonstrated by a live `Scale =` over a pixel icon going from caught to
+    // invisible across a six-comment edit that changed no code at all.
+    //
+    // That is the same failure this scan has now had four times, arriving
+    // through a fourth door: a guard keyed to a spelling dies when the spelling
+    // moves, and it dies silently. Comment text is the worst thing yet to have
+    // keyed it to, because nothing else in the codebase treats prose as
+    // load-bearing and no reviewer would think to check.
+    private static List<string> CodeLines(IEnumerable<string> lines) =>
+        lines.Where(line => !line.TrimStart().StartsWith("//")).ToList();
 
-    private static HashSet<string> TextureRectHolders(IEnumerable<string> lines)
+    private static bool ThisIsAPixelSurface(IEnumerable<string> codeLines)
+    {
+        var lines = codeLines as IList<string> ?? codeLines.ToList();
+        return TextureRectHolders(lines).Count > 0
+            || lines.Any(line => BitmapTypeDeclaration.IsMatch(line))
+            || lines.Any(line => PixelIconAssignment.IsMatch(line));
+    }
+
+    // Anchored to the start of a line and to real modifiers, so it matches a
+    // declaration and not the word "class" inside a sentence.
+    private static readonly Regex ClassDeclaration = new(
+        @"^\s*(?:(?:public|internal|private|protected|static|sealed|abstract|partial|new)\s+)*class\s+(?<name>\w+)\b");
+
+    private static HashSet<string> TextureRectHolders(IEnumerable<string> codeLines)
     {
         var holders = new HashSet<string>();
-        foreach (string text in lines)
+        foreach (string text in codeLines)
         {
             foreach (Match declaration in PixelHolderDeclaration.Matches(text))
             {
@@ -1456,29 +1518,50 @@ public partial class PixelSpecSmokeTest : Node
         var pixelSurfaceTypes = new HashSet<string>();
         foreach (var (_, lines) in sources)
         {
-            if (!ThisIsAPixelSurface(TextureRectHolders(lines), lines)) continue;
-            foreach (string text in lines)
+            var code = CodeLines(lines);
+            if (!ThisIsAPixelSurface(code)) continue;
+            foreach (string text in code)
             {
                 var declared = ClassDeclaration.Match(text);
                 if (declared.Success) pixelSurfaceTypes.Add(declared.Groups["name"].Value);
             }
         }
 
+        // An empty alternation is `(?:)`, which matches the empty string
+        // everywhere and would make every identifier in the project a holder.
+        // It cannot happen while any pixel surface exists, which is exactly why
+        // it would be a silent catastrophe if one ever did not.
+        if (pixelSurfaceTypes.Count == 0)
+        {
+            throw new System.InvalidOperationException(
+                "no pixel surface types were derived - the transform scan would match everything");
+        }
+
+        string types = string.Join("|", pixelSurfaceTypes);
         var pixelSurfaceHolder = new Regex(
-            $@"\b(?:{string.Join("|", pixelSurfaceTypes)})\s*\??\s+(?<name>\w+)\b" +
-            $@"|\bvar\s+(?<name>\w+)\s*=\s*[\w.]+\.Instantiate<(?:{string.Join("|", pixelSurfaceTypes)})>");
+            $@"\b(?:{types})\s*\??\s+(?<name>\w+)\b" +
+            $@"|\bvar\s+(?<name>\w+)\s*=\s*[\w.]+\.Instantiate<(?:{types})>");
 
         foreach (var (path, lines) in sources)
         {
-            var holders = TextureRectHolders(lines);
-            foreach (string text in lines)
+            var code = CodeLines(lines);
+            var holders = TextureRectHolders(code);
+
+            // Asked before the typed identifiers are folded in, and that order
+            // is load-bearing. `this` is a pixel surface because of what the
+            // class *holds*, not because of what it happens to reference -
+            // RewardScreen declares a CardView and is not itself pixel art, so
+            // reading the merged set here would make `this.Scale` a violation
+            // in every file that so much as names one.
+            if (ThisIsAPixelSurface(code)) holders.Add("this");
+
+            foreach (string text in code)
             {
                 foreach (Match declaration in pixelSurfaceHolder.Matches(text))
                 {
                     holders.Add(declaration.Groups["name"].Value);
                 }
             }
-            if (ThisIsAPixelSurface(holders, lines)) holders.Add("this");
 
             for (int i = 0; i < lines.Count; i++)
             {

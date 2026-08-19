@@ -19,11 +19,12 @@ namespace Hollowdeck.UI;
 // mouse input and must leave the player exactly where they were on release;
 // that popup grabs focus, sets MouseFilter.Stop and saves/restores focus in
 // _ExitTree, all correct for a modal and all wrong for a hold. The Ignore on
-// every node here is load-bearing rather than tidy: a scrim that swallowed
-// mouse events would fire OnMouseExited on the hand card underneath and close
-// the peek in the frame it opened.
+// every node in the peek - including the ones inside the loaded CardView.tscn,
+// see IgnoreMouse - is load-bearing rather than tidy: anything here that
+// swallowed mouse events would fire OnMouseExited on the hand card underneath
+// and close the peek in the frame it opened.
 //
-// What it does share is CardView.ScaledCard, which is where the spacer and the
+// What it does share is CardView.AddScaledCard, which is where the spacer and the
 // integer scale live.
 public partial class CardInspectView : Control
 {
@@ -50,20 +51,42 @@ public partial class CardInspectView : Control
     private const int ArriveFromPx = 24;
 
     private static CardInspectView? _open;
+    private CardView? _raiser;
 
     // One peek at a time, and the static is the whole guard. Two input paths
     // reach this - a mouse dwell and a held key - and they can be true of
     // different cards at once (rest the mouse anywhere while arrow-keying),
     // which is the same pair CardView.SetHighlighted's comment records.
-    public static void Show(Node anchorInTree, CardInstance card)
+    //
+    // **Which is exactly why the raiser is tracked and told when it is
+    // pre-empted.** CardView keeps an `_inspecting` flag meaning "a peek raised
+    // by *this* card is open", and a Show that replaced one peek with another
+    // silently made that false on the card it took the peek away from. The
+    // consequence was not cosmetic: the old raiser still believed it owned a
+    // peek, so its own mouse-exit called Dismiss and killed the *new* card's
+    // peek while its key was still held - unrecoverable, since IsActionPressed
+    // only fires on the press edge. It also left that card's keyword panel
+    // suppressed with no peek to justify it.
+    public static void Show(CardView raiser, CardInstance card)
     {
+        var preempted = _open?._raiser;
         Dismiss();
+        if (preempted is not null && GodotObject.IsInstanceValid(preempted) && preempted != raiser)
+        {
+            preempted.OnPeekPreempted();
+        }
 
-        var view = new CardInspectView { Name = "CardInspectView" };
-        anchorInTree.GetTree().CurrentScene.AddChild(view);
+        var view = new CardInspectView { Name = "CardInspectView", _raiser = raiser };
+        raiser.GetTree().CurrentScene.AddChild(view);
         view.Build(card);
         _open = view;
     }
+
+    // Whether the open peek is the one this view raised. CardView asks before
+    // dismissing, so a card that has already lost the peek cannot take away the
+    // one that replaced it.
+    public static bool RaisedBy(CardView view) =>
+        _open is not null && GodotObject.IsInstanceValid(_open) && _open._raiser == view;
 
     public static void Dismiss()
     {
@@ -94,7 +117,7 @@ public partial class CardInspectView : Control
         spacer.MouseFilter = MouseFilterEnum.Ignore;
 
         // Centred by hand rather than by a CenterContainer, for the reason
-        // ScaledCard's own comment gives: a Container would re-sort and stomp
+        // AddScaledCard's own comment gives: a Container would re-sort and stomp
         // the card's Scale back to 1x. Rounded because the result is what a
         // bitmap face and a 6x icon are painted at.
         // GetViewportRect, not this node's own Size: the FullRect preset above

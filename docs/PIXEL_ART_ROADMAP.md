@@ -73,7 +73,7 @@ on the channel `FocusHaloSize` already used, the punch-in became a **step betwee
 card the fan had half-covered — became **card inspect**, a hold-to-peek at 2x on a mouse dwell or a
 held `hd_inspect`.
 
-Six things came out of it, and five were not visible from the entry above:
+Seven things came out of it, and six were not visible from the entry above:
 
 - **`CardView.cs` had nine transform lines, not the two this file named.** The two were the ones
   someone had looked at. The others were the draw-in's 0.6x and random ±10° tilt, `SnapHome`'s
@@ -84,8 +84,10 @@ Six things came out of it, and five were not visible from the entry above:
   a pixel holder for files in a hand-written `ViewsWrappingAPixelSprite = { "EnemyView.cs" }`, and
   neither deferred file was in it — `FloatingText` is a `Label` and holds no texture whatever. So
   the exception list had been guarding an opening nothing was pointed at. That set is **derived**
-  now: `this` is a pixel surface in a file that declares a `TextureRect` (§2's door) or whose class
-  derives from `Label` (§7's). A list of one looks settled in a way a list of three does not.
+  now: `this` is a pixel surface in a file that declares a `TextureRect` (§2's door), whose class
+  derives from `Label` (§7's), or which assigns `Icon` from `ArtAssets` (`PotionView`, which neither
+  of the other two describes). Thirteen files under `scripts/ui` qualify. A list of one looks
+  settled in a way a list of thirteen does not.
 - **A bare `Scale =` was never matchable**, and that is how both deferred files actually wrote it.
   The assignment arm was keyed to `foo.Scale =`; C# does not require the qualifier, and an
   unqualified property assignment in a Node's own method *is* `this.Scale`. Mutation tested — the
@@ -106,11 +108,22 @@ Six things came out of it, and five were not visible from the entry above:
   than an invention; only the range is gentler, because a reward card dimming as far as an intent
   icon reads as unavailable.
 
+- **The replacement's own first version was keyed to comment prose**, which is the fifth hole and
+  the worst of them. The class sweep matched `\bclass\s+(\w+)` against every line, and this
+  codebase's comments are prose *about* pixel art — "one asset class over", "a separate class
+  rather than" — so the derived type set held `over`, `of`, `rather` and `supported`, each then
+  interpolated into a pattern that matched ordinary prose everywhere. Measured: a live `Scale =`
+  over a pixel icon went from caught to invisible across a six-comment reword that changed no code.
+  The scan reads code lines only now, and `HoverTooltip.cs` is a probe asserting a file that merely
+  *discusses* `TextureRect` is not a surface.
+
 The generalisable form, and the reason it is written here rather than in a commit message: **an
 exemption list is a claim about a scan's reach, and it is worth exactly as much as that reach.**
 Both files on this one were already outside the scan for structural reasons nobody had checked, so
-the list documented a gap it was not closing. What found all four holes was mutating the guard —
-putting each violation back and watching a green suite stay green.
+the list documented a gap it was not closing. What found all five holes was mutating the guard —
+putting each violation back and watching a green suite stay green. The fifth was found that way by
+review, *after* the first four had been, which is the honest note to end on: the technique works and
+one pass of it was not enough.
 
 ---
 

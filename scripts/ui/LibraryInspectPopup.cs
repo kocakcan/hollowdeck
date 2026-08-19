@@ -103,7 +103,7 @@ public partial class LibraryInspectPopup : Control
         header.AddChild(closeButton);
 
         // The spacer, the plain-Control-not-Container rule and the integer
-        // scale all live in CardView.ScaledCard now, shared with the combat
+        // scale all live in CardView.AddScaledCard now, shared with the combat
         // peek. A library tile is not a picture of anything in a live combat,
         // so it prints authored numbers - which is what it always did.
         CardView.AddScaledCard(

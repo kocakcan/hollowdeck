@@ -945,9 +945,12 @@ begin with, and widening it turned up a fifth violation in a third file nobody h
   - **It is modelled on `HoverTooltip`, not on `LibraryInspectPopup`**, which is the closer-looking
     of the two. A peek must not steal focus, must not stop mouse input, and must leave the player
     where they were on release; that popup does all three the other way, correctly, for a modal.
-    Every node in `CardInspectView` is `MouseFilterEnum.Ignore`, and that is load-bearing rather
-    than tidy — a scrim that swallowed mouse events would fire `OnMouseExited` on the card
-    underneath and close the peek in the frame it opened.
+    Every node in the peek is `MouseFilterEnum.Ignore` — **including the ones inside the loaded
+    `CardView.tscn`, whose root is authored `mouse_filter = 0`**, which is why that is applied
+    recursively rather than to the three nodes this class creates. It is load-bearing rather than
+    tidy: the peek is centred over the hand, so a node in it that swallowed mouse events would fire
+    `OnMouseExited` on the card underneath and close the peek in the frame it opened — a 0.4s
+    open-close loop on the feature's own primary entry point.
   - **The dwell is mouse-only, and `SetHighlighted` is why that needed saying.** It routes through
     `OnMouseEntered` so a keyboard-selected card reads identically to a hovered one — which is right
     for the visual and exactly wrong for the dwell, since an arrow-keyed card stays selected

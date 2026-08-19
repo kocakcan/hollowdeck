@@ -147,7 +147,7 @@ public partial class CardView : Panel
             FocusMode = value ? FocusModeEnum.None : FocusModeEnum.All;
             // Every existing caller means both by setting one, so setting one
             // keeps meaning both. The single caller that wants them to disagree
-            // is ScaledCard, which writes ShowsLiveCombat *after* this and says
+            // is AddScaledCard, which writes ShowsLiveCombat *after* this and says
             // why - ordering that lives in one place rather than at each site.
             ShowsLiveCombat = value;
         }
@@ -700,13 +700,26 @@ public partial class CardView : Panel
         RefreshKeywordTooltip();
     }
 
+    // Dismisses only a peek this card actually owns. The check is not
+    // defensive tidiness: the mouse and the held key can be on different cards,
+    // so an unguarded Dismiss here lets a card whose peek was already replaced
+    // take down the peek that replaced it.
     public void EndInspect()
     {
         CancelDwell();
         if (!_inspecting) return;
 
         _inspecting = false;
-        CardInspectView.Dismiss();
+        if (CardInspectView.RaisedBy(this)) CardInspectView.Dismiss();
+        RefreshKeywordTooltip();
+    }
+
+    // The other card took the peek. Called by CardInspectView.Show rather than
+    // discovered, because the flag and the singleton are two facts that have to
+    // agree and only one of them knows when this happens.
+    public void OnPeekPreempted()
+    {
+        _inspecting = false;
         RefreshKeywordTooltip();
     }
 
@@ -803,14 +816,22 @@ public partial class CardView : Panel
     // the cursor happened to be over.
     public void SetHighlighted(bool on)
     {
-        if (_dragging || _leavingHand) return;
-
         // The visual only. Selecting a card is not a request to inspect it -
         // see OnMouseEntered - but *de*selecting one has to take down a peek
         // that key is still holding open, or the selection moves out from
         // under it and nothing is left that would close it.
-        ApplyHoverVisual(on);
-        if (!on) EndInspect();
+        //
+        // The drag/leaving guard sits on the lift and the peek rather than on
+        // the whole method, because the badge below is not part of the hover
+        // visual - it is what says which slot the keyboard is on, and it is the
+        // one thing here that stays true of a card being dragged. Guarding the
+        // method wholesale left the old card's badge lit when the selection
+        // moved off a card mid-drag, so two cards claimed the keyboard at once.
+        if (!_dragging && !_leavingHand)
+        {
+            ApplyHoverVisual(on);
+            if (!on) EndInspect();
+        }
 
         _hotkeyBadge.AddThemeStyleboxOverride("panel",
             on ? ChromeStyles.HotkeyBadgeSelectedStyle() : ChromeStyles.HotkeyBadgeStyle());
