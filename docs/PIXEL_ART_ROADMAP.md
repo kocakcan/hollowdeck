@@ -64,10 +64,53 @@ view wrapping one. The first version of that guard was a hand-written list of th
 it was green over two live violations while claiming full coverage in three documents; the review
 that caught it is the reason the scan is type-driven.
 
-**Two named exceptions remain, and they are the rest of this item:** `CardView.cs` (the 1.15x hover
-bump and the play/exhaust pops) and `FloatingText.cs` (damage numbers punching in from 2.2x, which
-is §7's design-em rule rather than §2's). Both carry a real affordance that needs replacing rather
-than deleting — the first is half of ROADMAP Phase 11's "card inspect".
+**The two named exceptions are gone, and emptying the list was the smaller half of doing it.**
+`CardView.cs` (the 1.15x hover bump and the play/exhaust pops) and `FloatingText.cs` (damage numbers
+punching in from 2.2x, §7's design-em rule rather than §2's) each carried a real affordance, so each
+got a replacement rather than a deletion: the hover bump became a **snapped 18px lift plus a halo**
+on the channel `FocusHaloSize` already used, the punch-in became a **step between two legal rungs**
+(24 → 16, or 32 → 24 for a big hit), and the thing the bump was really doing — letting you read a
+card the fan had half-covered — became **card inspect**, a hold-to-peek at 2x on a mouse dwell or a
+held `hd_inspect`.
+
+Six things came out of it, and five were not visible from the entry above:
+
+- **`CardView.cs` had nine transform lines, not the two this file named.** The two were the ones
+  someone had looked at. The others were the draw-in's 0.6x and random ±10° tilt, `SnapHome`'s
+  rotation, the drag straighten — and the fan's *resting* ±12° tilt, which is the worst of them by
+  a distance: not a 0.15s beat but a rotation held on every card of every hand for the whole game.
+  A file-granular exception is what let a list of two describe a file of nine.
+- **Removing a file from the exception set caught nothing at all.** The scan only treated `this` as
+  a pixel holder for files in a hand-written `ViewsWrappingAPixelSprite = { "EnemyView.cs" }`, and
+  neither deferred file was in it — `FloatingText` is a `Label` and holds no texture whatever. So
+  the exception list had been guarding an opening nothing was pointed at. That set is **derived**
+  now: `this` is a pixel surface in a file that declares a `TextureRect` (§2's door) or whose class
+  derives from `Label` (§7's). A list of one looks settled in a way a list of three does not.
+- **A bare `Scale =` was never matchable**, and that is how both deferred files actually wrote it.
+  The assignment arm was keyed to `foo.Scale =`; C# does not require the qualifier, and an
+  unqualified property assignment in a Node's own method *is* `this.Scale`. Mutation tested — the
+  original `Scale = Vector2.One * 2.2f` passes a full green suite against the pre-change scan.
+- **`TweenPingPong` was not in the pattern**, which had known `TweenProperty` and `TweenTo` since
+  before the vocabulary had a third builder. What that was hiding is the worst §9 violation in the
+  codebase and it was not in either named file: `RewardScreen` looping a ±2.5° rotation on every
+  card of every reward offer, forever — the "slow idle loop" §9 singles out as never permitted even
+  where a fast lunge is. **Third time this scan has gone quiet because a spelling moved out from
+  under it.** It is also line-based, so a wrapped call was invisible; it reads two lines now.
+- **A violation can arrive from outside the file that owns the pixels.** All three arms above only
+  ever looked at a class's own methods, so nothing could see `RewardScreen` transforming a
+  `CardView`. The types whose *instances* are pixel surfaces are derived from the same predicate
+  now, and an identifier of one of those types is a holder wherever it is declared.
+- **The reward fan's sway went to `modulate:a`, not to nothing.** Alpha is the one property §9 names
+  as always available, and two other idle loops over pixel surfaces already use it — `EnemyView`'s
+  intent icon and `MapScreen`'s current-node ring. So the replacement is an existing idiom rather
+  than an invention; only the range is gentler, because a reward card dimming as far as an intent
+  icon reads as unavailable.
+
+The generalisable form, and the reason it is written here rather than in a commit message: **an
+exemption list is a claim about a scan's reach, and it is worth exactly as much as that reach.**
+Both files on this one were already outside the scan for structural reasons nobody had checked, so
+the list documented a gap it was not closing. What found all four holes was mutating the guard —
+putting each violation back and watching a green suite stay green.
 
 ---
 

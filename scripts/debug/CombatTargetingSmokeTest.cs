@@ -103,6 +103,8 @@ public partial class CombatTargetingSmokeTest : Node
         await TestExitTreeClearsTheGlow();
         await TestDescriptionChangesAgainstAVulnerableTarget();
         await TestCancelTargetingRestoresACleanBoard();
+        await TestInspectPeekOpensAndCloses();
+        await TestSelectingACardDoesNotOpenAPeek();
         await TestClickingAnEnemyResolvesAnAimedPotion();
         await TestHitTestSkipsCorpsesAndIgnoresUntargetedCards();
         await TestASummonBuildsAnEnemyViewMidFight();
@@ -325,6 +327,60 @@ public partial class CombatTargetingSmokeTest : Node
         // out of EnemyView.Instances before the next test looks at it.
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    // Card inspect, driven through the same CardView entry point both the mouse
+    // dwell and the held hd_inspect land on.
+    //
+    // The keyword tooltip half is asserted with it rather than separately,
+    // because the two are one rule: HoverTooltip sits at ZIndex 2500 and the
+    // peek at 2200, so a keyword box left up while the peek is open paints on
+    // top of the card it is quoting.
+    private async System.Threading.Tasks.Task TestInspectPeekOpensAndCloses()
+    {
+        var (screen, _, handArea) = await StartFight("strike");
+        var card = FirstCard(handArea);
+
+        Check("no_peek_before_inspect", !CardInspectView.IsOpen, "a peek was already open");
+
+        card.SetHighlighted(true);
+        card.BeginInspect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("inspect_opens_a_peek", CardInspectView.IsOpen, "BeginInspect raised nothing");
+        Check("the_peek_hides_the_keyword_panel",
+            Private<HoverTooltip?>(card, "_keywordTooltip") is null,
+            "the keyword panel is still up under the peek");
+
+        card.EndInspect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("release_closes_the_peek", !CardInspectView.IsOpen, "the peek outlived the hold");
+
+        await EndFight(screen);
+    }
+
+    // The dwell is deliberately not on the shared hover path. SetHighlighted
+    // routes through the same visual as a mouse hover so the two read alike,
+    // and an arrow-keyed card stays selected indefinitely - so a dwell hung
+    // there opens a full-screen peek 0.4s after every keyboard selection, over
+    // a fight the player is still choosing in. It shipped that way for one
+    // build and a screenshot fixture is what found it.
+    //
+    // Waited well past DwellSeconds rather than one frame, or this passes for
+    // the wrong reason.
+    private async System.Threading.Tasks.Task TestSelectingACardDoesNotOpenAPeek()
+    {
+        var (screen, _, handArea) = await StartFight("strike");
+        var card = FirstCard(handArea);
+
+        card.SetHighlighted(true);
+        await ToSignal(GetTree().CreateTimer(0.6), SceneTreeTimer.SignalName.Timeout);
+
+        Check("selecting_a_card_does_not_open_a_peek", !CardInspectView.IsOpen,
+            "an arrow-key selection grew a peek nobody asked for");
+
+        await EndFight(screen);
     }
 
     private static CardView FirstCard(Control handArea) =>
@@ -551,8 +607,10 @@ public partial class CombatTargetingSmokeTest : Node
         //
         // HighestHoveredCardTopY, not HighestCardTopY: the lower edge of that
         // band is not where a card rests but where it reaches when the player
-        // looks at it, 18px higher and painted at ZIndex 100 over anything
-        // underneath. Aiming a potion and then moving the mouse to the enemy
+        // looks at it, CardView.HoverLiftPx higher and painted at ZIndex 100
+        // over anything underneath. That was half of a 1.15x scale bump and is
+        // a lift now; the number is the same 18 either way, which is what the
+        // lift was chosen to preserve. Aiming a potion and then moving the mouse to the enemy
         // crosses the fan on the way, so a card lifting is not a corner case -
         // it is the ordinary path through this state.
         var hintRect = hint.GetGlobalRect();

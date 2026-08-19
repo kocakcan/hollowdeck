@@ -927,21 +927,37 @@ The glow ring is also where `CardView`'s `"panel"` stylebox stopped having four 
 a driver repainting on a timer has to reproduce whatever the last event decided, which is what forced
 the `RepaintFrame` funnel and a stated precedence (focus > hover > rare glow).
 
-Note that **card inspect's 1.15x hover bump is the same question, and this codebase has already
-answered it once.** `CardView.cs`'s `FocusHaloSize` comment records killing a 1.08x scale tween on
-the upgrade grid for exactly this: "a fractional scale over pixel art, so the 32px icon drawn at
-`CardArtScale` 3 became 103.68px and the 16px bitmap text became 17.28 — both resampled, which is
-precisely what `PixelSpec` exists to forbid." The halo replaced it there. The *hover* bump at
-`CardView.cs:568` still scales the whole card by 1.15 and was left alone by the animation pass,
-because a hover affordance needs a replacement rather than a deletion — which is what card inspect
-is. `PixelSpecSmokeTest`'s transform guard is type-driven and would flag it, so `CardView.cs` is an
-explicit named exception in that scan — as is `FloatingText.cs`, whose damage numbers punch in from
-2.2x and hit ART_SPEC §7's design-em rule rather than §2's scale rule. Emptying that exception list
-is the second half of this item; both entries need a replacement affordance, not a deletion.
+~~Note that **card inspect's 1.15x hover bump is the same question**~~ — **shipped, and the
+exception list is empty.** The hover bump is a snapped 18px lift plus a halo on the channel
+`FocusHaloSize` already used; `FloatingText` steps between two legal rungs instead of punching in
+from 2.2x; and the affordance the bump was really carrying — reading a card the fan had half-covered
+— is card inspect, a hold-to-peek at 2x. `docs/PIXEL_ART_ROADMAP.md` §1 carries what it cost, and
+the short version is that **emptying the list was the smaller half**: `CardView.cs` held nine
+transform sites rather than the two the exception named (including the fan's *resting* ±12° tilt),
+removing either file from the set caught nothing because neither was inside the scan's reach to
+begin with, and widening it turned up a fifth violation in a third file nobody had listed —
+`RewardScreen` rotating every reward card on an infinite loop.
 
-- **Card inspect.** Cards are 176x240 with a 16px body face and hover does a 1.15x bump; the genre's
-  hold-to-inspect is the highest-value UI item left. It has to work from the keyboard too, since
-  combat is already fully keyboard-driven.
+- ~~**Card inspect.**~~ **Shipped.** Hold to peek: a ~0.4s mouse dwell, or `hd_inspect` (Up) held
+  over the arrow-key selection, shows the card at 2x over a scrim for as long as the hold lasts.
+  Both paths land on `CardView.BeginInspect`, so there is one peek and one place deciding what it
+  shows. Three things worth knowing:
+  - **It is modelled on `HoverTooltip`, not on `LibraryInspectPopup`**, which is the closer-looking
+    of the two. A peek must not steal focus, must not stop mouse input, and must leave the player
+    where they were on release; that popup does all three the other way, correctly, for a modal.
+    Every node in `CardInspectView` is `MouseFilterEnum.Ignore`, and that is load-bearing rather
+    than tidy — a scrim that swallowed mouse events would fire `OnMouseExited` on the card
+    underneath and close the peek in the frame it opened.
+  - **The dwell is mouse-only, and `SetHighlighted` is why that needed saying.** It routes through
+    `OnMouseEntered` so a keyboard-selected card reads identically to a hovered one — which is right
+    for the visual and exactly wrong for the dwell, since an arrow-keyed card stays selected
+    indefinitely. Hanging the dwell off the shared path opened a full-screen peek 0.4s after every
+    keyboard selection. Found in the `combattarget` screenshot fixture, not by a suite.
+  - **`CardView.ShowsLiveCombat` is new, and it is `Interactive` split in two.** The peek is the same
+    hand card at 2x and is deliberately not interactive, but a picture of a card that prints
+    different numbers from the card it is a picture of is the drifted-readout bug this project
+    refuses in the enemy telegraph. `Interactive`'s setter still writes it, so every existing caller
+    is unchanged.
 - **Status tooltips are mouse-only** — a real parity break against this project's own stated "fully
   playable without a mouse". `StatusRow` sets stock Godot `TooltipText`, while `CardView` and
   `EnemyView` both already route through the keyboard-aware `scripts/ui/HoverTooltip.cs`. Route

@@ -14,7 +14,7 @@ namespace Hollowdeck.UI;
 public partial class LibraryInspectPopup : Control
 {
     private const int ZIndexAboveCombatEnd = 2000;
-    private static readonly Vector2 CardPopupSize = new(352, 480);
+    private const int InspectScale = CardInspectView.InspectScale;
 
     private CardDefinition? _baseCard;
     private CardView? _cardView;
@@ -102,27 +102,12 @@ public partial class LibraryInspectPopup : Control
         closeButton.Pressed += QueueFree;
         header.AddChild(closeButton);
 
-        // Control.Scale is a render transform only - it does not grow the
-        // node's own layout Size - so the scaled CardView is wrapped in a
-        // spacer sized to its scaled footprint, or it would overlap the
-        // header row above it instead of pushing it up. The spacer is a
-        // plain Control, not a Container: a Container re-fits its children
-        // on every sort pass (added, theme change, ...) via
-        // fit_child_in_rect, which stomps a child's Scale back to identity -
-        // measured, not assumed, after CenterContainer silently reset this
-        // exact card back to 1x one frame after it was set to 2x. A plain
-        // Control never re-sorts, so the manual centring below survives.
-        var spacer = new Control { CustomMinimumSize = CardPopupSize };
-        _content.AddChild(spacer);
-
-        var cardScene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
-        _cardView = cardScene.Instantiate<CardView>();
-        spacer.AddChild(_cardView);
-        _cardView.Interactive = false;
-        _cardView.Position = (CardPopupSize - _cardView.CustomMinimumSize) / 2f;
-        _cardView.PivotOffset = _cardView.CustomMinimumSize / 2f;
-        _cardView.Scale = Vector2.One * 2f;
-        _cardView.SetCardInstance(new CardInstance(card));
+        // The spacer, the plain-Control-not-Container rule and the integer
+        // scale all live in CardView.ScaledCard now, shared with the combat
+        // peek. A library tile is not a picture of anything in a live combat,
+        // so it prints authored numbers - which is what it always did.
+        CardView.AddScaledCard(
+            _content, new CardInstance(card), InspectScale, showsLiveCombat: false, out _cardView);
 
         _focusBeforeOpen = GetViewport().GuiGetFocusOwner();
         closeButton.CallDeferred(Control.MethodName.GrabFocus);

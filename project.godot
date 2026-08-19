@@ -53,6 +53,10 @@ theme/custom="res://assets/theme/hollowdeck_theme.tres"
 ; are Z/X/C rather than Shift+1..3 because InputEvent.IsActionPressed defaults
 ; to exact_match:false, which would make Shift+1 also fire hd_card_1.
 ; Q/W/E/D (piles) are why nothing here binds WASD for navigation.
+;
+; hd_inspect is Up rather than a letter: it is *held* rather than pressed, it
+; sits beside the left/right the hand already cycles with, and "up" is what the
+; card does - it is the same lift the hover affordance carries, taken further.
 
 hd_confirm={
 "deadzone": 0.2,
@@ -67,6 +71,11 @@ hd_cancel={
 hd_end_turn={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":4194309,"physical_keycode":0,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null), Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":4194310,"physical_keycode":0,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
+]
+}
+hd_inspect={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":4194320,"physical_keycode":0,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
 hd_nav_left={

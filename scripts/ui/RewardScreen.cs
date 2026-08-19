@@ -28,7 +28,6 @@ namespace Hollowdeck.UI;
 public partial class RewardScreen : Control
 {
     private const float CardWidth = 224f;
-    private const float MaxFanRotationDeg = 8f;
     private const float FanArcHeight = 20f;
 
     // A 32x32 icon at 2x plus padding, which is the floor for every row
@@ -669,32 +668,47 @@ public partial class RewardScreen : Control
 
             float t = n <= 1 ? 0.5f : (float)i / (n - 1);
             float centered = t - 0.5f;
-            float rotationDeg = centered * 2f * MaxFanRotationDeg;
             float yOffset = FanArcHeight * (1f - Mathf.Cos(centered * Mathf.Pi));
             var pos = new Vector2(startX + i * spacing, area.Size.Y / 2f - 154f + yOffset);
             view.Position = pos;
-            view.RotationDegrees = rotationDeg;
-            view.PivotOffset = view.Size / 2f;
 
-            PlayIdleSway(view, rotationDeg, i * 0.15f);
+            PlayIdleShimmer(view, i * 0.15f);
         }
     }
 
-    // Slow, gentle rotation drift around the card's resting angle - phase-
-    // staggered per card (same "spawn the loop with a random/staggered
-    // start delay" idiom EnemyView's idle bob already uses) so a row of
-    // reward cards doesn't sway in lockstep.
-    private const float SwayDegrees = 2.5f;
-    private const float SwaySeconds = 1.6f;
+    // Slow, gentle brightening - phase-staggered per card (the same "spawn the
+    // loop with a staggered start delay" idiom EnemyView's intent pulse already
+    // uses) so a row of reward cards doesn't breathe in lockstep.
+    //
+    // **This was a +/-2.5 degree rotation drift**, and it is the reason the fan
+    // above no longer tilts either. A card is a 32px icon at CardArtScale 3 and
+    // 16px bitmap type, and ART_SPEC section 9 forbids rotating either - not
+    // just tweening through a fractional scale, but this exact shape: it
+    // permits a fast lunge to interpolate between snapped endpoints "because
+    // the motion is fast and the alternative is no travel at all", and rules
+    // out a slow idle loop in the same breath. This loop ran forever, on every
+    // card of every reward.
+    //
+    // Alpha is the one property that section names as always available, and it
+    // is what the two other idle loops over pixel surfaces already use -
+    // EnemyView's intent icon and MapScreen's current-node ring both ping-pong
+    // modulate:a. So this is that idiom rather than a new one; only the range is
+    // gentler, because a reward card dimming as far as an intent icon does
+    // would read as the offer being unavailable.
+    // Gentler than the two loops it borrows from (EnemyView's intent icon goes
+    // to 0.6, MapScreen's ring to 0.35). Measured on the rewardcards fixture:
+    // at 0.85 a card caught mid-breathe reads as *unavailable* rather than as
+    // alive, which is the one thing a row of offers must never say.
+    private const float ShimmerAlpha = 0.92f;
+    private const float ShimmerSeconds = 1.6f;
 
-    private static void PlayIdleSway(CardView view, float restRotation, float phaseDelay)
+    private static void PlayIdleShimmer(CardView view, float phaseDelay)
     {
         var tween = view.CreateTween();
         tween.Wait(phaseDelay);
         tween.SetLoops();
         tween.TweenPingPong(
-            view, "rotation_degrees", restRotation + SwayDegrees, restRotation - SwayDegrees,
-            Motion.Drift.Over(SwaySeconds));
+            view, "modulate:a", ShimmerAlpha, 1f, Motion.Drift.Over(ShimmerSeconds));
     }
 
     // Picking a card closes the overlay and returns to the list rather than

@@ -12,11 +12,22 @@ public partial class CombatScreen : Control
     private const float CardWidth = 176f;
     private const float CardHeight = 240f;
     // Fan layout: cards overlap by up to ~55% of their width (shrinking
-    // further if the hand is too wide to fit), rotate up to MaxFanRotationDeg
-    // at the outer edges, and arc so the outer cards sit *lower* than the
-    // center one - see RefreshHand() for the actual formula.
-    private const float MaxFanRotationDeg = 12f;
-    private const float FanArcHeight = 16f;
+    // further if the hand is too wide to fit) and arc so the outer cards sit
+    // *lower* than the center one - see RefreshHand() for the actual formula.
+    //
+    // There is no tilt any more. The fan rotated its outer cards by up to 12
+    // degrees, which is ART_SPEC section 9's "rotation resamples" holding for
+    // the whole life of every hand rather than for one beat - a card carries a
+    // 32px icon at CardArtScale 3 and 16px bitmap type, and both rode it. Arc
+    // and overlap are what a fan is made of; the tilt was decoration on top,
+    // and it is the one part that could not be drawn without resampling.
+    //
+    // The arc is 24 rather than 16 with the tilt gone: a tilted card separates
+    // from its neighbour by its corner as well as by its offset, so flattening
+    // them all cost the outer cards some of the separation they had. Like
+    // CardView.HoverLiftPx it is a whole number of source pixels at
+    // CardArtScale 3, since it is a resting offset for the same pixel art.
+    private const float FanArcHeight = 24f;
     // HandArea's own rect only needs to be wide enough for the fan-width
     // math below; its top edge sits well below where cards actually rest -
     // this pulls the resting fan up so cards stay inside the 648-tall
@@ -49,15 +60,23 @@ public partial class CombatScreen : Control
     public static float HighestCardTopY => 460f + FanBaseY;
     // The same edge for a card the player is *looking at*, which is the one
     // that matters to anything sharing the band above the fan. A hovered or
-    // arrow-key-selected card scales about its own centre and jumps to
-    // ZIndex 100, so it reaches half the growth above its resting top - 18px -
-    // and paints over whatever is there. TargetHintLabel sits in that band and
-    // was measured against the resting top, which is 18px of clearance that
-    // does not exist.
+    // arrow-key-selected card rises by CardView.HoverLiftPx and jumps to
+    // ZIndex 100, so it paints over whatever is in that band. TargetHintLabel
+    // sits there and was once measured against the *resting* top, which is
+    // clearance that does not exist.
+    //
+    // The number this subtracts is still 18, which is not a coincidence: it is
+    // half of the 240px the 1.15x bump used to grow, and the lift was chosen to
+    // land on it so the band above the fan is unchanged by that whole change
+    // rather than quietly re-tuned by it. It is read from CardView rather than
+    // restated here - the whole reason that constant is public.
     public static float HighestHoveredCardTopY =>
-        HighestCardTopY - CardHeight * (CardView.HoverScaleFactor - 1f) / 2f;
-    // The lowest a card's rotated corner may reach: the design canvas floor.
-    // Paired with the above so one test can bracket the fan from both sides.
+        HighestCardTopY - CardView.HoverLiftPx;
+    // The lowest a card's corner may reach: the design canvas floor. Paired
+    // with the above so one test can bracket the fan from both sides. The
+    // corner used to be a *rotated* one, and FanBaseY's comment below still
+    // works the old sin/cos arithmetic because that is the measurement the
+    // constant it explains was chosen against.
     public const float CanvasBottomY = 648f;
 
     private CombatManager _combat = null!;
@@ -603,6 +622,18 @@ public partial class CombatScreen : Control
             return;
         }
 
+        // Inspect is held rather than toggled, so the release has to be
+        // answered - and it is answered *above* the CombatEnd branch below,
+        // which returns. A fight that ends while the key is still down would
+        // otherwise strand the peek over the victory panel with nothing left
+        // that could take it away.
+        if (@event.IsActionReleased("hd_inspect"))
+        {
+            OnInspectReleased();
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+
         // At CombatEnd the hand is inert and the only thing left to do is
         // leave, so confirm *and* end-turn both press Continue - otherwise a
         // fight played start to finish on the keyboard ends by reaching for
@@ -627,13 +658,44 @@ public partial class CombatScreen : Control
             return;
         }
 
-        if (@event.IsActionPressed("hd_nav_left")) OnKeyboardCycle(-1);
+        if (@event.IsActionPressed("hd_inspect")) OnInspectPressed();
+        else if (@event.IsActionPressed("hd_nav_left")) OnKeyboardCycle(-1);
         else if (@event.IsActionPressed("hd_nav_right")) OnKeyboardCycle(1);
         else if (@event.IsActionPressed("hd_confirm")) OnKeyboardConfirm();
         else if (@event.IsActionPressed("hd_end_turn")) OnEndTurnRequested();
         else if (!TryHandleSlotAction(@event)) return;
 
         GetViewport().SetInputAsHandled();
+    }
+
+    // The keyboard half of card inspect. The mouse half is a dwell inside
+    // CardView; both land on CardView.BeginInspect, so there is one peek and
+    // one place that decides what it shows.
+    //
+    // It reads _keyboardSelectedCard rather than whatever the mouse is over,
+    // which is the same split the lit hotkey badge already draws: the two can
+    // be true of different cards at once, and a key should answer the selection
+    // it is paired with.
+    private void OnInspectPressed()
+    {
+        if (_combat.State != CombatState.PlayerTurn) return;
+        if (_keyboardSelectedCard is not { } card) return;
+        if (!_cardViews.TryGetValue(card, out var view) || !IsInstanceValid(view)) return;
+
+        view.BeginInspect();
+    }
+
+    // Deliberately not gated on state or on which card is selected. A release
+    // has to take down whatever is up: the selection can change, the turn can
+    // end and the card can be played while the key is still down, and a peek
+    // that survived any of those would be stranded with nothing left to release
+    // it.
+    private void OnInspectReleased()
+    {
+        foreach (var view in _cardViews.Values)
+        {
+            if (IsInstanceValid(view)) view.EndInspect();
+        }
     }
 
     // The card and potion belts are both "press the key matching the slot
@@ -1040,18 +1102,17 @@ public partial class CombatScreen : Control
             cardView.SetCardInstance(card);
             cardView.SetHotkeyNumber(i < 10 ? (i + 1) % 10 : null);
 
-            // Fan: cards rotate outward from center and the outer cards sit
-            // lower than the center one, like cards spread from a grip point
-            // below the screen - center rides highest, the edges fall away.
-            // yOffset is positive at both edges and Godot's +y is down, which
-            // is what makes the arc a fall rather than a lift; FanBaseY's
-            // comment carries what that costs at the bottom of the canvas.
+            // Fan: the outer cards sit lower than the center one, like cards
+            // spread from a grip point below the screen - center rides highest,
+            // the edges fall away. yOffset is positive at both edges and
+            // Godot's +y is down, which is what makes the arc a fall rather
+            // than a lift; FanBaseY's comment carries what that costs at the
+            // bottom of the canvas.
             float t = n <= 1 ? 0.5f : (float)i / (n - 1);
             float centered = t - 0.5f;
-            float rotationDeg = centered * 2f * MaxFanRotationDeg;
             float yOffset = FanArcHeight * (1f - Mathf.Cos(centered * Mathf.Pi));
             var pos = new Vector2(startX + i * spacing, FanBaseY + yOffset);
-            cardView.SetHomeTransform(pos, rotationDeg, i);
+            cardView.SetHomeTransform(pos, i);
             if (isNew)
             {
                 cardView.PlayDrawTween(_pileCounters.DrawCenter, i * 0.04f);

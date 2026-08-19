@@ -398,6 +398,20 @@ The rules:
   describing one it never met.
 - **The only node property a pixel asset may be tweened on is alpha.** `modulate` resamples nothing.
   `scale`, `rotation`, `rotation_degrees` and `skew` all do.
+
+  **A Control is a pixel asset when it carries one**, which is what the enforcing scan derives
+  rather than being told: a class that declares a `TextureRect` wraps pixel art, and a class
+  deriving from `Label` *is* bitmap type — §7's door into the same rule, since a bitmap face
+  rendered away from its 8px design em grows uneven stems exactly the way a fractional texture
+  scale does. Instances of such a class carry the rule with them, so the file doing the
+  transforming does not have to be the file holding the pixels; the reward fan rotating `CardView`s
+  from `RewardScreen` was invisible for as long as that last clause was missing.
+
+  A **static** integer scale is not a tween and is allowed — the library popup and the combat
+  inspect peek both show a card at 2x. No scan can tell `Vector2.One * 2f` from
+  `Vector2.One * 1.15f`, so it goes through `PixelSpec.ApplyIntegerScale`, which takes an `int` and
+  makes the scale being whole a fact the type system holds. Same shape as `TextFit` re-checking a
+  font rung the font-size scan cannot see.
 - **A translation must land on a whole source pixel** — a multiple of the asset's render factor from
   §2, through `PixelSpec.SnapTranslation`. A lunge that genuinely travels is allowed to interpolate
   between snapped endpoints, because the motion is fast and the alternative is no travel at all; a

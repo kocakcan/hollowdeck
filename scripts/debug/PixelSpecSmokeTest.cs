@@ -58,6 +58,7 @@ public partial class PixelSpecSmokeTest : Node
         TestEveryCreatureHasItsFrames();
         TestEveryCombatEffectHasItsFrames();
         TestNoTweenTransformsAPixelSprite();
+        TestTheTransformScanSeesEveryPixelSurface();
         TestEveryTweenUsesTheMotionVocabulary();
         TestEveryMotionCurveIsUsed();
         TestTheMotionRegistryIsComplete();
@@ -1259,6 +1260,49 @@ public partial class PixelSpecSmokeTest : Node
     // Alpha is deliberately not in the pattern. Modulate resamples nothing, so
     // it stays the one property a pixel asset may be tweened on, and both death
     // and escape still use it.
+    // The scan above is only as wide as ThisIsAPixelSurface is, and a scan that
+    // finds nothing looks exactly like a codebase with nothing to find. That is
+    // not a hypothetical here: this same guard was keyed to the literal
+    // `TweenProperty(` for three phases, ART_SPEC section 11 renamed all
+    // thirty-four call sites to `TweenTo(` in one commit, and the scan went from
+    // nine findings in CardView.cs to zero with every call site still present
+    // and all 23 suites green.
+    //
+    // So the predicate is asserted rather than trusted. These three files are
+    // the ones it is *for* - a creature view, a card, a damage number - and each
+    // reaches it through a different half of the rule. If a regex edit stops
+    // resolving any of them, this fails here rather than going quiet over there.
+    private void TestTheTransformScanSeesEveryPixelSurface()
+    {
+        foreach (string fileName in new[] { "EnemyView.cs", "CardView.cs", "FloatingText.cs" })
+        {
+            Check($"{fileName}_is_scanned_as_a_pixel_surface", ThisIsAPixelSurfaceIn(fileName),
+                $"scripts/ui/{fileName} no longer resolves as a pixel surface, so a transform on " +
+                "`this` in it would go unseen (ART_SPEC section 9)");
+        }
+    }
+
+    private static bool ThisIsAPixelSurfaceIn(string fileName)
+    {
+        string path = $"res://scripts/ui/{fileName}";
+        using var reader = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+        if (reader is null) return false;
+
+        var lines = new List<string>();
+        while (!reader.EofReached()) lines.Add(reader.GetLine());
+
+        var holders = new HashSet<string>();
+        foreach (string text in lines)
+        {
+            foreach (Match declaration in PixelHolderDeclaration.Matches(text))
+            {
+                holders.Add(declaration.Groups["name"].Value);
+            }
+        }
+
+        return ThisIsAPixelSurface(holders, lines);
+    }
+
     private void TestNoTweenTransformsAPixelSprite()
     {
         var findings = ScanSourceForSpriteTransforms().ToList();
@@ -1292,28 +1336,52 @@ public partial class PixelSpecSmokeTest : Node
     private static readonly Regex PixelHolderDeclaration = new(
         @"\bTextureRect\s*\??\s+(?<name>\w+)\b|\bvar\s+(?<name>\w+)\s*=\s*new\s+TextureRect\b|\b(?<name>\w+)\s*=\s*GetNode<TextureRect>");
 
-    // Files where `this` is a Control wrapping a pixel asset.
-    private static readonly HashSet<string> ViewsWrappingAPixelSprite = new() { "EnemyView.cs" };
-
-    // Deferred, not permitted - each needs a replacement affordance rather than
-    // a deletion, and each is tracked in ROADMAP Phase 11. Listed by file so
-    // that adding a *new* violation elsewhere still fails, and so that the
-    // exceptions are countable rather than invisible.
+    // When `this` is itself a pixel surface, so that transforming the whole
+    // Control resamples what it carries just as surely as transforming a child
+    // would. **Derived, not listed.**
     //
-    //   CardView.cs     - the 1.15x hover bump and the play/exhaust pops. The
-    //                     card is a Panel of text, but it carries _artIcon at
-    //                     CardArtScale 3 and 16px bitmap type, both of which
-    //                     resample with it. CardView's own FocusHaloSize comment
-    //                     already records killing a 1.08x tween for exactly this
-    //                     on the upgrade grid; the hover channel needs the same
-    //                     treatment, which is what "card inspect" is.
-    //   FloatingText.cs - damage numbers punch in from 2.2x. Bitmap glyphs off
-    //                     their design em (ART_SPEC section 7), not a texture,
-    //                     so it is the same family through a different door.
-    private static readonly HashSet<string> DeferredTransformExceptions = new()
+    // It was a hand-written set - `{ "EnemyView.cs" }` - and that is the same
+    // shape as the hand-written holder list above it, which was green over two
+    // live violations while three documents claimed full coverage. A list of
+    // one is worse than a list of three, not better: it looks settled.
+    //
+    // Two doors into the same rule, which is why the predicate has two arms:
+    //
+    //   a TextureRect in the file   - the Control wraps pixel art, and scaling
+    //                                 or rotating it resamples that art
+    //                                 (ART_SPEC section 2). EnemyView and
+    //                                 CardView both arrive this way.
+    //   the class derives from Label - the Control *is* bitmap type, and
+    //                                 scaling it renders the face away from its
+    //                                 8px design em, which grows uneven stems
+    //                                 exactly the way a fractional texture scale
+    //                                 does (ART_SPEC section 7). FloatingText
+    //                                 arrives this way, and no list would have
+    //                                 predicted it - it holds no texture at all.
+    //
+    // Measured when this replaced the list: across scripts/ui it resolves
+    // exactly EnemyView.cs, CardView.cs and FloatingText.cs, which is every file
+    // the two doors describe and nothing else.
+    private static readonly Regex BitmapTypeDeclaration = new(@"\bclass\s+\w+\s*:\s*Label\b");
+
+    private static bool ThisIsAPixelSurface(IReadOnlyCollection<string> textureRectHolders, IEnumerable<string> lines) =>
+        textureRectHolders.Count > 0 || lines.Any(line => BitmapTypeDeclaration.IsMatch(line));
+
+    private static readonly Regex ClassDeclaration = new(@"\bclass\s+(?<name>\w+)\b");
+
+    private static HashSet<string> TextureRectHolders(IEnumerable<string> lines)
     {
-        "CardView.cs", "FloatingText.cs",
-    };
+        var holders = new HashSet<string>();
+        foreach (string text in lines)
+        {
+            foreach (Match declaration in PixelHolderDeclaration.Matches(text))
+            {
+                holders.Add(declaration.Groups["name"].Value);
+            }
+        }
+
+        return holders;
+    }
 
     private static IEnumerable<(string Path, int Line, string Detail)> ScanSourceForSpriteTransforms()
     {
@@ -1331,35 +1399,105 @@ public partial class PixelSpecSmokeTest : Node
         // because a scan that finds nothing looks exactly like a codebase with
         // nothing to find. The name is in a regex rather than in the type
         // system, so nothing else could have caught it.
+        //
+        // **Three alternatives, and the third one is not decoration.** The
+        // qualified form `foo.Scale =` was the only assignment shape the
+        // pattern knew, and C# does not require the qualifier: `Scale = ` in a
+        // Node's own method means `this.Scale =` and is the shape that was
+        // actually written. Both deferred files used it - FloatingText opened
+        // its punch on a bare `Scale = Vector2.One * 2.2f` and CardView started
+        // its draw tween on `Scale = Vector2.One * 0.6f` - so those two lines
+        // were invisible to this scan the whole time, and the exemption list
+        // that named them was covering something already uncovered. Mutation
+        // tested: re-adding a bare `Scale =` to FloatingText passed a full
+        // suite before this arm existed.
+        //
+        // The `=(?!=|>)` on the assignment arms keeps `==` and an
+        // expression-bodied `=>` out; the lookbehind is what stops `CardArtScale
+        // = 3` and `TileScale = 2` reading as a transform.
+        //
+        // **TweenPingPong is in the alternation for the same reason TweenTo is**,
+        // and it was missing for as long as it has existed. It is the vocabulary's
+        // third builder (ART_SPEC section 11) and takes its property in the same
+        // argument position as the other two, so nothing about it is harder to
+        // scan - it simply was not thought of when the pattern was written
+        // against the two that existed then. What it was hiding is the worst
+        // instance of section 9 in the codebase: RewardScreen looping a +/-2.5
+        // degree rotation on every card in the reward fan, forever, which is
+        // precisely the "slow idle loop" that section calls out as never
+        // permitted even when a fast lunge is. Third time this scan has gone
+        // quiet because a builder's spelling moved out from under it.
         var transform = new Regex(
-            """(?:TweenProperty|TweenTo)\(\s*(?<node>\w+|this)\s*, "(?<prop>scale|rotation|rotation_degrees|skew)"|(?<![\w.])(?<node>\w+|this)\.(?<prop>Scale|RotationDegrees|Rotation|Skew)\s*=""");
+            """(?:TweenProperty|TweenTo|TweenPingPong)\(\s*(?<node>\w+|this)\s*, "(?<prop>scale|rotation|rotation_degrees|skew)"|(?<![\w.])(?<node>\w+|this)\.(?<prop>Scale|RotationDegrees|Rotation|Skew)\s*=(?!=|>)|(?<![\w.])(?<prop>Scale|RotationDegrees|Rotation|Skew)\s*=(?!=|>)""");
 
+        // Read every file once first, because which identifiers are pixel
+        // holders in *one* file depends on what the others turned out to be.
+        var sources = new Dictionary<string, List<string>>();
         foreach (string path in FilesUnder("res://scripts/ui", ".cs"))
         {
-            string fileName = path.GetFile();
-            if (DeferredTransformExceptions.Contains(fileName)) continue;
-
             using var reader = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
             if (reader is null) continue;
             var lines = new List<string>();
             while (!reader.EofReached()) lines.Add(reader.GetLine());
+            sources[path] = lines;
+        }
 
-            var holders = new HashSet<string>();
+        // The types whose *instances* are pixel surfaces, discovered rather
+        // than named: a class that wraps a TextureRect or is a Label carries
+        // pixel art or bitmap type, so transforming one of its instances
+        // resamples what it holds no matter which file does the transforming.
+        //
+        // This is the arm that catches a violation from the outside. The two
+        // arms above only ever look at a class's own methods, so RewardScreen
+        // tilting and endlessly swaying the CardViews in its reward fan was
+        // invisible to all of them - a *continuous* rotation of pixel art,
+        // which is the one case section 9 singles out as never allowed even
+        // for fast motion, sitting in a file that holds no pixel asset itself.
+        var pixelSurfaceTypes = new HashSet<string>();
+        foreach (var (_, lines) in sources)
+        {
+            if (!ThisIsAPixelSurface(TextureRectHolders(lines), lines)) continue;
             foreach (string text in lines)
             {
-                foreach (Match declaration in PixelHolderDeclaration.Matches(text))
+                var declared = ClassDeclaration.Match(text);
+                if (declared.Success) pixelSurfaceTypes.Add(declared.Groups["name"].Value);
+            }
+        }
+
+        var pixelSurfaceHolder = new Regex(
+            $@"\b(?:{string.Join("|", pixelSurfaceTypes)})\s*\??\s+(?<name>\w+)\b" +
+            $@"|\bvar\s+(?<name>\w+)\s*=\s*[\w.]+\.Instantiate<(?:{string.Join("|", pixelSurfaceTypes)})>");
+
+        foreach (var (path, lines) in sources)
+        {
+            var holders = TextureRectHolders(lines);
+            foreach (string text in lines)
+            {
+                foreach (Match declaration in pixelSurfaceHolder.Matches(text))
                 {
                     holders.Add(declaration.Groups["name"].Value);
                 }
             }
-            if (ViewsWrappingAPixelSprite.Contains(fileName)) holders.Add("this");
+            if (ThisIsAPixelSurface(holders, lines)) holders.Add("this");
 
             for (int i = 0; i < lines.Count; i++)
             {
                 if (lines[i].TrimStart().StartsWith("//")) continue;
-                foreach (Match match in transform.Matches(lines[i]))
+
+                // Matched against this line *and the next*, because a tween
+                // call is routinely wrapped: RewardScreen's card sway is
+                // `tween.TweenPingPong(` on one line and `view,
+                // "rotation_degrees", ...` on the next, and a line-at-a-time
+                // scan sees neither half. Only matches that *start* on this
+                // line are reported, so the next line is not read twice.
+                string probe = i + 1 < lines.Count ? lines[i] + " " + lines[i + 1].TrimStart() : lines[i];
+                foreach (Match match in transform.Matches(probe))
                 {
-                    string node = match.Groups["node"].Value;
+                    if (match.Index >= lines[i].Length) continue;
+                    // The unqualified arm captures no node, because the node
+                    // it means is not written down: an unqualified property
+                    // assignment inside a Node's own method is `this`.
+                    string node = match.Groups["node"].Success ? match.Groups["node"].Value : "this";
                     if (!holders.Contains(node)) continue;
                     yield return (path, i + 1, $"{node}.{match.Groups["prop"].Value}");
                 }

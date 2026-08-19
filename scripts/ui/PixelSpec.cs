@@ -87,6 +87,26 @@ public static class PixelSpec
         Mathf.Round(offset.X / scale) * scale,
         Mathf.Round(offset.Y / scale) * scale);
 
+    // The one place a Control carrying pixel art may be scaled, and the reason
+    // it exists is that no source scan can tell a legal scale from an illegal
+    // one. PixelSpecSmokeTest's transform scan reads `x.Scale =` and cannot
+    // evaluate the right-hand side, so it has to treat every such write as a
+    // violation - which is correct, because `Vector2.One * 2f` and
+    // `Vector2.One * 1.15f` are the same line to a regex.
+    //
+    // Taking an `int` is what closes that: the scale being whole is a fact the
+    // type system holds rather than one a reader has to check. Same shape as
+    // TextFit re-checking a font rung the font-size scan cannot see.
+    //
+    // For a card or an icon shown *bigger* on purpose - the library popup and
+    // the combat inspect peek, both at 2x. Not for animation: section 9 permits
+    // no scale tween at all, whatever the endpoints.
+    public static void ApplyIntegerScale(Control node, int scale)
+    {
+        node.PivotOffset = node.CustomMinimumSize / 2f;
+        node.Scale = Vector2.One * scale;
+    }
+
     // Nearest filtering on every pixel asset (section 3). The engine default
     // is Linear, which blurs pixel art at any scale.
     //
