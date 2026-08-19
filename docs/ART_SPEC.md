@@ -398,6 +398,28 @@ The rules:
   describing one it never met.
 - **The only node property a pixel asset may be tweened on is alpha.** `modulate` resamples nothing.
   `scale`, `rotation`, `rotation_degrees` and `skew` all do.
+
+  **A Control is a pixel asset when it carries one**, which is what the enforcing scan derives
+  rather than being told. Three doors, because three different things carry pixels: a class that
+  declares a `TextureRect` wraps pixel art; a class deriving from `Label` *is* bitmap type — §7's
+  door into the same rule, since a bitmap face rendered away from its 8px design em grows uneven
+  stems exactly the way a fractional texture scale does; and a class assigning `Icon` from
+  `ArtAssets` paints a pixel texture through a property, which is `PotionView` and which neither of
+  the other two describes. Instances of such a class carry the rule with them, so the file doing the
+  transforming does not have to be the file holding the pixels; the reward fan rotating `CardView`s
+  from `RewardScreen` was invisible for as long as that last clause was missing.
+
+  Thirteen files under `scripts/ui` are pixel surfaces by that predicate. **The scan reads code
+  lines only**, and that is not tidiness: it discovers what to look at by matching source text, and
+  this codebase's comments are prose *about* pixel art — a comment saying "a `TextureRect` is what
+  holds a pixel texture" declares a holder called `is`, and "one asset class over" declares a type
+  called `over`. Measured: before that filter, coverage moved when a comment was **reworded**.
+
+  A **static** integer scale is not a tween and is allowed — the library popup and the combat
+  inspect peek both show a card at 2x. No scan can tell `Vector2.One * 2f` from
+  `Vector2.One * 1.15f`, so it goes through `PixelSpec.ApplyIntegerScale`, which takes an `int` and
+  makes the scale being whole a fact the type system holds. Same shape as `TextFit` re-checking a
+  font rung the font-size scan cannot see.
 - **A translation must land on a whole source pixel** — a multiple of the asset's render factor from
   §2, through `PixelSpec.SnapTranslation`. A lunge that genuinely travels is allowed to interpolate
   between snapped endpoints, because the motion is fast and the alternative is no travel at all; a

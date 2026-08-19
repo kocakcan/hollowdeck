@@ -150,6 +150,11 @@ public partial class ScreenShot : Node
         // from the buff arrow it sits two columns away from.
         ["combatintents"] = new("res://scenes/CombatScreen.tscn", SeedIntentCombat, ShowNewIntents),
         ["combatsummon"] = new("res://scenes/CombatScreen.tscn", SeedSummonCombat, ShowFullRoster),
+        // Card inspect, held open. The peek is what replaced the hover bump's
+        // 1.15x scale, so this is the shot that says whether the replacement
+        // reads - and it is the only combat fixture where anything covers the
+        // enemy row on purpose, which is the trade the centred placement makes.
+        ["combatinspect"] = new("res://scenes/CombatScreen.tscn", SeedCombat, OpenCardInspect),
         // AwaitingTarget, which no other combat shot enters and which is the
         // only state TargetHintLabel is visible in. The hint used to be pinned
         // inside the enemy row, so aiming a potion wrote its instructions
@@ -291,6 +296,14 @@ public partial class ScreenShot : Node
 
         RemoveChild(screen);
         screen.QueueFree();
+
+        // The card-inspect peek parents itself to GetTree().CurrentScene, the
+        // way HoverTooltip does and for the same anti-clipping reason. In the
+        // running game that *is* the screen, so ChangeSceneToFile takes the
+        // peek with it. Here it is this harness, which outlives every fixture -
+        // so without this the peek raised by "combatinspect" was still on
+        // screen for whatever was shot next. Caught by looking at the PNGs.
+        CardInspectView.Dismiss();
     }
 
     // A believable mid-run baseline every fixture starts from and then
@@ -506,6 +519,22 @@ public partial class ScreenShot : Node
         {
             "drowned_thrall", "gaol_rat", "mire_leech", "gilded_husk",
         };
+    }
+
+    // Raised through CardView.BeginInspect rather than by constructing a
+    // CardInspectView directly, so the fixture exercises the path both the
+    // dwell and the held key take rather than a third one nothing uses.
+    private static void OpenCardInspect(Node screen)
+    {
+        AfterCombatReady(screen);
+
+        var hand = screen.GetNode<Control>("HandArea");
+        foreach (var child in hand.GetChildren())
+        {
+            if (child is not CardView view) continue;
+            view.BeginInspect();
+            return;
+        }
     }
 
     private static void ShowNewIntents(Node screen)

@@ -202,6 +202,19 @@ which is how a missing entry announces itself. If it is a *debuff*, it needs a f
 `StatusRow.IsDebuff` — and that one is silent in the resolution layer rather than the UI, per
 `Artifact` above. If it decays on a clock, a sixth: `CombatManager.DecayAtTurnEnd`.
 
+**No pixel surface transforms, and what enforces that is derived rather than listed.** A hand card
+lifts 18 snapped pixels and paints a halo; it does not scale, and the fan does not tilt. Damage
+numbers step between two legal font rungs; they do not punch in from 2.2x. Reward cards breathe on
+`modulate:a`; they do not sway on `rotation_degrees`. `PixelSpecSmokeTest`'s transform scan treats
+`this` as a pixel surface in any file declaring a `TextureRect`, deriving from `Label`, or assigning
+`Icon` from `ArtAssets` (thirteen files today), and treats instances of those classes as pixel
+surfaces wherever they are declared — so a violation reaching in from another file is caught too. It
+reads **code lines only**, because this file and its neighbours are dense prose about pixel art and
+the scan matches source text: keyed to comments, coverage moved when a comment was reworded. A **static integer** scale is still legal and goes through
+`PixelSpec.ApplyIntegerScale`, which takes an `int` so the scan does not have to evaluate one.
+ART_SPEC §9; `docs/PIXEL_ART_ROADMAP.md` §1 carries the four holes that were found closing this, all
+of them by mutating the guard rather than by reading it.
+
 **The keyword layer is three bools and three enforcement sites, all in `PileManager`.** `Retain`
 survives `DiscardHand`, `Ethereal` is exhausted by it, `Innate` is promoted to where the opening
 draw finds it. Three things about them are expensive to rediscover:
@@ -815,7 +828,10 @@ per-act combat drops, and the reward screen those drops forced — plus relic ti
 boss-relic choice those tiers made worth having, the start-of-run screen: blessings and typed
 seed entry, the card-reward skip streak, and the map's width at 3–5. **That closes Phase 9**, and the
 twenty-rung ascension ladder closes Phase 10 with it. What's open is Phase 11's legibility and feel
-work. Don't treat this section as a to-do list.
+work, of which **card inspect has shipped** — hold to peek at a card at 2x, on a mouse dwell or a
+held `hd_inspect`, which is what let `CardView`'s 1.15x hover bump be replaced rather than deleted
+and emptied `PixelSpecSmokeTest`'s transform-scan exception list. Don't treat this section as a to-do
+list.
 
 One open item is worth knowing *before* you touch the code it sits in, rather than when the roadmap
 is next read:

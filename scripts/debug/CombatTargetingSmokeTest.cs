@@ -103,6 +103,9 @@ public partial class CombatTargetingSmokeTest : Node
         await TestExitTreeClearsTheGlow();
         await TestDescriptionChangesAgainstAVulnerableTarget();
         await TestCancelTargetingRestoresACleanBoard();
+        await TestInspectPeekOpensAndCloses();
+        await TestSelectingACardDoesNotOpenAPeek();
+        await TestAPreemptedCardCannotCloseTheNewPeek();
         await TestClickingAnEnemyResolvesAnAimedPotion();
         await TestHitTestSkipsCorpsesAndIgnoresUntargetedCards();
         await TestASummonBuildsAnEnemyViewMidFight();
@@ -325,6 +328,122 @@ public partial class CombatTargetingSmokeTest : Node
         // out of EnemyView.Instances before the next test looks at it.
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    // Card inspect, driven through the same CardView entry point both the mouse
+    // dwell and the held hd_inspect land on.
+    //
+    // The keyword tooltip half is asserted with it rather than separately,
+    // because the two are one rule: HoverTooltip sits at ZIndex 2500 and the
+    // peek at 2200, so a keyword box left up while the peek is open paints on
+    // top of the card it is quoting.
+    private async System.Threading.Tasks.Task TestInspectPeekOpensAndCloses()
+    {
+        // **Bash, not Strike**, and that is the whole assertion below working.
+        // Strike reads "Deal 6 damage." and mentions no keyword, so
+        // ShowKeywordTooltip returns before assigning and _keywordTooltip is
+        // null whether or not the peek hides anything. Measured: with Strike,
+        // deleting the `if (_inspecting) HideKeywordTooltip()` arm this check is
+        // named after left the suite at 147 passed, 0 failed. Bash applies
+        // Vulnerable, so the panel is really up and really has to go.
+        var (screen, _, handArea) = await StartFight("bash");
+        var card = FirstCard(handArea);
+
+        Check("no_peek_before_inspect", !CardInspectView.IsOpen, "a peek was already open");
+
+        card.SetHighlighted(true);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        // The transition, not the end state. Asserting only that the panel is
+        // down while the peek is up passes for free on any card that never
+        // raised one.
+        Check("a_keyword_card_raises_its_panel_when_looked_at",
+            Private<HoverTooltip?>(card, "_keywordTooltip") is not null,
+            "Bash mentions Vulnerable but raised no keyword panel - this fixture can no longer " +
+            "tell whether the peek hides one");
+
+        card.BeginInspect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("inspect_opens_a_peek", CardInspectView.IsOpen, "BeginInspect raised nothing");
+        Check("the_peek_hides_the_keyword_panel",
+            Private<HoverTooltip?>(card, "_keywordTooltip") is null,
+            "the keyword panel is still up under the peek");
+
+        card.EndInspect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("release_closes_the_peek", !CardInspectView.IsOpen, "the peek outlived the hold");
+
+        await EndFight(screen);
+    }
+
+    // The two input paths can be on different cards at once, and a Show that
+    // replaced one peek with another used to leave the old raiser believing it
+    // still owned one - so that card's own mouse-exit killed the *new* card's
+    // peek while its key was still held, unrecoverably, since IsActionPressed
+    // fires on the press edge only.
+    private async System.Threading.Tasks.Task TestAPreemptedCardCannotCloseTheNewPeek()
+    {
+        // Bash again, so the keyword-panel half below has a panel to be about.
+        var (screen, _, handArea) = await StartFight("bash");
+        var cards = handArea.GetChildren().OfType<CardView>().ToList();
+        var a = cards[0];
+        var b = cards[1];
+
+        // A is hovered as well as inspecting, which is the state the mouse
+        // leaves a card in - and the only state in which the panel returning is
+        // observable at all.
+        a.SetHighlighted(true);
+        a.BeginInspect();
+        b.BeginInspect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("the_second_card_owns_the_peek", CardInspectView.RaisedBy(b),
+            "the peek is not owned by the card that raised it last");
+
+        // The quieter half of the same bug. A card that lost the peek but still
+        // believes it owns one keeps suppressing its own keyword panel, with no
+        // peek left to justify the suppression - a panel the player cannot get
+        // back by any means, on the card the mouse is resting on.
+        Check("a_preempted_card_gets_its_keyword_panel_back",
+            Private<HoverTooltip?>(a, "_keywordTooltip") is not null,
+            "the pre-empted card is still hiding its keyword panel for a peek it no longer owns");
+
+        a.EndInspect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        Check("a_preempted_card_does_not_close_the_new_peek", CardInspectView.IsOpen,
+            "the card that lost the peek took the replacement down with it");
+
+        b.EndInspect();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Check("the_owner_still_closes_the_peek", !CardInspectView.IsOpen, "the peek outlived its owner");
+
+        await EndFight(screen);
+    }
+
+    // The dwell is deliberately not on the shared hover path. SetHighlighted
+    // routes through the same visual as a mouse hover so the two read alike,
+    // and an arrow-keyed card stays selected indefinitely - so a dwell hung
+    // there opens a full-screen peek 0.4s after every keyboard selection, over
+    // a fight the player is still choosing in. It shipped that way for one
+    // build and a screenshot fixture is what found it.
+    //
+    // Waited well past DwellSeconds rather than one frame, or this passes for
+    // the wrong reason.
+    private async System.Threading.Tasks.Task TestSelectingACardDoesNotOpenAPeek()
+    {
+        var (screen, _, handArea) = await StartFight("strike");
+        var card = FirstCard(handArea);
+
+        card.SetHighlighted(true);
+        await ToSignal(GetTree().CreateTimer(0.6), SceneTreeTimer.SignalName.Timeout);
+
+        Check("selecting_a_card_does_not_open_a_peek", !CardInspectView.IsOpen,
+            "an arrow-key selection grew a peek nobody asked for");
+
+        await EndFight(screen);
     }
 
     private static CardView FirstCard(Control handArea) =>
@@ -551,8 +670,10 @@ public partial class CombatTargetingSmokeTest : Node
         //
         // HighestHoveredCardTopY, not HighestCardTopY: the lower edge of that
         // band is not where a card rests but where it reaches when the player
-        // looks at it, 18px higher and painted at ZIndex 100 over anything
-        // underneath. Aiming a potion and then moving the mouse to the enemy
+        // looks at it, CardView.HoverLiftPx higher and painted at ZIndex 100
+        // over anything underneath. That was half of a 1.15x scale bump and is
+        // a lift now; the number is the same 18 either way, which is what the
+        // lift was chosen to preserve. Aiming a potion and then moving the mouse to the enemy
         // crosses the fan on the way, so a card lifting is not a corner case -
         // it is the ordinary path through this state.
         var hintRect = hint.GetGlobalRect();

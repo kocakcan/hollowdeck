@@ -49,6 +49,7 @@ path. Bindings are named `hd_*` actions in `project.godot`'s `[input]` section.
 | --- | --- |
 | `1`–`9`, `0` | Select the card in that hand slot (the badge on each card is its key) |
 | `←` `→` | Cycle the selection — or, once a card is aimed, cycle the target |
+| `↑` (hold) | Inspect the selected card — shows it at 2x for as long as you hold. Resting the mouse on a card does the same |
 | `Space` | Play the selected card. A single-target card aims first, so it's Space twice |
 | `Z` `X` `C` | Drink the potion in that belt slot, then aim it the same way |
 | `Enter` | End turn — and, at the end of a fight, Continue |

@@ -25,14 +25,41 @@ namespace Hollowdeck.UI;
 // to reparent itself out of the hand area first.
 public partial class CardView : Panel
 {
-    // How much a hovered (or arrow-key selected) card grows, about its own
-    // centre. Public because it is not only a visual: it decides how far above
-    // its resting top a hand card can reach, which is what anything laying
+    // How far a hovered (or arrow-key selected) card rises out of the fan.
+    // Public because it is not only a visual: it decides how far above its
+    // resting top a hand card can reach, which is what anything laying
     // something out in the band above the fan has to clear. CombatScreen's
     // HighestHoveredCardTopY is the one place that sum is written down.
-    public const float HoverScaleFactor = 1.15f;
-    private static readonly Vector2 HoverScale = new(HoverScaleFactor, HoverScaleFactor);
-    private static readonly Vector2 NormalScale = Vector2.One;
+    //
+    // This was a 1.15x scale bump, and it was the last live instance in the
+    // hand of what FocusHaloSize below already records killing on the upgrade
+    // grid: a fractional scale over pixel art resamples the 32px icon drawn at
+    // CardArtScale 3 and the 16px bitmap type together (ART_SPEC section 2 and
+    // section 7). A lift says the same thing - this is the card you are looking
+    // at, and it is clear of its neighbours - through a channel that resamples
+    // nothing.
+    //
+    // 18 rather than a rounder number, and it is pinned from both ends. It has
+    // to be a whole number of *source* pixels in the largest thing the card
+    // carries - the art window at CardArtScale 3 (section 9's translation rule,
+    // through PixelSpec.SnapTranslation) - so it is a multiple of 3. And it has
+    // to be small enough that TargetHintLabel still clears the top of a lifted
+    // card, which is the band CombatScreen.HighestHoveredCardTopY measures and
+    // CombatTargetingSmokeTest asserts: 24 overlapped the hint by 4px.
+    //
+    // 18 is also exactly what the 1.15x bump reached - half of 240px of growth -
+    // so the band above the fan is unchanged by this whole change rather than
+    // quietly re-tuned by it.
+    public const int HoverLiftPx = 18;
+
+    // Neutral, and deliberately not FocusRing. That is Ramp.G5, which is the
+    // *same* colour as RarityRareGlow - the collision FocusHaloSize's comment
+    // below records, where a focused card and a Rare card looked identical. A
+    // hovered Rare would land in exactly that hole. N8 is the top of the
+    // neutral ramp and is claimed by no rarity, tier or status semantic, so it
+    // can only mean "you are looking at this one".
+    private static readonly Color HoverHalo = PixelSpec.Ramp.N8;
+
     private static readonly Color UnaffordableTint = new(0.55f, 0.55f, 0.55f);
 
     // Derived from the fixed 176x240 card layout (VBox 8px inset, 6px
@@ -91,6 +118,26 @@ public partial class CardView : Panel
     // does not run this setter, so an untouched CardView keeps Panel's
     // FocusModeEnum.None default.
     private bool _interactive = true;
+
+    // Whether this view's numbers and its dimming resolve against the live
+    // combat - Strength, Weak, the aimed enemy's Vulnerable, and whether there
+    // is energy to pay the cost - or whether it prints what the card was
+    // authored with.
+    //
+    // Interactive's setter writes it, because for eight phases a hand card was
+    // the only view that had ever been in a live combat and the two questions
+    // had one answer. Card inspect is what separated them: the peek is the
+    // *same* hand card drawn at 2x, it is deliberately not Interactive (nothing
+    // about it is dragged, clicked or focused), and a picture of a card that
+    // prints different numbers from the card it is a picture of is the
+    // drifted-readout bug this project refuses in the enemy telegraph.
+    //
+    // The initializer matches _interactive's, not Panel's default, for the same
+    // reason that one is written out: the backing field deliberately does not
+    // run the setter, so a CardView nobody has configured has to arrive at the
+    // hand-card answer on its own.
+    public bool ShowsLiveCombat { get; set; } = true;
+
     public bool Interactive
     {
         get => _interactive;
@@ -98,6 +145,11 @@ public partial class CardView : Panel
         {
             _interactive = value;
             FocusMode = value ? FocusModeEnum.None : FocusModeEnum.All;
+            // Every existing caller means both by setting one, so setting one
+            // keeps meaning both. The single caller that wants them to disagree
+            // is AddScaledCard, which writes ShowsLiveCombat *after* this and says
+            // why - ordering that lives in one place rather than at each site.
+            ShowsLiveCombat = value;
         }
     }
 
@@ -121,7 +173,6 @@ public partial class CardView : Panel
     // TryPlayFromHand.
     private bool _leavingHand;
     private Vector2 _homePosition;
-    private float _homeRotation;
     private int _restZIndex;
     private EnemyView? _targetLockedView;
 
@@ -144,6 +195,13 @@ public partial class CardView : Panel
     // screen still opens silent.
     private bool _hovered;
     private bool _focusShowing;
+
+    // Card inspect. _inspecting is "a peek raised by *this* card is open", kept
+    // per view rather than read off CardInspectView.IsOpen, because the peek is
+    // a single static and the card that raised it is the only one that may take
+    // it down.
+    private bool _inspecting;
+    private Tween? _dwell;
 
     public override void _Ready()
     {
@@ -269,6 +327,13 @@ public partial class CardView : Panel
     // glow.** The first two already suppress the glow through CardFrameStyle's
     // own `!hovered` condition; focus needs saying here because it overwrites
     // BorderColor after that function has returned.
+    //
+    // Both of the top two rungs paint a halo now, and they cannot collide: a
+    // hand card is Interactive and therefore FocusModeEnum.None, so it can
+    // never be the focused one, and a card on a choice screen is !Interactive
+    // and takes no hover visual at all (OnMouseEntered's own guard). The
+    // ordering below is still stated rather than inferred, because that
+    // argument is about today's two callers and this function is not.
     private StyleBoxFlat BuildFrameStyle(Color? rareGlow)
     {
         var def = CardInstance!.Definition;
@@ -281,6 +346,17 @@ public partial class CardView : Panel
             style.ShadowColor = new Color(UiTheme.Palette.FocusRing, 0.55f);
             style.ShadowSize = FocusHaloSize;
             style.ShadowOffset = Vector2.Zero; // a halo, not a drop shadow
+        }
+        else if (_hovered && Interactive)
+        {
+            // The other half of what the 1.15x bump used to say. The lift
+            // carries "clear of its neighbours"; this carries "this one", which
+            // matters at the two moments the lift alone is ambiguous - a
+            // one-card hand has no neighbours to be clear of, and the card the
+            // mouse is resting on may not be the one the arrow keys selected.
+            style.ShadowColor = new Color(HoverHalo, 0.5f);
+            style.ShadowSize = FocusHaloSize;
+            style.ShadowOffset = Vector2.Zero;
         }
 
         return style;
@@ -348,15 +424,15 @@ public partial class CardView : Panel
 
         // Only a real hand card can be "too expensive to play right now" -
         // a card sitting in a shop, a reward pick or a pile-view popup has
-        // no energy cost context at all, so it must never dim. Interactive
-        // is already the flag separating those two worlds, and gating on it
-        // keeps the tint correct even if the CombatManager.Instance lifetime
-        // regresses again.
+        // no energy cost context at all, so it must never dim. ShowsLiveCombat
+        // is the flag separating those two worlds, and gating on it keeps the
+        // tint correct even if the CombatManager.Instance lifetime regresses
+        // again.
         // An unplayable card is dimmed at every energy level, which is the only
         // signal the frame has that TryPlayCard will refuse it. An X card is
         // affordable whenever there is any energy at all - it spends whatever
         // is left, and TryPlayCard refuses it at zero.
-        bool affordable = !Interactive
+        bool affordable = !ShowsLiveCombat
             || (def.IsPlayable
                 && (CombatManager.Instance?.Player is not { } player
                     || (def.IsXCost ? player.CurrentEnergy >= 1 : player.CurrentEnergy >= def.Cost)));
@@ -458,14 +534,14 @@ public partial class CardView : Panel
     // Live player context (Strength/Weak) so the shown damage number is
     // always what would actually land, plus the card's own target type (so
     // an AllEnemies card says so) and who it would hit (so Vulnerable is
-    // resolved for real). Only an Interactive card is in a combat where
+    // resolved for real). Only a ShowsLiveCombat card is in a combat where
     // "who would this hit" means anything - a shop/reward/deck-view card
     // shows base numbers, same reasoning as the affordability tint above.
     private DescribeContext BuildDescribeContext()
     {
         var def = CardInstance!.Definition;
         var combat = CombatManager.Instance;
-        if (!Interactive || combat is null) return new DescribeContext(TargetType: def.Target);
+        if (!ShowsLiveCombat || combat is null) return new DescribeContext(TargetType: def.Target);
 
         IReadOnlyList<Combatant>? targets = def.Target switch
         {
@@ -555,7 +631,13 @@ public partial class CardView : Panel
     // at one of the call sites the way the last one did.
     private void RefreshKeywordTooltip()
     {
-        if (_hovered || _focusShowing) ShowKeywordTooltip();
+        // The peek wins outright, and it is a hide rather than a fade for the
+        // reason the reward screen's tip line is: the panel would sit at
+        // ZIndex 2500, i.e. *over* the peek, and a keyword box floating on top
+        // of the card it is explaining reads as something the player failed to
+        // dismiss. The card at 2x is already showing the text the box quotes.
+        if (_inspecting) HideKeywordTooltip();
+        else if (_hovered || _focusShowing) ShowKeywordTooltip();
         else HideKeywordTooltip();
     }
 
@@ -581,22 +663,146 @@ public partial class CardView : Panel
         _keywordTooltip = null;
     }
 
-    // pos/rotationDeg are this card's resting slot in the fan (CombatScreen
-    // computes the fan formula); zIndex is its paint order at rest so the
-    // fan's overlap direction is consistent - hover/drag temporarily bump
-    // above this, then restore it on release/exit.
-    public void SetHomeTransform(Vector2 pos, float rotationDeg, int zIndex)
+    // How long the mouse rests on a card before the peek opens. Long enough
+    // that crossing the fan on the way to another card does not flash three
+    // peeks, short enough to be a hold rather than a wait.
+    //
+    // A dwell rather than an immediate open, and the keyboard path deliberately
+    // has no equivalent: a held key is already an explicit act, where a mouse
+    // resting somewhere is not.
+    private const float DwellSeconds = 0.4f;
+
+    private void BeginDwell()
+    {
+        CancelDwell();
+        _dwell = GetTree().CreateTween();
+        _dwell.Wait(DwellSeconds);
+        _dwell.TweenCallback(Callable.From(BeginInspect));
+    }
+
+    private void CancelDwell()
+    {
+        if (_dwell is { } dwell && dwell.IsValid()) dwell.Kill();
+        _dwell = null;
+    }
+
+    // Raises the peek for this card. Public because CombatScreen drives the
+    // keyboard half - hd_inspect held over the arrow-key selected card - and
+    // the two halves have to land on one implementation, the same argument
+    // SetHighlighted makes for the hover visual one property over.
+    public void BeginInspect()
+    {
+        if (!Interactive || _dragging || _leavingHand || CardInstance is null) return;
+        if (_inspecting) return;
+
+        _inspecting = true;
+        CardInspectView.Show(this, CardInstance);
+        RefreshKeywordTooltip();
+    }
+
+    // Dismisses only a peek this card actually owns. The check is not
+    // defensive tidiness: the mouse and the held key can be on different cards,
+    // so an unguarded Dismiss here lets a card whose peek was already replaced
+    // take down the peek that replaced it.
+    public void EndInspect()
+    {
+        CancelDwell();
+        if (!_inspecting) return;
+
+        _inspecting = false;
+        if (CardInspectView.RaisedBy(this)) CardInspectView.Dismiss();
+        RefreshKeywordTooltip();
+    }
+
+    // The other card took the peek. Called by CardInspectView.Show rather than
+    // discovered, because the flag and the singleton are two facts that have to
+    // agree and only one of them knows when this happens.
+    public void OnPeekPreempted()
+    {
+        _inspecting = false;
+        RefreshKeywordTooltip();
+    }
+
+    // pos is this card's resting slot in the fan (CombatScreen computes the fan
+    // formula); zIndex is its paint order at rest so the fan's overlap
+    // direction is consistent - hover/drag temporarily bump above this, then
+    // restore it on release/exit.
+    //
+    // There is no rotation here any more, and the fan is not poorer for it. It
+    // carried up to MaxFanRotationDeg of tilt, which is ART_SPEC section 9's
+    // "scale, rotation, rotation_degrees and skew all resample" applied not for
+    // a 0.12s beat but permanently, to every card in every hand of the game.
+    // What actually makes a fan read is its arc and its overlap, and both are
+    // still here.
+    public void SetHomeTransform(Vector2 pos, int zIndex)
     {
         _homePosition = pos;
-        _homeRotation = rotationDeg;
         _restZIndex = zIndex;
         if (_dragging) return;
         Position = pos;
-        RotationDegrees = rotationDeg;
         ZIndex = zIndex;
     }
 
-    // Drives the same hover visual (scale/rotation/border) from keyboard
+    // Builds a CardView at an integer scale inside a plain Control spacer sized
+    // to its scaled footprint. Shared by LibraryInspectPopup and
+    // CardInspectView, because all three lines that matter here are traps and
+    // two copies of them is two chances to get one wrong.
+    //
+    // Control.Scale is a render transform only - it does not grow the node's
+    // own layout Size - so without the spacer a scaled card overlaps whatever
+    // is laid out above it instead of pushing it away. And the spacer is a
+    // plain Control, not a Container: a Container re-fits its children on every
+    // sort pass (added, theme change, ...) via fit_child_in_rect, which stomps
+    // a child's Scale back to identity - measured, not assumed, after
+    // CenterContainer silently reset this exact card back to 1x one frame after
+    // it was set to 2x.
+    //
+    // The scale is an int because ART_SPEC section 2 admits no other kind: the
+    // card carries a 32px icon at CardArtScale and 16px bitmap type, and both
+    // multiply through cleanly only at whole factors.
+    // Takes the parent rather than returning a loose node, and that is the one
+    // thing about it that is not obvious. SetCardInstance below reads the node
+    // cache _Ready builds, and _Ready does not run until the view is in the
+    // *scene* tree - parenting it to a spacer that is itself detached is not
+    // enough. Handing the parent in is what makes the order unrepresentable
+    // rather than merely documented: measured, the other order renders a card
+    // with no art and no frame fill, and throws nothing.
+    public static Control AddScaledCard(
+        Node parent, CardInstance instance, int scale, bool showsLiveCombat, out CardView view)
+    {
+        var scene = GD.Load<PackedScene>("res://scenes/CardView.tscn");
+        view = scene.Instantiate<CardView>();
+
+        var footprint = view.CustomMinimumSize * scale;
+        var spacer = new Control { CustomMinimumSize = footprint };
+        parent.AddChild(spacer);
+        spacer.AddChild(view);
+
+        view.Interactive = false;
+        // After Interactive, which writes this as a side effect. A peek is not
+        // interactive and is still a picture of a live hand card; a library
+        // tile is neither.
+        view.ShowsLiveCombat = showsLiveCombat;
+        view.Position = (footprint - view.CustomMinimumSize) / 2f;
+        PixelSpec.ApplyIntegerScale(view, scale);
+        view.SetCardInstance(instance);
+        return spacer;
+    }
+
+    // Where the card sits at rest and while lifted, both snapped to a whole
+    // source pixel of the largest asset it carries (the art window at
+    // CardArtScale 3). CombatScreen's fan formula divides a band by a card
+    // count, so _homePosition is fractional far more often than not - snapping
+    // only the lifted end would leave the card resting off-grid for as long as
+    // nobody is looking at it, which is the half of section 9's translation
+    // rule that is easy to read past.
+    private Vector2 RestingPosition =>
+        PixelSpec.SnapTranslation(_homePosition, PixelSpec.CardArtScale);
+
+    private Vector2 LiftedPosition =>
+        RestingPosition - new Vector2(0, HoverLiftPx);
+
+    // Drives the same hover visual (lift/halo/border) from keyboard
     // card selection (CombatScreen's arrow-key nav), so a keyboard-selected
     // card reads identically to a mouse-hovered one with no separate visual
     // language to maintain.
@@ -610,8 +816,22 @@ public partial class CardView : Panel
     // the cursor happened to be over.
     public void SetHighlighted(bool on)
     {
-        if (on) OnMouseEntered();
-        else OnMouseExited();
+        // The visual only. Selecting a card is not a request to inspect it -
+        // see OnMouseEntered - but *de*selecting one has to take down a peek
+        // that key is still holding open, or the selection moves out from
+        // under it and nothing is left that would close it.
+        //
+        // The drag/leaving guard sits on the lift and the peek rather than on
+        // the whole method, because the badge below is not part of the hover
+        // visual - it is what says which slot the keyboard is on, and it is the
+        // one thing here that stays true of a card being dragged. Guarding the
+        // method wholesale left the old card's badge lit when the selection
+        // moved off a card mid-drag, so two cards claimed the keyboard at once.
+        if (!_dragging && !_leavingHand)
+        {
+            ApplyHoverVisual(on);
+            if (!on) EndInspect();
+        }
 
         _hotkeyBadge.AddThemeStyleboxOverride("panel",
             on ? ChromeStyles.HotkeyBadgeSelectedStyle() : ChromeStyles.HotkeyBadgeStyle());
@@ -635,17 +855,44 @@ public partial class CardView : Panel
     // set Interactive = false, every one of them silently dropped the hover
     // explanation on the floor. Splitting the guard is the whole fix - the
     // mouse_entered signal was always firing, it was just discarded.
+    // The mouse_entered signal, and the only path that starts a dwell. The
+    // visual half is shared with SetHighlighted below; the dwell is not, and
+    // that split is the whole of what keeps the peek from opening itself.
+    //
+    // Routing SetHighlighted through here wholesale is what the visual half
+    // wants - a keyboard-selected card must read identically to a hovered one -
+    // and it is exactly wrong for the dwell: a card that has been arrow-keyed
+    // to stays selected indefinitely, so a dwell hung off it opens a
+    // full-screen peek 0.4s after every keyboard selection, over a fight the
+    // player is still choosing in. Found by looking at the combattarget
+    // fixture, which arms a card and had grown a peek nobody asked for.
     private void OnMouseEntered()
     {
         if (_dragging || _leavingHand) return;
+        ApplyHoverVisual(true);
+        if (Interactive) BeginDwell();
+    }
+
+    private void ApplyHoverVisual(bool on)
+    {
+        if (on) ApplyHoverEnterVisual();
+        else ApplyHoverExitVisual();
+    }
+
+    private void ApplyHoverEnterVisual()
+    {
         _hovered = true;
         if (Interactive)
         {
             ZIndex = 100;
+            // Endpoints are both snapped, which is what section 9 asks of a
+            // translation over pixel art - it permits interpolating *between*
+            // snapped endpoints for a movement this fast, and forbids resting
+            // on a fractional one. _homePosition comes from CombatScreen's fan
+            // formula and is fractional far more often than not, so the resting
+            // end needs snapping just as much as the lifted one does.
             var tween = GetTree().CreateTween();
-            tween.SetParallel(true);
-            tween.TweenTo(this, "scale", HoverScale, Motion.Snap);
-            tween.TweenTo(this, "rotation_degrees", 0f, Motion.Snap); // "stands up straight"
+            tween.TweenTo(this, "position", LiftedPosition, Motion.Snap);
             RepaintFrame();
         }
         RefreshKeywordTooltip();
@@ -654,14 +901,19 @@ public partial class CardView : Panel
     private void OnMouseExited()
     {
         if (_dragging || _leavingHand) return;
+        CancelDwell();
+        EndInspect();
+        ApplyHoverVisual(false);
+    }
+
+    private void ApplyHoverExitVisual()
+    {
         _hovered = false;
         if (Interactive)
         {
             ZIndex = _restZIndex;
             var tween = GetTree().CreateTween();
-            tween.SetParallel(true);
-            tween.TweenTo(this, "scale", NormalScale, Motion.Snap);
-            tween.TweenTo(this, "rotation_degrees", _homeRotation, Motion.Snap);
+            tween.TweenTo(this, "position", RestingPosition, Motion.Snap);
             RepaintFrame();
         }
         // Not necessarily a hide: a card the player focused themselves keeps
@@ -672,26 +924,27 @@ public partial class CardView : Panel
 
     // Cards animate in from the draw pile when newly added to hand -
     // staggerDelaySec cascades a multi-card draw instead of popping all at
-    // once. Target position/rotation are whatever SetHomeTransform already
-    // set immediately before this is called.
+    // once. The target position is whatever SetHomeTransform already set
+    // immediately before this is called.
+    //
+    // What used to be here as well was a 0.6x scale growing to 1 and a random
+    // +/-10 degrees of tilt straightening out. Both were section 9 violations
+    // and neither was carrying the beat: a card that flies in from the draw
+    // pile already reads as arriving, because it travels the width of the
+    // screen to get here. The travel is the animation.
     public void PlayDrawTween(Vector2 fromGlobalPos, float staggerDelaySec)
     {
-        var toPos = _homePosition;
-        var toRotation = _homeRotation;
-        Scale = Vector2.One * 0.6f;
         Modulate = new Color(1, 1, 1, 0f);
         GlobalPosition = fromGlobalPos;
-        RotationDegrees = toRotation + (GD.Randf() * 20f - 10f);
 
         var tween = GetTree().CreateTween();
         tween.Wait(staggerDelaySec);
         tween.SetParallel(true);
-        tween.TweenTo(this, "position", toPos, Motion.Land);
-        tween.TweenTo(this, "rotation_degrees", toRotation, Motion.Land);
-        tween.TweenTo(this, "scale", Vector2.One, Motion.Land);
-        // Alpha finishes ahead of the transform on purpose - the card is fully
-        // opaque while it is still settling, so the overshoot is legible rather
-        // than happening behind a fade. And Land's Back on alpha would clamp.
+        tween.TweenTo(this, "position", RestingPosition, Motion.Land);
+        // Alpha finishes ahead of the travel on purpose - the card is fully
+        // opaque while it is still settling, so Land's overshoot is legible
+        // rather than happening behind a fade. And Land's Back on alpha would
+        // clamp.
         tween.TweenTo(this, "modulate:a", 1f, Motion.Settle);
     }
 
@@ -711,11 +964,14 @@ public partial class CardView : Panel
         // The exhaust branch is faster as well as hotter - that pair is the
         // whole "this one is not coming back" signal, so the period is content
         // rather than a curve choice and rides through Over.
+        //
+        // The shrink that used to ride alongside is gone with the rest of the
+        // transforms. It said "going away", which the flight into the pile
+        // anchor and the fade to alpha 0 were already both saying.
         float duration = isExhaust ? 0.18f : 0.26f;
         var tween = GetTree().CreateTween();
         tween.SetParallel(true);
         tween.TweenTo(this, "global_position", toGlobalPos, Motion.Settle.Over(duration));
-        tween.TweenTo(this, "scale", Vector2.One * (isExhaust ? 0.1f : 0.3f), Motion.Pop.Over(duration));
         tween.TweenTo(this, "modulate", isExhaust ? new Color(1.6f, 1.3f, 0.7f, 0f) : new Color(1f, 1f, 1f, 0f), Motion.Settle.Over(duration));
         tween.Chain().TweenCallback(Callable.From(QueueFree));
     }
@@ -724,9 +980,7 @@ public partial class CardView : Panel
     {
         ZIndex = _restZIndex;
         var tween = GetTree().CreateTween();
-        tween.SetParallel(true);
-        tween.TweenTo(this, "position", _homePosition, Motion.Land);
-        tween.TweenTo(this, "rotation_degrees", _homeRotation, Motion.Land);
+        tween.TweenTo(this, "position", RestingPosition, Motion.Land);
     }
 
     public override void _GuiInput(InputEvent @event)
@@ -756,10 +1010,10 @@ public partial class CardView : Panel
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } mb:
                 _dragging = mb.Pressed;
                 ZIndex = mb.Pressed ? 200 : _restZIndex;
-                if (mb.Pressed)
-                {
-                    RotationDegrees = 0f;
-                }
+                // Picking the card up is a decision already made, so the peek
+                // has served its purpose - and it would otherwise sit over the
+                // enemy the drag is aiming at.
+                if (mb.Pressed) EndInspect();
                 if (!mb.Pressed)
                 {
                     OnReleased();
@@ -805,6 +1059,7 @@ public partial class CardView : Panel
     {
         ClearTargetHighlight();
         HideKeywordTooltip();
+        EndInspect();
     }
 
     private void OnReleased()
@@ -873,14 +1128,16 @@ public partial class CardView : Panel
         return false;
     }
 
+    // The card has resolved and is on its way out. Nothing here transforms:
+    // what tells a play from a discard is the tint (exhaust burns hot) and the
+    // fact that this one does not fly to a pile, which is exactly what
+    // "resolved where it stood" looks like.
     private void PlayResolveTween()
     {
         bool isExhaust = CardInstance?.Definition.Exhaust ?? false;
         var tween = GetTree().CreateTween();
-        tween.SetParallel(true);
-        tween.TweenTo(this, "scale", Vector2.One * (isExhaust ? 0.15f : 0.4f), Motion.Pop);
-        // Scale pops, the tint does not: Back overshoots past its destination,
-        // and past alpha 0 there is nowhere to overshoot to.
+        // Settle rather than Pop: Back overshoots past its destination, and
+        // past alpha 0 there is nowhere to overshoot to.
         tween.TweenTo(this, "modulate", isExhaust ? new Color(1.6f, 1.3f, 0.7f, 0f) : new Color(1, 1, 1, 0f), Motion.Settle);
         tween.Chain().TweenCallback(Callable.From(QueueFree));
     }

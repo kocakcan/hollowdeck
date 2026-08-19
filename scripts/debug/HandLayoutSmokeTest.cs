@@ -189,11 +189,18 @@ public partial class HandLayoutSmokeTest : Node
         // toward their slot when this runs (same reason as the fifteen-card
         // test above).
         var homePositionField = typeof(CardView).GetField("_homePosition", BindingFlags.NonPublic | BindingFlags.Instance);
-        var homeRotationField = typeof(CardView).GetField("_homeRotation", BindingFlags.NonPublic | BindingFlags.Instance);
 
-        // Two sizes rather than one: a lone card sits at the fan's center with
-        // no rotation, and everything past two cards puts one at each extreme,
-        // so these bracket every hand the game can deal.
+        // Two sizes rather than one: a lone card sits at the fan's center, and
+        // everything past two cards puts one at each extreme, so these bracket
+        // every hand the game can deal.
+        //
+        // The corner sweep below used to rotate each corner by the card's own
+        // _homeRotation, because the fan tilted its outer cards by up to 12
+        // degrees. It does not any more - rotation resamples pixel art for as
+        // long as the hand is on screen (ART_SPEC section 9), and the arc and
+        // the overlap are what a fan is actually made of. An axis-aligned card
+        // has its corners at its own rect, so the sweep is the same walk with
+        // the rotation dropped rather than a different test.
         foreach (int target in new[] { 2, 10 })
         {
             int missing = target - combat.Player.Piles.Hand.Count;
@@ -206,7 +213,6 @@ public partial class HandLayoutSmokeTest : Node
             {
                 if (child is not CardView cardView) continue;
                 var home = (Vector2)homePositionField!.GetValue(cardView)!;
-                float rotation = Mathf.DegToRad((float)homeRotationField!.GetValue(cardView)!);
                 var size = cardView.CustomMinimumSize;
                 var center = handArea.Position + home + size / 2f;
 
@@ -216,7 +222,7 @@ public partial class HandLayoutSmokeTest : Node
                              new Vector2(-size.X, size.Y) / 2f, new Vector2(size.X, size.Y) / 2f,
                          })
                 {
-                    float y = (center + corner.Rotated(rotation)).Y;
+                    float y = (center + corner).Y;
                     if (y <= lowest) continue;
                     lowest = y;
                     worst = $"{cardView.CardInstance?.Definition.Id} corner at y={y:F0}";

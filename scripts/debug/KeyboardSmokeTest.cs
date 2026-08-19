@@ -39,7 +39,7 @@ public partial class KeyboardSmokeTest : Node
     // action, it belongs here too - that is the whole point of the list.
     private static readonly string[] SingletonActions =
     {
-        "hd_confirm", "hd_cancel", "hd_end_turn", "hd_nav_left", "hd_nav_right",
+        "hd_confirm", "hd_cancel", "hd_end_turn", "hd_nav_left", "hd_nav_right", "hd_inspect",
         "hd_pile_deck", "hd_pile_draw", "hd_pile_discard", "hd_pile_exhaust",
     };
 
