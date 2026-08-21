@@ -370,7 +370,9 @@ Six things are worth knowing before touching it:
   `PopupDelta` is a state diff with no cause channel, so a Poison tick arrives indistinguishable
   from a sword and plays `impact`. Giving it a cause is a `CombatManager` change; and the beat that
   was actually missing is the arrival, since a tick already moves a number the player is watching
-  and an application moved nothing at all.
+  and an application moved nothing at all. *(The incoming blade below has since given that diff one
+  narrow cause — `Combatant.HitsTaken` — but it names only an attack that reached HP. A tick still
+  plays `impact`, and giving every HP change a cause is still the wider change this bullet declines.)*
 - **The Rust tests are about the *sequence*, which is the half `validate` is structurally blind to.**
   A burst that repeats a frame, contracts instead of expanding, or thickens as it dies is on the
   ramp, on the grid and hard-alpha. Four rules: consecutive frames differ, extent never shrinks, mass
@@ -456,10 +458,79 @@ Five things came out of it:
   drawn correctly and the check that it is drawn at all are different checks**, and this project had
   neither.
 
-**What is deferred, and stated so it is not mistaken for finished:** the swipe fires only on
-player→enemy damage. An enemy hitting the player still gets a shake and no directional beat, which
-is the mirror of this art and would be an authored second orientation rather than a reuse — the
-axis argument gives one orientation per direction of travel, not one for both.
+### The incoming blade — **shipped**, and the forecast above it was wrong again
+
+The paragraph this replaces read: *"the swipe fires only on player→enemy damage. An enemy hitting the
+player still gets a shake and no directional beat, which is the mirror of this art and would be an
+authored second orientation rather than a reuse — the axis argument gives one orientation per
+direction of travel, not one for both."* The last clause is false, and it is false for the same
+reason the eight-direction forecast one level up was: **the geometry was checkable and nobody
+checked it.**
+
+**An axis is undirected, so the mirror is the identity.** `fx.rs::bar` draws every blade frame
+through the centre pixel in *both* directions at once, and frame 3's motes are authored as mirrored
+pairs — so every frame is invariant under a half turn. The player's attack vector spans about −13° to
+−49° and an enemy's spans 131° to 167°, which is the same line read from the other end. There was
+nothing to reorient. `an_axial_run_is_unchanged_by_a_half_turn` now asserts the property the reuse
+rests on, because a later hooked tip or tapered tail would point one of the two paths backwards with
+every suite green.
+
+What a second run actually buys is **pigment**: `gash` is `swipe`'s geometry called with the oxblood
+family, which is the one family `fx` had left and the one `impact` explicitly declined ("Ember rather
+than oxblood: R5 is the damage *number*") — so the blade coming at the player is the colour of the
+number about to land on their own HP bar.
+
+**But the beat was never missing for want of art.** It was missing because
+`CombatScreen.PopupDelta` is a state diff with no cause channel — the sentence `venom` already
+carries — so when the player's HP fell, nothing on screen knew *which* enemy swung. The fix is
+`Combatant.HitsTaken` + `LastAttacker`, which is `HitsAbsorbed` one number over and for the identical
+reason: a falling HP bar is not a cause either, and four things take HP in a fight.
+
+Six things came out of it:
+
+- **The direction that already worked was misfiring, and had been for as long as it existed.**
+  `PlayHitVfx` answered three separate questions — who recoils, who lunges, where the blade comes
+  from — with one test, `popupParent is EnemyView`. So an enemy losing HP to its *own* Poison tick
+  made the player lunge and throw a blade at it. The item was scoped as "add the other direction" and
+  the honest description is "give the beat a cause", which fixes both ends at once.
+- **A stale attacker is worse than none, and the counter is the whole of what prevents it.**
+  `LastAttacker` alone still names the enemy that swung last turn while the player ticks down from
+  Poison on their own — and `BeginPlayerTurn` runs that tick *before* it transitions out of
+  `ResolvingEnemyIntent`, so gating on combat state instead would have shipped exactly that bug. Read
+  together the pair answers "is this HP loss the hit that enemy dealt", which is the only question
+  worth asking.
+- **The pigment guard's first version excused most of the blade.** `swipe` is drawn in bone from end
+  to end, so its `hot` *is* `N8` — and `N8` is also the flash core every run in `fx.rs` opens on, the
+  frame `SpriteAnimator.FlashOpeningClips` declines. Exempting the shared core *by colour* therefore
+  exempted the bone family wholesale, and a `gash` redrawn in bone would have passed. It is excluded
+  by **position** now, through a `FLASH_CORE_RADIUS` the art and the test both read. Same shape as
+  §4's `GRAZING`: a tolerance that can contain a real answer is not a tolerance.
+- **It is `gash` because `rot_hound` already has a move called `rend`.** That is `fx.rs`'s own naming
+  rule catching something for the second time — the four bursts are deliberately not
+  `impact`/`block`/`heal`/`poison` because those read as status ids one directory over. `rend` is the
+  better verb and it makes a grep ambiguous about whether an asset or a move is meant, which is worth
+  more.
+- **The two blades cannot share a still, and finding that out took rendering one.** The screenshot
+  sheet was written to lay both paths in one frame; they are the same *line*, so they overlap along
+  their length and collide outright at the player, who is an endpoint of both — the outgoing blade's
+  opening flash came out underneath the incoming blade's motes. Every rearrangement fails for the
+  same reason the feature works. Two shots instead. The general form is small and keeps recurring in
+  this file: **a property that makes a feature cheap can make its diagram impossible.**
+- **Seven mutations, seven reds**, and the two halves were tested separately. Art: an asymmetric tip
+  on `swipe`, a `gash` recoloured into bone, a `gash` redrawn a pixel longer. Code: the counter
+  deleted, the counter gated on `targetAmount` instead of `unblocked` (so a fully-blocked hit counts),
+  `AttackerOf` reading `hpDelta` alone (the stale-attacker bug), and `BladeFor` always returning the
+  bone blade — the last caught by the *spawn* scan rather than by anything about blades, which is the
+  third set `CombatFx.All` exists for. The first mutation *tried* was a colour change on a pixel the
+  bar already covered, which changed no geometry and passed: a mutation has to move the thing the
+  assertion measures.
+
+**What is deferred, and stated so it is not mistaken for finished:** a fully-blocked enemy attack
+still draws no blade. Every VFX in `PopupDelta` hangs off an HP diff, and `DealDamageEffect`'s
+counter is gated on damage that got past Block, so a swing the player absorbed whole gets the ward
+burst and nothing crossing the gap. That is defensible — it is what the outgoing direction has always
+done — but it is a decision rather than an oversight, and closing it means a second counter, not a
+second asset.
 
 ## 6. An easing vocabulary — **shipped**
 

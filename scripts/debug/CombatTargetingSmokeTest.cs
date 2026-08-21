@@ -110,6 +110,7 @@ public partial class CombatTargetingSmokeTest : Node
         await TestHitTestSkipsCorpsesAndIgnoresUntargetedCards();
         await TestASummonBuildsAnEnemyViewMidFight();
         TestTheBlockedBeatNeedsAnAbsorbedHit();
+        await TestAnEnemyAttackNamesItselfAsTheAttacker();
 
         GD.Print($"CombatTargetingSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -143,6 +144,68 @@ public partial class CombatTargetingSmokeTest : Node
             !CombatScreen.IsAbsorbedHit(hpDelta: -3, absorbedDelta: 1),
             "Block that absorbed part of a hit still lost HP, which is the ordinary hit " +
             "reaction - two beats for one hit otherwise");
+    }
+
+    // The other half of that argument, for the beat that has a *direction*.
+    //
+    // A blade is drawn from the attacker to the target, so the beat needs to
+    // know who swung - and PopupDelta is a state diff, which is why an enemy's
+    // attack got a shake and no blade for as long as the swipe existed.
+    // Combatant.HitsTaken/LastAttacker are the cause channel and
+    // CombatScreen.AttackerOf is the rule that reads them.
+    //
+    // Unlike the blocked beat above, half of this *is* driven against a real
+    // fight, because the half that can go wrong is not the rule - it is whether
+    // DealDamageEffect's counter is reached at all on the path an enemy turn
+    // actually takes. The rule is then asked about the diff that fight produced
+    // rather than about numbers typed here. What is deliberately not driven is
+    // the spawned rect: a travelling run lives 0.16s and frees itself, so
+    // catching it would be a race, and a check that is only sometimes looking
+    // at its subject is worse than none.
+    private async System.Threading.Tasks.Task TestAnEnemyAttackNamesItselfAsTheAttacker()
+    {
+        // rot_hound is weighted_random over two moves and both are attacks, so
+        // its first turn lands damage whichever way the roll goes - a sequential
+        // enemy opening on a buff would make this pass or fail by move order.
+        CombatContext.EnemyDefinitionIds = new List<string> { "rot_hound" };
+        var instance = GD.Load<PackedScene>("res://scenes/CombatScreen.tscn").Instantiate();
+        AddChild(instance);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        var combat = CombatManager.Instance!;
+        var enemy = combat.Enemies[0];
+        var player = combat.Player;
+        int hpBefore = player.CurrentHp;
+        int hitsBefore = player.HitsTaken;
+
+        combat.TryEndTurn();
+        // The enemy turn is wall-clock paced (PreActionDelaySec +
+        // PostActionDelaySec, 0.35s for one enemy). Waited on rather than
+        // frame-counted, since this scene's frame time is not a clock.
+        await ToSignal(GetTree().CreateTimer(1.2f), SceneTreeTimer.SignalName.Timeout);
+
+        int hpDelta = player.CurrentHp - hpBefore;
+        int struckDelta = player.HitsTaken - hitsBefore;
+        Check("the_enemy_turn_landed_a_hit", hpDelta < 0 && struckDelta > 0,
+            $"the player took {-hpDelta} damage over {struckDelta} counted hits - this check " +
+            "says nothing at all unless the fight actually hit somebody");
+
+        Check("a_landed_hit_names_the_enemy_that_swung",
+            ReferenceEquals(CombatScreen.AttackerOf(hpDelta, struckDelta, player.LastAttacker), enemy),
+            $"the hit resolved to {player.LastAttacker?.Name ?? "nobody"} rather than to " +
+            $"{enemy.Name} - a blade drawn from the wrong end, or from nothing");
+
+        // And that the rule refuses the shape every other HP loss has. This is
+        // the case the feature turns on: BeginPlayerTurn ticks Poison *before*
+        // it leaves ResolvingEnemyIntent, so a gate on combat state instead of
+        // on the counter would fire a blade out of an enemy that did nothing.
+        Check("hp_lost_with_no_new_hit_names_nobody",
+            CombatScreen.AttackerOf(-5, 0, enemy) is null,
+            "an HP loss the counter did not move resolved to an attacker - a Poison tick would " +
+            "draw a blade from whichever enemy last swung");
+
+        instance.QueueFree();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }
 
     // The glow is EnemyView's own Button background, so anything drawn over

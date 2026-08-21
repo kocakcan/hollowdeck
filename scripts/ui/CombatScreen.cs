@@ -134,11 +134,13 @@ public partial class CombatScreen : Control
     // is already watching, while Poison's whole cost lands on turns that have
     // not happened yet.
     //
-    // Absorbed is the odd one out: a monotonic counter rather than a level, and
-    // the only *cause* in the tuple. See PopupDelta - falling Block cannot tell
-    // an absorbed hit from an expired one, and they are the same two numbers
-    // moving the same way.
-    private readonly Dictionary<Combatant, (int Hp, int Block, int Poison, int Absorbed)>
+    // Absorbed and Taken are the odd ones out: monotonic counters rather than
+    // levels, and the two *causes* in the tuple. See PopupDelta - falling Block
+    // cannot tell an absorbed hit from an expired one, and a falling HP bar
+    // cannot tell an attack from a Poison tick or a card that costs HP. Both are
+    // the same two numbers moving the same way, and both beats they gate are a
+    // creature-sized burst rather than a text pop.
+    private readonly Dictionary<Combatant, (int Hp, int Block, int Poison, int Absorbed, int Taken)>
         _lastStats = new();
     private Dictionary<StatusType, int>? _lastPlayerStatuses;
 
@@ -536,7 +538,7 @@ public partial class CombatScreen : Control
     private void SpawnBurst(Vector2 globalPos, string effect) =>
         CombatFx.Play(this, ToLocalPoint(globalPos), effect);
 
-    // The same, for the one effect that travels rather than landing.
+    // The same, for the two effects that travel rather than landing.
     //
     // What this replaced was PlaySlashTrail: a two-point Line2D, 10px wide, at
     // Color(1, 1, 1, 0.85). Pure white is off ART_SPEC section 5's ramp (the
@@ -549,25 +551,50 @@ public partial class CombatScreen : Control
     private void SpawnTravellingBurst(Vector2 fromGlobal, Vector2 toGlobal, string effect) =>
         CombatFx.PlayTravelling(this, ToLocalPoint(fromGlobal), ToLocalPoint(toGlobal), effect);
 
-    // The global centre of whatever a PopupDelta beat is aimed at. One switch
-    // rather than the three hand-written copies the VFX sites had between them,
-    // now that four effects read it instead of one.
+    // The global centre a beat is aimed at, keyed by the combatant rather than
+    // by the node showing it. One switch rather than the three hand-written
+    // copies the VFX sites had between them.
     //
-    // Global, and effects parent to the CombatScreen rather than to the
-    // popupParent - which for an enemy is an EnemyView inside an HBoxContainer,
-    // the same reason SpawnHitSpark always did.
-    private Vector2? BeatCenter(Node popupParent) => popupParent switch
+    // It used to take the popupParent, which was enough while every beat landed
+    // on the combatant PopupDelta was already diffing. The incoming blade needs
+    // the centre of the *attacker* too, and an attacker has no popupParent -
+    // nothing is being diffed about it. PopupDelta holds the Combatant anyway,
+    // so keying on that costs nothing and answers both questions.
+    //
+    // Null for an enemy whose view has gone: death and escape tweens free them,
+    // so an onDeath resolving through a dying enemy can reach here after its
+    // view is queued. IsInstanceValid rather than the dictionary alone, because
+    // a queued free leaves the entry in place for a frame.
+    //
+    // Global, and effects parent to the CombatScreen rather than to the view -
+    // which for an enemy is an EnemyView inside an HBoxContainer, the same
+    // reason SpawnHitSpark always did.
+    private Vector2? CombatantCenter(Combatant combatant)
     {
-        EnemyView enemyView => enemyView.GlobalPosition + enemyView.Size / 2f,
-        CombatScreen => PlayerCenter,
-        _ => null,
-    };
+        if (combatant is PlayerCombatant) return PlayerCenter;
+        if (combatant is EnemyCombatant enemy
+            && _enemyViews.TryGetValue(enemy, out var view)
+            && IsInstanceValid(view))
+        {
+            return view.GlobalPosition + view.Size / 2f;
+        }
+        return null;
+    }
+
+    // Which blade an attack draws. The player's is bone and everything else's
+    // is oxblood, which is the whole of how the two read apart once they are
+    // travelling - see CombatFx.Gash, where the shared geometry is the point.
+    //
+    // One place the choice is made, and it is also what keeps both constants
+    // visible to PixelSpecSmokeTest's "is anything spawning this?" scan.
+    private static string BladeFor(Combatant attacker) =>
+        attacker is PlayerCombatant ? CombatFx.Swipe : CombatFx.Gash;
 
     // Where the player sprite is, in global coordinates. Three sites had a copy
-    // of this expression - the lunge's direction, BeatCenter's own arm, and the
-    // slash's origin - which was survivable while nothing about the sprite
-    // moved. It is one expression now because the swipe made it three readers
-    // of the same fact rather than three coincidences.
+    // of this expression - the lunge's direction, CombatantCenter's own arm,
+    // and the slash's origin - which was survivable while nothing about the
+    // sprite moved. It is one expression now because the swipe made it three
+    // readers of the same fact rather than three coincidences.
     private Vector2 PlayerCenter => _playerSprite.GlobalPosition + _playerSprite.Size / 2f;
 
     // Blue tint pulse for block gain, mirroring FlashHit's red damage pulse.
@@ -1253,6 +1280,30 @@ public partial class CombatScreen : Control
     public static bool IsAbsorbedHit(int hpDelta, int absorbedDelta) =>
         absorbedDelta > 0 && hpDelta == 0;
 
+    /// <summary>
+    /// Who dealt an HP loss, or null when nothing swung — the gate on the
+    /// travelling blade, and the only thing that gives a beat a direction.
+    /// </summary>
+    /// <remarks>
+    /// IsAbsorbedHit's sibling, public for the identical reason: PopupDelta
+    /// needs a live fight and a built screen to reach, so a rule left inline
+    /// there has no coverage at all.
+    ///
+    /// Both arguments are load-bearing and neither is enough alone. hpDelta
+    /// says a beat is owed; struckDelta says the loss is the one
+    /// DealDamageEffect just recorded, which is what separates an attack from
+    /// the three other ways HP falls in a fight — a Poison tick, a card that
+    /// costs HP, and Thorns billing the attacker. And lastAttacker outlives all
+    /// of those: without the counter it would still name the enemy that swung
+    /// last turn while the player ticks down from Poison on their own, and a
+    /// blade would fly out of an enemy that did nothing.
+    ///
+    /// Deliberately silent about fully-blocked hits: they lose no HP, so they
+    /// never reach here. That beat is the ward burst.
+    /// </remarks>
+    public static Combatant? AttackerOf(int hpDelta, int struckDelta, Combatant? lastAttacker) =>
+        hpDelta < 0 && struckDelta > 0 ? lastAttacker : null;
+
     private void PopupDelta(Combatant c, Node popupParent, Vector2 localSpawnPos)
     {
         int poison = c.GetStatus(StatusType.Poison);
@@ -1262,16 +1313,17 @@ public partial class CombatScreen : Control
             int hpDelta = c.CurrentHp - prev.Hp;
             int blockDelta = c.Block - prev.Block;
             int absorbed = c.HitsAbsorbed - prev.Absorbed;
+            var attacker = AttackerOf(hpDelta, c.HitsTaken - prev.Taken, c.LastAttacker);
 
             if (hpDelta < 0)
             {
                 bool bigHit = -hpDelta >= Mathf.Max(10, c.MaxHp * 0.2f);
-                PlayHitReaction(popupParent, localSpawnPos, -hpDelta, bigHit);
+                PlayHitReaction(popupParent, localSpawnPos, c, attacker, -hpDelta, bigHit);
             }
             else if (hpDelta > 0)
             {
                 SpawnFloatingText(popupParent, localSpawnPos, $"+{hpDelta}", new Color(0.4f, 1f, 0.4f));
-                if (BeatCenter(popupParent) is { } healed) SpawnBurst(healed, CombatFx.Bloom);
+                if (CombatantCenter(c) is { } healed) SpawnBurst(healed, CombatFx.Bloom);
             }
 
             if (blockDelta > 0)
@@ -1282,18 +1334,18 @@ public partial class CombatScreen : Control
             }
             else if (IsAbsorbedHit(hpDelta, absorbed))
             {
-                PlayBlockAbsorbVfx(popupParent, localSpawnPos);
+                PlayBlockAbsorbVfx(popupParent, c, localSpawnPos);
             }
 
             // Only on the way up. Poison decays as it ticks, so diffing without
             // the sign would fire the burst every turn it wears off - once for
             // landing and once for every turn it does its job.
-            if (poison > prev.Poison && BeatCenter(popupParent) is { } poisoned)
+            if (poison > prev.Poison && CombatantCenter(c) is { } poisoned)
             {
                 SpawnBurst(poisoned, CombatFx.Venom);
             }
         }
-        _lastStats[c] = (c.CurrentHp, c.Block, poison, c.HitsAbsorbed);
+        _lastStats[c] = (c.CurrentHp, c.Block, poison, c.HitsAbsorbed, c.HitsTaken);
     }
 
     // On a big hit, hold every reaction (damage number, flash, shake,
@@ -1305,37 +1357,55 @@ public partial class CombatScreen : Control
     // this). Small hits stay instant so combat doesn't feel sluggish.
     private const float HitStopSeconds = 0.06f;
 
-    private void PlayHitReaction(Node popupParent, Vector2 localSpawnPos, int hpLost, bool bigHit)
+    private void PlayHitReaction(
+        Node popupParent, Vector2 localSpawnPos, Combatant target, Combatant? attacker,
+        int hpLost, bool bigHit)
     {
         void Fire()
         {
             if (popupParent is Node n && !IsInstanceValid(n)) return;
             SpawnFloatingText(popupParent, localSpawnPos, $"-{hpLost}", new Color(1f, 0.35f, 0.35f), bigHit);
             if (popupParent is CanvasItem hitTarget) FlashHit(hitTarget);
-            PlayHitVfx(popupParent, hpLost);
+            PlayHitVfx(popupParent, target, attacker, hpLost);
         }
 
         if (bigHit) GetTree().CreateTimer(HitStopSeconds).Timeout += Fire;
         else Fire();
     }
 
-    // Damage-direction VFX: player-attacks-enemy gets a lunge + slash trail
-    // in addition to the target's recoil; enemy-attacks-player gets a
-    // camera-shake-style hit on the player sprite instead. Both get an impact
-    // burst and a screen shake scaled to how much HP was actually lost.
-    private void PlayHitVfx(Node popupParent, int hpLost)
+    // Damage-direction VFX. Three separate questions, and the whole of the fix
+    // to the deferral this closes is that they used to be one:
+    //
+    //   - who got hurt decides the recoil (an enemy) or the shake (the player),
+    //     whatever hurt them;
+    //   - who swung decides the lunge, which is the player's animation and must
+    //     not play when the player did nothing;
+    //   - who swung *at what* decides the blade, which is the beat that was
+    //     missing in one direction entirely.
+    //
+    // All three used to be answered by `popupParent is EnemyView`, i.e. by the
+    // node type of the thing losing HP - and the second and third answers were
+    // simply wrong whenever an enemy lost HP to something other than the
+    // player. An enemy ticking down from its own Poison made the player lunge
+    // and throw a blade at it. That was invisible for the same reason the beat
+    // was missing: PopupDelta is a state diff, so `attacker` did not exist to
+    // ask. See Combatant.HitsTaken and AttackerOf.
+    private void PlayHitVfx(Node popupParent, Combatant target, Combatant? attacker, int hpLost)
     {
-        if (BeatCenter(popupParent) is not { } center) return;
+        if (CombatantCenter(target) is not { } center) return;
 
-        if (popupParent is EnemyView enemyView)
+        if (popupParent is EnemyView enemyView) enemyView.PlayHitRecoil();
+        else if (target is PlayerCombatant) PlayPlayerHitShake();
+
+        // Before the spawn, not after: PlayerCenter reads the sprite's live
+        // GlobalPosition and the lunge is about to move it, so a blade spawned
+        // second would leave from where the player is going rather than from
+        // where they are.
+        if (attacker is PlayerCombatant) PlayPlayerLungeToward(center);
+
+        if (attacker is not null && CombatantCenter(attacker) is { } from)
         {
-            enemyView.PlayHitRecoil();
-            PlayPlayerLungeToward(center);
-            SpawnTravellingBurst(PlayerCenter, center, CombatFx.Swipe);
-        }
-        else
-        {
-            PlayPlayerHitShake();
+            SpawnTravellingBurst(from, center, BladeFor(attacker));
         }
 
         SpawnBurst(center, CombatFx.Impact);
@@ -1345,11 +1415,11 @@ public partial class CombatScreen : Control
     // Block absorbed the hit entirely (no HP lost) - previously silent; a
     // "Blocked" text plus a metallic-blue flash and a ward burst gives it the
     // same "something happened" feedback a landed hit already gets.
-    private void PlayBlockAbsorbVfx(Node popupParent, Vector2 localSpawnPos)
+    private void PlayBlockAbsorbVfx(Node popupParent, Combatant blocker, Vector2 localSpawnPos)
     {
         SpawnFloatingText(popupParent, localSpawnPos, "Blocked!", new Color(0.6f, 0.8f, 1f));
         if (popupParent is CanvasItem target) FlashBlock(target);
-        if (BeatCenter(popupParent) is { } center) SpawnBurst(center, CombatFx.Ward);
+        if (CombatantCenter(blocker) is { } center) SpawnBurst(center, CombatFx.Ward);
     }
 
     private void SpawnFloatingText(Node parent, Vector2 localPos, string text, Color color, bool bigHit = false)

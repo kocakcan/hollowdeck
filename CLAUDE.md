@@ -956,14 +956,18 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   node it can flee — otherwise emptying the board scores as a Win, pays out in full, and rewards the
   slow deck the move was written to punish
 - `scenes/CombatScreen.tscn` — card drag/hover/targeting
-- `scripts/ui/CombatFx.cs` — the five combat effect runs, and the single place one is positioned,
-  sized and freed. Four burst in place; `swipe` **travels** (`PlayTravelling` tweens `position`
-  between two snapped endpoints while the frames play), which is what let the slash trail be one
-  authored orientation instead of the eight-direction set the roadmap forecast — the attacker is
-  pinned and the targets are one row above it, so the whole fight spans −13° to −49°. A travelling
-  run therefore has its own cadence: for a burst the frame time is only a duration, for this one it
-  is also a speed. The registry (`CombatFx.All`) is what `PixelSpecSmokeTest` drives, so
-  a fifth effect is one entry rather than a name retyped in a test
+- `scripts/ui/CombatFx.cs` — the six combat effect runs, and the single place one is positioned,
+  sized and freed. Four burst in place; `swipe` and `gash` **travel** (`PlayTravelling` tweens
+  `position` between two snapped endpoints while the frames play), which is what let the slash trail
+  be one authored orientation instead of the eight-direction set the roadmap forecast — the attacker
+  is pinned and the targets are one row above it, so the whole fight spans −13° to −49°. A travelling
+  run therefore has its own cadence: for a burst the frame time is only a duration, for these it is
+  also a speed. **The two blades are one drawn axis in two pigments**, because an axis is undirected:
+  the enemy-to-player span is 131° to 167°, the same line read from the other end, and `fx.rs`
+  asserts every axial frame is symmetric under a half turn. So the incoming blade needed a colour and
+  not a silhouette — bone for the player's, oxblood for what is coming at them. The registry
+  (`CombatFx.All`) is what `PixelSpecSmokeTest` drives, so a seventh effect is one entry rather than
+  a name retyped in a test
 - `scripts/ui/SpriteAnimator.cs` — the one frame-swap driver, for creature clips and effect bursts
   alike. `Attach` resolves frames from a sprite id and needs an `idle`; `AttachOneShot` takes frames
   outright and holds the last one, which is what a burst needs and what frees it
