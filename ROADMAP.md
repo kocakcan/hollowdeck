@@ -915,7 +915,12 @@ adding polish. That was the whole of that category, so what is left in that file
 One light direction, the combat effect frames and the easing vocabulary have since shipped too; the
 effect frames were the first ordinary-backlog entry to land, and they retired the last
 smooth-gradient art on the combat screen — a `CpuParticles2D` spark that broke three ART_SPEC rules
-in a spot where neither the transform scan nor `artgen validate` could reach it. The easing
+in a spot where neither the transform scan nor `artgen validate` could reach it. That entry's last
+deferral — an enemy's attack getting no directional beat — has now closed too, and it is worth one
+line here because the finding was not an art one: an axis is *undirected*, so the "authored second
+orientation" that file forecast did not exist, and what was actually missing was a cause channel.
+`PopupDelta` is a state diff, so nothing knew which enemy swung — and the same gap was making the
+player lunge at an enemy that was dying of its own Poison. The easing
 vocabulary (`scripts/ui/Motion.cs`, ART_SPEC §11) is the one **this** phase should read before
 touching a tween: eight named curves replaced thirty-four ad-hoc pairs of duration and transition,
 and the setting below now has one place to multiply.

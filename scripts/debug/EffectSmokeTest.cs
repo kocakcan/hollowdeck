@@ -172,6 +172,7 @@ public partial class EffectSmokeTest : Node
             $"block={target.Block} hp={target.CurrentHp}");
 
         TestAbsorbingAHitIsDistinguishableFromLosingBlock();
+        TestALandedHitIsDistinguishableFromEveryOtherWayHpFalls();
     }
 
     // Combatant.HitsAbsorbed is a *cause*, and it exists because falling Block
@@ -215,6 +216,75 @@ public partial class EffectSmokeTest : Node
         Check("expiring_block_does_not_count", target.HitsAbsorbed == before,
             $"clearing Block moved HitsAbsorbed from {before} to {target.HitsAbsorbed} - the " +
             "view layer cannot then tell an absorbed hit from an expired one");
+    }
+
+    // Combatant.HitsTaken/LastAttacker are the same argument as HitsAbsorbed
+    // above, one number over, and they exist because a falling HP bar is not a
+    // cause either. Four things take HP in a fight - an attack, a Poison tick,
+    // a card that costs it, and Thorns billing the attacker - and only the
+    // first is a weapon crossing the gap that CombatScreen can draw a blade
+    // along. Without the pair, CombatScreen.AttackerOf would name whichever
+    // enemy last swung, so the player ticking down from Poison on their own
+    // turn would take a blade from an enemy that did nothing.
+    //
+    // So the property worth asserting is again the *difference*: an attack that
+    // reaches HP moves the counter, and the other three ways HP falls do not.
+    // Asserting only that damage increments it would stay green under every
+    // misfire this is here to stop.
+    private void TestALandedHitIsDistinguishableFromEveryOtherWayHpFalls()
+    {
+        var attacker = new EnemyCombatant { Name = "Attacker", MaxHp = 50, CurrentHp = 50 };
+        var target = new PlayerCombatant { Name = "Target", MaxHp = 50, CurrentHp = 50, Block = 10 };
+        var ctx = new EffectContext
+        {
+            Source = attacker,
+            Targets = new List<Combatant> { target },
+            Combat = null!,
+        };
+
+        // A hit Block eats whole is not a blade's beat, it is the ward burst's -
+        // and it is the case the `unblocked` gate exists for. First, so a
+        // counter that moved here would fail before anything sets it legitimately.
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 4 });
+        Check("a_fully_blocked_hit_is_not_a_landed_one",
+            target.HitsTaken == 0 && target.LastAttacker is null,
+            $"Block ate all 4 damage and HitsTaken is {target.HitsTaken}, LastAttacker is " +
+            $"{target.LastAttacker?.Name ?? "null"} - a hit that never reached HP has no blade");
+
+        target.Block = 0;
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 4 });
+        Check("a_landed_hit_counts_it", target.HitsTaken == 1,
+            $"a hit against 0 Block left HitsTaken at {target.HitsTaken}, expected 1");
+
+        // Identity, not non-null. A LastAttacker wrongly set to the *target*
+        // passes every null check and draws the blade out of the thing it is
+        // supposed to be arriving at.
+        Check("a_landed_hit_names_who_dealt_it", ReferenceEquals(target.LastAttacker, attacker),
+            $"LastAttacker is {target.LastAttacker?.Name ?? "null"}, expected {attacker.Name}");
+
+        // The three losses that are not attacks. HP subtracted directly stands
+        // in for all of them - a Poison tick, LoseHpEffect and Thorns each do
+        // exactly this and none goes near the counter - the way the Block check
+        // above stands in for the turn boundary.
+        int before = target.HitsTaken;
+        target.CurrentHp -= 5;
+        Check("hp_lost_without_an_attack_does_not_count", target.HitsTaken == before,
+            $"HP falling on its own moved HitsTaken from {before} to {target.HitsTaken} - the " +
+            "view layer cannot then tell a sword from a Poison tick");
+
+        // And the rule that reads them, driven over the shapes the diff
+        // actually produces. This is the whole of the gate, and PopupDelta
+        // needs a live fight and a built screen to reach.
+        Check("attacker_of_a_landed_hit_is_the_attacker",
+            ReferenceEquals(CombatScreen.AttackerOf(-4, 1, attacker), attacker),
+            "a landed hit did not resolve to its attacker");
+        Check("attacker_of_a_poison_tick_is_nobody",
+            CombatScreen.AttackerOf(-5, 0, attacker) is null,
+            "HP fell with the counter still - a stale attacker would draw a blade out of an " +
+            "enemy that did nothing");
+        Check("attacker_of_a_heal_is_nobody",
+            CombatScreen.AttackerOf(3, 0, attacker) is null,
+            "HP rose and something resolved to an attacker");
     }
 
     private void TestGainBlockAndDraw()

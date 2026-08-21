@@ -373,20 +373,35 @@ and a driver that never advances them look identical to every other check here, 
 has to *end* — its budget is asserted against a real 60fps tick rather than against its own frame
 time, since a check that steps by the constant it is testing cannot observe that constant at all.
 
-A fifth run joined those bursts and is the first that **travels** — the swipe. It is spawned by
-`CombatFx.PlayTravelling`, which tweens `position` between two `SnapTranslation`'d endpoints while
-the frames run, and it is checked for the two things a second spawn path adds: that the *landing* is
-on the grid (the origin is shared code the burst checks already cover, the destination is not) and
-that its travel finishes before the `impact` that follows it blooms at the same point. That last is
-an assertion rather than a comment because both numbers are tunable and a later nudge to either one
-silently inverts the beat — a blade still in flight while the hit blooms under it reads as the
-impact landing first.
+Two more runs joined those bursts and both **travel** — the swipe, and the blade coming the other
+way. They are spawned by `CombatFx.PlayTravelling`, which tweens `position` between two
+`SnapTranslation`'d endpoints while the frames run, and are checked for the two things a second spawn
+path adds: that the *landing* is on the grid (the origin is shared code the burst checks already
+cover, the destination is not) and that the travel finishes before the `impact` that follows it
+blooms at the same point. That last is an assertion rather than a comment because both numbers are
+tunable and a later nudge to either one silently inverts the beat — a blade still in flight while the
+hit blooms under it reads as the impact landing first.
+
+The two blades share one drawn axis and differ only in pigment, and that is forced rather than
+chosen: **an axis is undirected.** The player's attack vector spans about −13° to −49° and an enemy's
+spans 131° to 167°, which is the same line read from the other end, so a second *orientation* would
+be a second answer to a question that has one. What separates them is colour — bone for the player's
+blade, oxblood for what is coming at them — because once both are travelling, colour is the only
+channel left.
 
 The generator side carries the half no runtime check can: `fx.rs` declares per run whether it is
 drawn about a *point* or along an *axis*, and asserts both directions — a swipe redrawn as a disc
 leaves the tween carrying the direction alone, and a burst that drifted into a bar would be aiming a
 beat the call site positions by its centre. The bands are wide because the measured gap is (bursts
-0.94–1.00, the swipe 3.00–10.50), so neither is a constant fitted to its best case.
+0.94–1.00, the blades 3.00–10.50), so neither is a constant fitted to its best case.
+
+Two more rules live there for the two blades. An **axial run must be unchanged by a half turn**,
+which is the property that lets one drawn axis carry travel in both directions — a hooked tip or a
+tail thicker at one end points backwards along exactly one of the two paths. And the two blades must
+**share a shape and differ in pigment**, since with the geometry shared the colour is the whole of
+how they read apart. The flash core every run opens on is excluded from that second rule by
+*position* rather than by colour: `swipe` is drawn in bone throughout and the core is `N8`, so a
+colour-keyed exemption would have excused most of the blade.
 
 Events are the one category where the *missing* direction is survivable: `ArtAssets.EventIcon`
 falls back to the map's scroll, so an event authored without art still renders a screen with a
@@ -443,6 +458,12 @@ The rules:
   half octants. Direction the player can read comes from the motion; the art only has to agree with
   the mean of that band. Same argument `anim::Facing` makes with one axis rather than four per-clip
   direction arguments.
+
+  It removes the need for a second orientation too, which is a stronger claim and a separate one.
+  An axis is **undirected**: the enemy-to-player span is 131° to 167°, the identical line read from
+  the other end, and every axial frame is asserted symmetric under a half turn. So both blades run on
+  one drawn axis and are told apart by pigment. A run that needs its *own* axis is a new axis
+  constant and a new set of frames, not a rotation.
 
   This bullet said "derives" flat for as long as frame animation has existed, which was true when
   creatures were the only thing animating. It is recorded here rather than quietly rewritten because

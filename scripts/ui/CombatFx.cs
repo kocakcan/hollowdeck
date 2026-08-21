@@ -4,12 +4,14 @@ namespace Hollowdeck.UI;
 
 // The combat effect frames - docs/PIXEL_ART_ROADMAP.md section 5.
 //
-// Five generated four-frame runs (tools/artgen/src/icons/fx.rs), spawned as a
+// Six generated four-frame runs (tools/artgen/src/icons/fx.rs), spawned as a
 // transient TextureRect and played one-shot by SpriteAnimator. Four of them
-// burst in place; the fifth travels, which is the whole of how a slash gets a
-// direction without an authored direction set (see PlayTravelling). What they
-// replaced was CombatScreen.SpawnHitSpark: a CpuParticles2D burst whose texture
-// was a 24x24 radial GradientTexture2D drawn at ScaleAmountMin 0.4 / Max 0.9.
+// burst in place; the other two travel, which is the whole of how a slash gets
+// a direction without an authored direction set (see PlayTravelling). Those two
+// are one blade in two pigments and share a single drawn axis, because an axis
+// is undirected - see Gash. What they replaced was CombatScreen.SpawnHitSpark:
+// a CpuParticles2D burst whose texture was a 24x24 radial GradientTexture2D
+// drawn at ScaleAmountMin 0.4 / Max 0.9.
 //
 // That was off the medium in three separate ways - a smooth gradient against
 // ART_SPEC section 5's 43-colour ramp, a soft alpha edge against section 3, and
@@ -44,29 +46,53 @@ public static class CombatFx
     // the status row redrawing a turn's worth of information at once.
     public const string Venom = "venom";
 
-    // The player's blade reaching an enemy. This is the one effect that
-    // travels, and the only one whose subject is the attack rather than its
+    // The player's blade reaching an enemy. The first of the two effects that
+    // travel, and one of the two whose subject is the attack rather than its
     // result - so it is drawn in bone rather than in any of the six chromatic
-    // families the other four use.
+    // families the bursts use.
     public const string Swipe = "swipe";
+
+    // The same blade coming the other way: an enemy's attack reaching the
+    // player. Oxblood rather than bone, and the pigment is the *whole* of the
+    // difference - fx.rs draws it by calling swipe()'s own geometry with other
+    // colours.
+    //
+    // PIXEL_ART_ROADMAP section 5 forecast that this "would be an authored
+    // second orientation rather than a reuse", which is that section's second
+    // wrong forecast about this effect and wrong the same way. An axis is
+    // undirected: the player's attack vector spans about -13 to -49 degrees and
+    // an enemy's spans 131 to 167, which is the same line read from the other
+    // end, and every swipe frame is symmetric under a half turn. There was
+    // nothing to reorient. What an incoming blade needed was a colour, so it
+    // does not read as the player swinging at themselves.
+    //
+    // R is the family `impact` declined - "Ember rather than oxblood: R5 is the
+    // damage *number*" - which is exactly what recommends it here. This is the
+    // colour of the number about to land on the player's own HP bar.
+    //
+    // Spelled `gash` rather than `rend` because rot_hound already has a move
+    // called rend; fx.rs's own naming rule is that an asset name reading as a
+    // definition id makes a grep ambiguous about which one is meant.
+    public const string Gash = "gash";
 
     // Every effect, for the coverage check. The list is what
     // PixelSpecSmokeTest drives rather than a set of names retyped there, so a
     // sixth effect is registered in one place - the third-copy failure
     // SpriteAnimator.CreatureClips is the same fix for.
-    public static readonly string[] All = { Impact, Ward, Bloom, Venom, Swipe };
+    public static readonly string[] All = { Impact, Ward, Bloom, Venom, Swipe, Gash };
 
     // Seconds per frame. Four frames at this cadence is 0.24s, which sits
     // between the hit clip's 0.10 and the enemy turn's 0.35 pacing - long
     // enough to read as a beat, short enough that two hits in one card's
     // resolution do not queue up visibly.
     //
-    // One number for all four rather than a table keyed by effect: these are
-    // the same shape in four pigments (see fx.rs), so a per-effect dial would
-    // be a content knob for a difference that does not exist.
+    // One number for all four bursts rather than a table keyed by effect: they
+    // are the same shape in four pigments (see fx.rs), so a per-effect dial
+    // would be a content knob for a difference that does not exist. The two
+    // blades are the same argument again and share TravelFrameSeconds below.
     public const double FrameSeconds = 0.06;
 
-    // And a second number for the one run that travels, which is *not* the
+    // And a second number for the two runs that travel, which is *not* the
     // per-effect dial the paragraph above declines.
     //
     // For a stationary burst the cadence decides only how long the beat lasts.
@@ -75,7 +101,7 @@ public static class CombatFx
     // different kinds of number and collapsing them would mean choosing a
     // slash speed by editing every burst's duration.
     //
-    // 0.04 puts the swipe's whole run at 0.16s against Impact's 0.24s, and
+    // 0.04 puts a blade's whole run at 0.16s against Impact's 0.24s, and
     // TravelFraction lands it on the target at the drawn-edge frame so its
     // tail and motes dissipate *on* the enemy. Both matter: the two are
     // spawned in the same frame by PlayHitVfx, and a blade still in flight
@@ -107,6 +133,12 @@ public static class CombatFx
     // and every target is an EnemyView centre inside EnemyRow, so across one to
     // four enemies the vector only ever spans about -13 to -49 degrees. Eight
     // authored images, two of them ever seen.
+    //
+    // One orientation covers the *return* trip too, which is the same section's
+    // second wrong forecast. An enemy's vector spans 131 to 167 degrees, which
+    // is the identical undirected line, and fx.rs asserts every axial frame is
+    // symmetric under a half turn. So both blades are spawned through here and
+    // differ only in which frames the caller names.
     //
     // Tweening `position` is legal where tweening `scale` is not, and the
     // distinction is section 9's rather than an oversight in the guard: a

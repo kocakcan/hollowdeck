@@ -28,6 +28,30 @@ public abstract class Combatant
     // from RunManager.AutoSaveScreens, so a fight never outlives its session.
     public int HitsAbsorbed;
 
+    // How many hits have reached this combatant's HP, ever, this fight, and who
+    // dealt the last one. HitsAbsorbed's sibling, and it exists for the
+    // identical reason one level over: a falling HP bar is not a cause either,
+    // and CombatScreen.PopupDelta cannot tell an attack from a Poison tick,
+    // from a card that costs HP, or from Thorns billing the attacker.
+    //
+    // The pair is what makes it a cause. LastAttacker on its own goes stale the
+    // moment anything else takes HP - it would still name the last enemy that
+    // swung while the player was ticking down from Poison on their own turn -
+    // and the counter on its own says a hit landed without saying from where.
+    // Read together they answer "is this HP loss the hit that enemy dealt",
+    // which is the question CombatScreen.AttackerOf asks.
+    //
+    // Set in exactly one place, DealDamageEffect, gated on damage that got past
+    // Block. Nothing else in combat may write them: a hit Block ate whole is
+    // the ward burst's beat and not a blade's, and the other three in-combat HP
+    // losses (the Poison tick, LoseHpEffect, Thorns' direct subtraction) are
+    // deliberately none of this feature's business.
+    //
+    // Not serialized, because no Combatant is: Combat is deliberately absent
+    // from RunManager.AutoSaveScreens, so a fight never outlives its session.
+    public int HitsTaken;
+    public Combatant? LastAttacker;
+
     public int GetStatus(StatusType status) => Statuses.GetValueOrDefault(status, 0);
 
     public void AddStatus(StatusType status, int amount)

@@ -24,6 +24,20 @@ public class DealDamageEffect : IEffect
             // an absorbed hit from an expired one.
             if (absorbedByBlock > 0) target.HitsAbsorbed++;
 
+            // And the other half of that argument: the one place a hit reaches
+            // HP, so the view layer can tell an attack from every other way HP
+            // falls. See Combatant.HitsTaken - a blade is drawn from the
+            // attacker to the target, and a Poison tick has no attacker to draw
+            // it from. Gated on `unblocked` rather than on targetAmount for the
+            // same reason Plating is below: a hit Block ate whole already has a
+            // beat of its own, and it is the ward burst rather than a weapon
+            // crossing the gap.
+            if (unblocked > 0)
+            {
+                target.HitsTaken++;
+                target.LastAttacker = ctx.Source;
+            }
+
             // Thorns bills the attacker for the hit, and it deliberately fires
             // on the *attempt* rather than on damage getting through - a hit
             // fully eaten by Block still gets pricked, which is what makes

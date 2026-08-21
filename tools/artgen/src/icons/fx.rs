@@ -32,15 +32,25 @@
 //! something no other layer can see: `validate` reads finished pixels and
 //! cannot tell a burst from a blob, and the C# side can only count files.
 //!
-//! ## One shape, four pigments
+//! ## Two shapes, six pigments
 //!
-//! Every effect is the same four-beat `burst` — flash, ring, arms, motes —
-//! separated only by which ramp family it is drawn in. That is not laziness: a
-//! burst reads as *this landed here* and the colour is what says which kind of
-//! thing landed, exactly as `EnemyView`'s intent icons share one silhouette
+//! Four of the six are the same four-beat `burst` — flash, ring, arms, motes —
+//! separated only by which ramp family they are drawn in. That is not laziness:
+//! a burst reads as *this landed here* and the colour is what says which kind
+//! of thing landed, exactly as `EnemyView`'s intent icons share one silhouette
 //! budget. It is also the only way to keep four effects on the ramp without a
 //! tint, which is unavailable — `ModulateColor` multiplies, so a blue `impact`
 //! would land off §5 the same way a rarity-tinted 9-slice would.
+//!
+//! The other two are the same `swipe`, and they are the sharper instance of the
+//! same argument, because there the shared half is *forced* rather than chosen.
+//! A slash is drawn along an axis, and an axis is **undirected** — the player's
+//! attack vector spans about −13° to −49° and the enemy's spans 131° to 167°,
+//! which is the same line read from the other end. So `gash` cannot be a second
+//! *orientation* of `swipe`; there is nothing to reorient. What separates them
+//! is pigment alone, and `the_two_blades_share_a_shape_and_differ_in_pigment`
+//! pins both halves of that so the second run cannot quietly become a place to
+//! redraw the blade.
 
 use super::shapes::{finish, new_icon, GRID};
 use super::*;
@@ -86,6 +96,26 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "fx", name: "swipe_1", draw: swipe_1 },
         Icon { category: "fx", name: "swipe_2", draw: swipe_2 },
         Icon { category: "fx", name: "swipe_3", draw: swipe_3 },
+        // The same blade coming the other way. Oxblood rather than bone,
+        // and the pigment is the whole of the difference: the geometry is
+        // `swipe`'s, called with other colours, because the axis a slash is
+        // drawn along is *undirected* - the outbound band and the inbound one
+        // are the same line, so one silhouette already serves both.
+        //
+        // R is the family `impact` declined ("Ember rather than oxblood: R5 is
+        // the damage *number*"), which is exactly what recommends it here: the
+        // blade coming at the player is the colour of the number about to land
+        // on their own HP bar.
+        //
+        // Named `gash` because `rend` — the first choice — is already a move id
+        // on `rot_hound` in `enemies.json`, which is the rule at the top of this
+        // file catching something for the second time. An asset name that reads
+        // as a definition id makes a grep ambiguous about which is meant, and
+        // that is worth more here than the better verb.
+        Icon { category: "fx", name: "gash_0", draw: gash_0 },
+        Icon { category: "fx", name: "gash_1", draw: gash_1 },
+        Icon { category: "fx", name: "gash_2", draw: gash_2 },
+        Icon { category: "fx", name: "gash_3", draw: gash_3 },
     ]
 }
 
@@ -94,6 +124,18 @@ pub fn icons() -> Vec<Icon> {
 /// halves come out different widths, and 15 keeps the widest frame plus its
 /// outline inside the grid where 16 would clip it.
 const CX: i32 = GRID / 2 - 1;
+
+/// The radius of the `N8` core every run's opening frame carries — the flash
+/// `SpriteAnimator.FlashOpeningClips` declines under Reduce Motion.
+///
+/// Named because it is the one part of the set that is deliberately *not*
+/// per-effect: all four bursts and both blades open on it, so it is the colour
+/// two runs are allowed to share. `the_two_blades_share_a_shape_and_differ_in_pigment`
+/// reads this rather than exempting `N8` by name — `swipe` is drawn in bone
+/// throughout, so a colour-keyed exemption would quietly excuse a `gash`
+/// redrawn in the same family, which is the "tolerance that can contain a real
+/// answer" trap `light.rs`'s `GRAZING` already paid for once.
+const FLASH_CORE_RADIUS: i32 = 3;
 
 /// Frames per effect. Restated in `PixelSpecSmokeTest` and asserted against
 /// what is actually on disk, the way `anim.rs`'s clip table is.
@@ -120,7 +162,7 @@ fn burst(frame: usize, hot: Rgb, mid: Rgb, cool: Rgb) -> Canvas {
     match frame {
         0 => {
             canvas.disc(CX, CX, 6, hot);
-            canvas.disc(CX, CX, 3, N8);
+            canvas.disc(CX, CX, FLASH_CORE_RADIUS, N8);
         }
         1 => {
             canvas.ring(CX, CX, 9, 3, mid);
@@ -197,7 +239,7 @@ fn venom_1() -> Canvas { burst(1, P4, P3, P2) }
 fn venom_2() -> Canvas { burst(2, P4, P3, P2) }
 fn venom_3() -> Canvas { burst(3, P4, P3, P2) }
 
-/// The axis every `swipe` frame is drawn along: up and to the right, 45°.
+/// The axis every blade frame is drawn along: up and to the right, 45°.
 ///
 /// One orientation rather than the eight-direction set
 /// `docs/PIXEL_ART_ROADMAP.md` §5 forecast, and the reason is measured rather
@@ -215,6 +257,14 @@ fn venom_3() -> Canvas { burst(3, P4, P3, P2) }
 /// (-31°, which is this diagonal). Same argument `anim::Facing` makes one
 /// asset class over: one axis rather than four per-clip direction arguments,
 /// because everything that moves at all moves along it.
+///
+/// It is one constant for *both* blades, and that is the half `PIXEL_ART_ROADMAP`
+/// §5's deferral got wrong. It forecast that an enemy hitting the player "would
+/// be an authored second orientation rather than a reuse". An axis has no
+/// direction: 149° is the same line as −31°, and `bar` draws through the centre
+/// pixel in both directions at once, so every frame here is invariant under a
+/// half turn (`an_axial_run_is_unchanged_by_a_half_turn`). The incoming blade
+/// needed a colour, not a silhouette.
 const SWIPE: (f32, f32) = (std::f32::consts::FRAC_1_SQRT_2, -std::f32::consts::FRAC_1_SQRT_2);
 
 /// A bar of `weight` through the centre pixel, `half_len` either way along
@@ -260,7 +310,7 @@ fn swipe(frame: usize, hot: Rgb, mid: Rgb, cool: Rgb) -> Canvas {
     match frame {
         0 => {
             bar(&mut canvas, 6.0, 5, hot);
-            canvas.disc(CX, CX, 3, N8);
+            canvas.disc(CX, CX, FLASH_CORE_RADIUS, N8);
         }
         1 => {
             bar(&mut canvas, 10.0, 3, mid);
@@ -294,6 +344,11 @@ fn swipe_1() -> Canvas { swipe(1, N8, N7, N6) }
 fn swipe_2() -> Canvas { swipe(2, N8, N7, N6) }
 fn swipe_3() -> Canvas { swipe(3, N8, N7, N6) }
 
+fn gash_0() -> Canvas { swipe(0, R5, R4, R3) }
+fn gash_1() -> Canvas { swipe(1, R5, R4, R3) }
+fn gash_2() -> Canvas { swipe(2, R5, R4, R3) }
+fn gash_3() -> Canvas { swipe(3, R5, R4, R3) }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,6 +379,7 @@ mod tests {
             ("bloom", Shape::Radial, vec![bloom_0(), bloom_1(), bloom_2(), bloom_3()]),
             ("venom", Shape::Radial, vec![venom_0(), venom_1(), venom_2(), venom_3()]),
             ("swipe", Shape::Axial, vec![swipe_0(), swipe_1(), swipe_2(), swipe_3()]),
+            ("gash", Shape::Axial, vec![gash_0(), gash_1(), gash_2(), gash_3()]),
         ]
     }
 
@@ -465,6 +521,120 @@ mod tests {
             return f32::INFINITY;
         }
         along / across
+    }
+
+    /// One drawn axis serves travel in both directions, and this is the
+    /// property that makes that true rather than lucky.
+    ///
+    /// `CombatFx.PlayTravelling` carries a blade from the attacker to the
+    /// target, and it is spawned for both directions off one art set — the
+    /// player's vector spans about −13° to −49°, the enemy's 131° to 167°, and
+    /// those are the same undirected line. A frame that is symmetric under a
+    /// half turn therefore looks right coming and going. A frame that is *not*
+    /// — a hooked tip, a tail thicker at one end, a barb — points backwards
+    /// along exactly one of the two paths, and nothing else in this project
+    /// could say so: `validate` reads finished pixels, the C# side counts
+    /// files, and `a_swipe_is_drawn_along_its_axis` below is satisfied by any
+    /// long shape whatever.
+    ///
+    /// Measured about the bounding box rather than about `CX`, because the
+    /// bars are stamped weight-blocks and an even weight puts a run's true
+    /// centre on a half pixel (see `bar`'s `nudge`). What is being asserted is
+    /// that the shape has a centre of symmetry, not where it is.
+    #[test]
+    fn an_axial_run_is_unchanged_by_a_half_turn() {
+        for (name, shape, frames) in every_run() {
+            if !matches!(shape, Shape::Axial) {
+                continue;
+            }
+            for (i, frame) in frames.iter().enumerate() {
+                let pixels = body(frame);
+                let (min_x, max_x) = (
+                    pixels.iter().map(|p| p.0).min().unwrap(),
+                    pixels.iter().map(|p| p.0).max().unwrap(),
+                );
+                let (min_y, max_y) = (
+                    pixels.iter().map(|p| p.1).min().unwrap(),
+                    pixels.iter().map(|p| p.1).max().unwrap(),
+                );
+                let set: std::collections::HashSet<(i32, i32)> = pixels.iter().copied().collect();
+                let turned: std::collections::HashSet<(i32, i32)> = pixels
+                    .iter()
+                    .map(|(x, y)| (min_x + max_x - x, min_y + max_y - y))
+                    .collect();
+                assert_eq!(
+                    set, turned,
+                    "{name} frame {i} is not symmetric under a half turn - it points backwards \
+                     along one of the two directions CombatFx.PlayTravelling carries it"
+                );
+            }
+        }
+    }
+
+    /// `swipe` and `gash` are one blade in two pigments, and both halves of
+    /// that have to hold.
+    ///
+    /// Shared geometry is the point: the axis is undirected, so a second
+    /// *shape* would be a second answer to a question that has one. Different
+    /// pigment is the point too, and it is the only thing separating "the
+    /// player swung" from "something swung at the player" once the travel is
+    /// over. Drawn as two assertions rather than one because they fail
+    /// independently — a redrawn `gash` still differs in colour, and a `gash`
+    /// recoloured to bone still matches in shape.
+    ///
+    /// The flash core is excluded, and finding out why is what this assertion
+    /// was worth. Frame 0 of every run in this file — all four bursts and both
+    /// blades — opens on an `N8` disc, because that frame is the flash
+    /// `SpriteAnimator.FlashOpeningClips` declines under Reduce Motion. It is
+    /// the one thing the whole set shares by design.
+    ///
+    /// It is excluded by **position** rather than by colour, and the first
+    /// draft had that backwards. `swipe` is drawn in bone from end to end, so
+    /// its `hot` *is* `N8`: exempting the colour exempts most of the blade, and
+    /// a `gash` recoloured into the same family would have passed. Excluding
+    /// the `FLASH_CORE_RADIUS` disc excludes exactly the shared core and
+    /// nothing else.
+    #[test]
+    fn the_two_blades_share_a_shape_and_differ_in_pigment() {
+        let swipe = [swipe_0(), swipe_1(), swipe_2(), swipe_3()];
+        let gash = [gash_0(), gash_1(), gash_2(), gash_3()];
+        for i in 0..FRAMES {
+            assert_eq!(
+                body(&swipe[i]),
+                body(&gash[i]),
+                "swipe and gash differ in shape at frame {i} - the axis is undirected, so the \
+                 incoming blade is a pigment rather than a second silhouette"
+            );
+
+            let colours = |canvas: &Canvas| -> std::collections::HashSet<(u8, u8, u8)> {
+                body(canvas)
+                    .iter()
+                    .filter(|(x, y)| {
+                        // Canvas::disc's own test, `+ 0.25` included: measuring
+                        // the core with a tighter radius than the one that drew
+                        // it leaves its outermost pixels in the comparison, and
+                        // they are N8 in both runs.
+                        let limit = (FLASH_CORE_RADIUS as f32 + 0.25).powi(2);
+                        let (dx, dy) = ((x - CX) as f32, (y - CX) as f32);
+                        dx * dx + dy * dy > limit
+                    })
+                    .map(|(x, y)| {
+                        let pixel = canvas.get(*x, *y);
+                        (pixel.0, pixel.1, pixel.2)
+                    })
+                    .collect()
+            };
+            let shared: Vec<_> = colours(&swipe[i])
+                .intersection(&colours(&gash[i]))
+                .copied()
+                .collect();
+            assert!(
+                shared.is_empty(),
+                "swipe and gash share {shared:?} at frame {i} - with the shape shared, the \
+                 pigment is the whole of how the two blades read apart (the flash core every \
+                 run opens on is excluded by position, not by colour)"
+            );
+        }
     }
 
     /// A swipe is a line and a burst is not, and neither half of that is

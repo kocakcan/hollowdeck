@@ -136,55 +136,88 @@ public partial class AnimationScreenshot : Node
             stale.QueueFree();
         }
 
-        await SnapshotTheSwipeInFlight(combat);
+        await SnapshotTheBladesInFlight(combat);
 
         SettingsManager.Instance.SetReduceMotion(reduceMotion, scratch);
         if (Godot.FileAccess.FileExists(scratch)) DirAccess.RemoveAbsolute(scratch);
     }
 
-    // The swipe, laid out along the path it actually takes.
+    // Both blades, each laid out along the path it actually takes.
     //
-    // It is the one effect whose direction comes from *motion* rather than from
-    // the art (CombatFx.PlayTravelling), which makes it the one effect a
-    // single still cannot show at all: a frame of it is a bar on a diagonal,
-    // and what the player reads is that bar crossing the board. A tween also
-    // cannot be stepped the way _Process can, so waiting for one would be the
-    // same unreliable clock the sheet above exists to avoid.
+    // They are the two effects whose direction comes from *motion* rather than
+    // from the art (CombatFx.PlayTravelling), which makes them the two a single
+    // still cannot show at all: a frame is a bar on a diagonal, and what the
+    // player reads is that bar crossing the board. A tween also cannot be
+    // stepped the way _Process can, so waiting for one would be the same
+    // unreliable clock the sheet above exists to avoid.
     //
-    // So this spawns four travelling swipes whose *origins* are the four points
-    // the real tween passes through, and ticks the i-th to its i-th frame. The
-    // line is the live geometry - CombatScreen pins PlayerSprite at canvas
-    // (120, 350) and an EnemyView centre sits in the row above it - so what is
-    // photographed is the path the game takes, not an arrangement chosen to
-    // look good.
-    private async System.Threading.Tasks.Task SnapshotTheSwipeInFlight(Node combat)
+    // So this spawns four travelling runs per blade whose *origins* are the
+    // points the real tween passes through, and ticks the i-th to its i-th
+    // frame. The lines are live geometry - CombatScreen pins PlayerSprite at
+    // canvas (120, 350) and every target is an EnemyView centre inside EnemyRow
+    // - so what is photographed is the path the game takes, not an arrangement
+    // chosen to look good. Together they are the only view in the project of the
+    // thing this feature turns on: one drawn axis, two directions of travel,
+    // told apart by pigment alone. fx.rs asserts the shape is shared and the
+    // colours are not; nothing but these two frames says whether oxblood reads
+    // against the backdrop.
+    //
+    // One shot each, and they cannot share one. The whole point of the pair is
+    // that the two vectors are the same undirected *line*, so laid out together
+    // they overlap along their length and collide outright at the player, who
+    // is an endpoint of both. Photographed that way the outgoing blade's
+    // opening flash sits under the incoming blade's motes, which is a picture
+    // of the two runs interfering rather than of either one. Two frames of film
+    // cost nothing; a still that has to be explained costs the shot.
+    //
+    // Different enemy slots, deliberately: the outgoing goes to the middle of
+    // the row (about -34 degrees) and the incoming comes from its right-hand end
+    // (about 167, i.e. -13 read as a line), which is most of the band the one
+    // authored axis has to cover.
+    private async System.Threading.Tasks.Task SnapshotTheBladesInFlight(Node combat)
     {
-        var from = new Vector2(120, 350);
-        var to = new Vector2(576, 170);
+        var player = new Vector2(120, 350);
 
+        LayBladeAlongItsPath(combat, player, new Vector2(576, 170), CombatFx.Swipe);
+        KillEveryTween();
+        await Snapshot("user://anim_04_swipe_in_flight.png");
+
+        foreach (var stale in combat.GetChildren().OfType<TextureRect>()
+                     .Where(r => r.GetChildren().OfType<SpriteAnimator>().Any()))
+        {
+            stale.QueueFree();
+        }
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        LayBladeAlongItsPath(combat, new Vector2(876, 170), player, CombatFx.Gash);
+        KillEveryTween();
+        await Snapshot("user://anim_05_gash_in_flight.png");
+    }
+
+    // Every live tween, killed before a blade shot. The travel tweens would
+    // otherwise carry all four rects to the target and stack them on one point -
+    // which is exactly the "it worked perfectly and photographed nothing"
+    // failure the sheet above records, arriving through the one channel that
+    // sheet does not have. Killing the lot rather than filtering is deliberate:
+    // these are the last shots in the run, and an enemy's idle pulse frozen
+    // mid-cycle is one less thing making the image non-deterministic.
+    private void KillEveryTween()
+    {
+        foreach (var tween in GetTree().GetProcessedTweens()) tween.Kill();
+    }
+
+    // One blade's four frames, stepped along the line it travels.
+    private static void LayBladeAlongItsPath(Node combat, Vector2 from, Vector2 to, string blade)
+    {
         for (int i = 0; i < 4; i++)
         {
-            var at = from.Lerp(to, i / 3f);
-            CombatFx.PlayTravelling(combat, at, to, CombatFx.Swipe);
+            CombatFx.PlayTravelling(combat, from.Lerp(to, i / 3f), to, blade);
 
             var rect = combat.GetChildren().OfType<TextureRect>().LastOrDefault();
             var animator = rect?.GetChildren().OfType<SpriteAnimator>().FirstOrDefault();
             for (int frame = 0; frame < i; frame++) animator?._Process(CombatFx.TravelFrameSeconds);
             animator?.SetProcess(false);
-
         }
-
-        // Every live tween, killed before the shot. The travel tweens would
-        // otherwise carry all four rects to the target and stack them on one
-        // point - which is exactly the "it worked perfectly and photographed
-        // nothing" failure the sheet above records, arriving through the one
-        // channel that sheet does not have. Killing the lot rather than
-        // filtering is deliberate: this is the last shot in the run, and an
-        // enemy's idle pulse frozen mid-cycle is one less thing making the
-        // image non-deterministic.
-        foreach (var tween in GetTree().GetProcessedTweens()) tween.Kill();
-
-        await Snapshot("user://anim_04_swipe_in_flight.png");
     }
 
     private async System.Threading.Tasks.Task Snapshot(string path)
