@@ -437,12 +437,12 @@ public static class ScreenBackground
 
     private static Texture2D BuildGroundPlane()
     {
-        var gradient = new Gradient
+        var gradient = new Gradient // ART_SPEC-3-exception: lighting, not art
         {
             Offsets = new float[] { 0f, 0.6f, 1f },
             Colors = new Color[] { new(0, 0, 0, 0), new(0, 0, 0, 0), new(0, 0, 0, 0.45f) },
         };
-        return new GradientTexture2D
+        return new GradientTexture2D // ART_SPEC-3-exception: the ground plane is lighting, not art
         {
             Gradient = gradient,
             Fill = GradientTexture2D.FillEnum.Linear,
@@ -514,12 +514,12 @@ public static class ScreenBackground
     // the Ember Reach read as somewhere else.
     private static Texture2D BuildVignette(Color edge, float edgeAlpha)
     {
-        var gradient = new Gradient
+        var gradient = new Gradient // ART_SPEC-3-exception: lighting, not art
         {
             Offsets = new float[] { 0.55f, 1f },
             Colors = new Color[] { new(edge.R, edge.G, edge.B, 0f), new(edge.R, edge.G, edge.B, edgeAlpha) },
         };
-        return new GradientTexture2D
+        return new GradientTexture2D // ART_SPEC-3-exception: the vignette is lighting, not art
         {
             Gradient = gradient,
             Fill = GradientTexture2D.FillEnum.Radial,

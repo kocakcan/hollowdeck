@@ -814,7 +814,7 @@ property a pixel asset may be tweened on. Enemy and player sprites are the one *
 were the second until §12, and their CC0 entry is now in that file's *Retired* section. There is **no
 `artgen` on `PATH`** and no `tools/artgen` wrapper — always invoke it through `cargo run`.
 
-The full pipeline — artgen's three subcommands and how to add an icon, the four combat FX frame
+The full pipeline — artgen's three subcommands and how to add an icon, the five combat FX frame
 sets, the `chrome` 9-slice output-dir rule, the derived-light rule, creature sprite animation and
 `GlowRing` — is in the **`pixel-art` skill**.
 
@@ -956,8 +956,13 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   node it can flee — otherwise emptying the board scores as a Win, pays out in full, and rewards the
   slow deck the move was written to punish
 - `scenes/CombatScreen.tscn` — card drag/hover/targeting
-- `scripts/ui/CombatFx.cs` — the four combat effect bursts, and the single place a burst is
-  positioned, sized and freed. The registry (`CombatFx.All`) is what `PixelSpecSmokeTest` drives, so
+- `scripts/ui/CombatFx.cs` — the five combat effect runs, and the single place one is positioned,
+  sized and freed. Four burst in place; `swipe` **travels** (`PlayTravelling` tweens `position`
+  between two snapped endpoints while the frames play), which is what let the slash trail be one
+  authored orientation instead of the eight-direction set the roadmap forecast — the attacker is
+  pinned and the targets are one row above it, so the whole fight spans −13° to −49°. A travelling
+  run therefore has its own cadence: for a burst the frame time is only a duration, for this one it
+  is also a speed. The registry (`CombatFx.All`) is what `PixelSpecSmokeTest` drives, so
   a fifth effect is one entry rather than a name retyped in a test
 - `scripts/ui/SpriteAnimator.cs` — the one frame-swap driver, for creature clips and effect bursts
   alike. `Attach` resolves frames from a sprite id and needs an `idle`; `AttachOneShot` takes frames
@@ -981,7 +986,14 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   argument-free entry points that are the only way to attach one. Also the two drifting haze layers
   (`Motion.Drift`, ungated on `ReduceMotion` per the gate-the-flash-not-the-loop rule) and the dust
   motes, whose `CpuParticles2D` was a smooth-gradient §2/§3/§5 violation for six phases in the one
-  spot neither the transform scan nor `artgen validate` can reach
+  spot neither the transform scan nor `artgen validate` can reach. **Four things have now shipped
+  through that gap** — the hit spark, those motes, the two creature contact shadows and the slash
+  trail — so it is a hole rather than a run of accidents, and
+  `PixelSpecSmokeTest.TestNothingDrawsSmoothArt` is what now sits in it: a scan keyed to the
+  *construct* (gradients, `Line2D`, `Polygon2D`, particle nodes, `antialiased: true`) across all of
+  `scripts/`, whose only exemption is the marker `ART_SPEC-3-exception` on the line itself. Do not
+  widen it to the canvas `Draw*` family — a hard-edged integer-width on-ramp stroke is pixel art,
+  and banning the primitive failed `MapScreen`'s connectors on the commit that fixed them
 - `tools/artgen/src/icons/backgrounds.rs` — the twenty-one pieces, and the only category that breaks
   the grid, the location *and* the naming at once. Its Rust tests hold what `validate` is blind to:
   seam continuity per band, a pillar's transparency, and the per-band contrast budget

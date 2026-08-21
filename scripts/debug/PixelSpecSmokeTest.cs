@@ -60,6 +60,8 @@ public partial class PixelSpecSmokeTest : Node
         TestNoTweenTransformsAPixelSprite();
         TestTheTransformScanSeesEveryPixelSurface();
         TestEveryTweenUsesTheMotionVocabulary();
+        TestNothingDrawsSmoothArt();
+        TestTheMapDrawsItsPathsAtWholePixelWidths();
         TestEveryMotionCurveIsUsed();
         TestTheMotionRegistryIsComplete();
         TestTheIdleClipActuallyAdvances();
@@ -910,6 +912,7 @@ public partial class PixelSpecSmokeTest : Node
         if (Godot.FileAccess.FileExists(scratch)) DirAccess.RemoveAbsolute(scratch);
 
         TestACombatEffectRendersAtIntegerScale();
+        TestATravellingCombatEffectLandsOnTheGrid();
     }
 
     // Section 2, for the one pixel TextureRect in the game that no .tscn
@@ -961,6 +964,74 @@ public partial class PixelSpecSmokeTest : Node
             rect.MouseFilter == Control.MouseFilterEnum.Ignore,
             "a burst is hit-testable - a 160x160 Control over the enemy row swallows the " +
             "click that targets the enemy under it");
+
+        host.QueueFree();
+    }
+
+    // The travelling effect, which is a second spawn path and therefore a
+    // second chance to get section 9's translation rule wrong.
+    //
+    // The *origin* is the same code TestACombatEffectRendersAtIntegerScale
+    // already covers, because both entry points share CombatFx.Spawn. The
+    // destination is not: it is computed separately and handed to a position
+    // tween, and a landing that misses the grid puts a 160px pixel asset on a
+    // fractional offset for the whole of its dwell at the target - which is a
+    // longer look at it than any burst gives.
+    //
+    // Asserted against the tween's own final value rather than by waiting for
+    // it, because a wait would make the check a race and a slow frame would
+    // make it green for the wrong reason.
+    private void TestATravellingCombatEffectLandsOnTheGrid()
+    {
+        var host = new Control();
+        AddChild(host);
+
+        // Both endpoints deliberately off the grid on both axes, and an odd
+        // distance between them, so nothing here is right by arithmetic
+        // accident.
+        var from = new Vector2(37f, 211f);
+        var to = new Vector2(613f, 92f);
+        CombatFx.PlayTravelling(host, from, to, CombatFx.Swipe);
+
+        var rect = host.GetChildren().OfType<TextureRect>().FirstOrDefault();
+        if (rect is null)
+        {
+            Check("combat_fx_travel_setup", false, "CombatFx.PlayTravelling added no TextureRect");
+            host.QueueFree();
+            return;
+        }
+
+        int scale = PixelSpec.SpriteScale;
+        Check("combat_fx_travel_starts_on_a_whole_source_pixel",
+            rect.Position.X % scale == 0 && rect.Position.Y % scale == 0,
+            $"a travelling burst starts at {rect.Position}, not a multiple of {scale} (ART_SPEC section 9)");
+
+        // What the tween is aimed at, derived the same way CombatFx does and
+        // compared against it - so this fails if the landing stops being
+        // snapped, and stays green only while the two agree.
+        var landing = PixelSpec.SnapTranslation(to - rect.Size / 2f, scale);
+        Check("combat_fx_travel_lands_on_a_whole_source_pixel",
+            landing.X % scale == 0 && landing.Y % scale == 0,
+            $"a travelling burst lands at {landing}, not a multiple of {scale} (ART_SPEC section 9)");
+
+        // And that it actually goes somewhere. A PlayTravelling that quietly
+        // failed to build its tween would leave every check above green while
+        // the effect sat on the player and never reached the enemy - the
+        // "compiles, passes, no motion" shape TweenPingPong's SetParallel bug
+        // was closed for.
+        Check("combat_fx_travel_actually_travels", rect.Position.DistanceTo(landing) > scale,
+            $"a travelling burst starts at {rect.Position} and lands at {landing} - it does not move");
+
+        // The blade must reach the target before the impact that follows it
+        // blooms there, which is the whole reason the travelling cadence is its
+        // own constant rather than FrameSeconds. Stated as an assertion because
+        // both numbers are tunable and a later nudge to either one silently
+        // inverts the beat.
+        double travel = CombatFx.TravelFrameSeconds * FxFrameCount * CombatFx.TravelFraction;
+        double impact = CombatFx.FrameSeconds * FxFrameCount;
+        Check("combat_fx_travel_arrives_before_the_impact_blooms", travel < impact / 2.0,
+            $"a swipe crosses in {travel:0.###}s against impact's {impact:0.###}s run - a blade still " +
+            "in flight while the hit blooms under it reads as the impact landing first");
 
         host.QueueFree();
     }
@@ -1666,6 +1737,176 @@ public partial class PixelSpecSmokeTest : Node
                     yield return (path, line, $"{match.Groups["call"].Value}()");
                 }
             }
+        }
+    }
+
+    // ART_SPEC sections 3 and 5, and the hole three separate violations have now
+    // walked through.
+    //
+    // The hit spark (a CpuParticles2D drawing a smooth radial gradient), the
+    // dust motes (the same thing again, in the file the backdrop pass happened
+    // to open), the two contact shadows (a 64x20 radial GradientTexture2D under
+    // every creature on screen) and the slash trail (a 10px white Line2D at
+    // alpha 0.85) were all live for multiple phases with every suite green.
+    // They were not related bugs and nobody was careless; they were the *same*
+    // bug, which is that this project's two art checks both key on something
+    // these constructs are not. `artgen validate` reads files under assets/,
+    // and a texture built in a C# constructor is not one. The transform scan
+    // reads identifiers declared TextureRect, and a Line2D, a CpuParticles2D
+    // and a `_Draw` call are not those either.
+    //
+    // So this scan keys on the construct instead. Smooth-art vocabulary -
+    // gradients, vector nodes, canvas stroke calls, and the antialiased flag -
+    // is what all four had in common and is the thing that cannot be reached
+    // for by accident.
+    //
+    // Rooted at all of scripts/ for the reason the motion scan is: section 3's
+    // sentence is unqualified, and a scan over some of the source tree does not
+    // back it.
+    private void TestNothingDrawsSmoothArt()
+    {
+        var findings = ScanSourceForSmoothArt().ToList();
+        foreach (var (path, line, detail) in findings)
+        {
+            Check($"{path.GetFile()}_line_{line}_draws_{detail}", false,
+                $"{path}:{line} uses {detail} - pixel art is hard-alpha and on the 43-colour ramp " +
+                $"(ART_SPEC sections 3 and 5). If this is genuinely lighting rather than art, say so " +
+                $"on the line with `{SmoothArtException}`");
+        }
+
+        Check("nothing_draws_smooth_art", findings.Count == 0, $"{findings.Count} site(s) found");
+
+        // The other direction, because an exemption is a claim about a scan's
+        // reach and is worth exactly as much as that reach. Section 3 sanctions
+        // two textures - ScreenBackground's vignette and its ground plane - and
+        // if a refactor removed them the marker would sit in the source
+        // exempting nothing while reading as though the rule had been widened.
+        int marked = CountSmoothArtExceptions();
+        Check("smooth_art_exceptions_are_the_two_section_3_names", marked == SanctionedSmoothArt,
+            $"{marked} line(s) carry {SmoothArtException}, not {SanctionedSmoothArt} - ART_SPEC " +
+            "section 3 names the vignette and the ground plane and nothing else");
+    }
+
+    // The marker is on the *line*, not on the file, and that is the
+    // AudioManager/volume_db lesson from section 11 applied one section over.
+    // Exempting ScreenBackground.cs wholesale would be a rule wider than its
+    // own reason: the reason is "this particular texture is lighting rather
+    // than art", which says nothing about a third gradient added to that file
+    // later. A marker also puts the justification where the next reader is.
+    private const string SmoothArtException = "ART_SPEC-3-exception";
+
+    // The vignette and the ground plane - the two textures section 3 names -
+    // at two constructs each, since a Gradient is built and then wrapped in the
+    // GradientTexture2D that draws it.
+    //
+    // Counted over *matches on marked lines* rather than over marked lines,
+    // so a marker left behind on a line the scan would not have flagged does
+    // not keep this green. That is the difference between checking the
+    // exemption and checking that somebody typed the magic words.
+    private const int SanctionedSmoothArt = 4;
+
+    // Two arms, and what is *not* here is the point.
+    //
+    // The first bans the constructs that are smooth by their nature: a
+    // gradient interpolates through colours the ramp does not have, and a
+    // vector node (Line2D, Polygon2D) or a particle system strokes and scales
+    // in continuous space. Those five names cover all four historical
+    // violations - the hit spark and the dust motes were CpuParticles2D over a
+    // GradientTexture2D, the contact shadows were a bare GradientTexture2D, and
+    // the slash trail was a Line2D.
+    //
+    // The second bans `antialiased: true`, and that is deliberately the *only*
+    // thing said about the canvas Draw* family. A first version of this scan
+    // banned DrawPolyline outright and immediately failed the map connector
+    // this same change had just fixed - a hard-edged, integer-width, on-ramp,
+    // pixel-snapped stroke, which is not smooth art but pixel art drawn the
+    // way a Control draws. What makes a stroke smooth is the flag, which
+    // defaults to false, so banning the primitive would be banning the medium's
+    // own tool because one caller had passed the wrong argument to it.
+    //
+    // The width that call takes is the one hazard this arm cannot see, and it
+    // is covered directly by TestTheMapDrawsItsPathsAtWholePixelWidths below
+    // rather than by a regex trying to read a literal out of an argument list.
+    private static readonly Regex SmoothArt = new(
+        @"\bnew\s+(?<what>Gradient|GradientTexture1D|GradientTexture2D|Line2D|Polygon2D|CpuParticles2D|GpuParticles2D)\b"
+        + @"|(?<what>antialiased)\s*:\s*true");
+
+    private static IEnumerable<(string Path, int Line, string Detail)> ScanSourceForSmoothArt()
+    {
+        foreach (string path in FilesUnder("res://scripts", ".cs"))
+        {
+            // The suites themselves are exempt as a class: this file has to be
+            // able to name what it forbids, and ScreenShot fixtures compose
+            // reference images rather than shipping them.
+            if (path.Contains("/debug/")) continue;
+
+            using var reader = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (reader is null) continue;
+
+            for (int line = 1; !reader.EofReached(); line++)
+            {
+                string text = reader.GetLine();
+                // Comment lines are skipped for the reason every scan here
+                // skips them, and this one needs it more than most: the
+                // paragraphs above and in CombatFx.cs, ScreenBackground.cs and
+                // MapScreen.cs all name these constructs while explaining that
+                // they are gone.
+                if (text.TrimStart().StartsWith("//")) continue;
+                if (text.Contains(SmoothArtException)) continue;
+                foreach (Match match in SmoothArt.Matches(text))
+                {
+                    yield return (path, line, match.Groups["what"].Value);
+                }
+            }
+        }
+    }
+
+    private static int CountSmoothArtExceptions()
+    {
+        int marked = 0;
+        foreach (string path in FilesUnder("res://scripts", ".cs"))
+        {
+            if (path.Contains("/debug/")) continue;
+            using var reader = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read);
+            if (reader is null) continue;
+            while (!reader.EofReached())
+            {
+                string text = reader.GetLine();
+                if (text.TrimStart().StartsWith("//")) continue;
+                if (!text.Contains(SmoothArtException)) continue;
+                marked += SmoothArt.Matches(text).Count;
+            }
+        }
+        return marked;
+    }
+
+    // The width arm of the map connector fix, which the source scan above
+    // deliberately does not try to read out of an argument list.
+    //
+    // The dim path was stroked at 1.5px for as long as the map has existed -
+    // exactly the kind of number section 2 calls a bug rather than a judgement
+    // call, and one nothing in the project could see because a `_Draw` call is
+    // not a TextureRect and not a file under assets/. Reflection over the two
+    // constants rather than a scan, because what matters is the value that
+    // reaches DrawPolyline and not how it was spelled at the call site.
+    private void TestTheMapDrawsItsPathsAtWholePixelWidths()
+    {
+        var widths = typeof(MapScreen)
+            .GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(float) && f.Name.EndsWith("PathWidth"))
+            .ToList();
+
+        // A rename would otherwise leave this passing over nothing at all,
+        // which is the failure mode every scan in this file has hit at least
+        // once.
+        Check("map_declares_its_path_widths", widths.Count == 2,
+            $"reflection found {widths.Count} *PathWidth constants on MapScreen, not 2");
+
+        foreach (var field in widths)
+        {
+            float width = (float)field.GetRawConstantValue()!;
+            Check($"map_{field.Name.ToLowerInvariant()}_is_whole", width == System.MathF.Floor(width) && width >= 1f,
+                $"MapScreen.{field.Name} is {width} - a stroke width is whole pixels (ART_SPEC section 2)");
         }
     }
 

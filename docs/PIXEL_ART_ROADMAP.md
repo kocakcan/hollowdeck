@@ -23,7 +23,13 @@ creatures were the only thing animating and silently stopped being true the mome
 effect set existed. That sentence has been widened rather than quietly restated, since a document
 describing a rule the code has outgrown reads exactly like one describing a rule it never met.
 
-§7 closes the file. It is the one entry whose first, complete, tested implementation was simply the
+§7 closed the file, and §5's own deferral has since reopened it — the slash trail, which turned out
+to be the fourth thing through one hole rather than the last item on a list. Its entry is the
+sharpest instance of this document's thesis so far, because the forecast written here was not merely
+incomplete: it was *checkable and wrong*, and five minutes with a scene file was the whole
+investigation nobody had done.
+
+§7 was the one entry whose first, complete, tested implementation was simply the
 wrong thing — nine better tiles for seven worse ones, changing nothing, because the problem was
 composition and a tile cannot have any. Worth carrying with the three below: **the failures this
 document keeps recording are failures of knowing what is broken, not of building it.**
@@ -392,10 +398,68 @@ anything going red:
   fixed 30-frame budget now, which turns "does it advance" into "does it finish", and the second is
   the question worth asking.
 
-**What is deferred, and stated so it is not mistaken for finished:** `PlaySlashTrail` is still a
-white `Line2D`. A streak spans player→enemy at an arbitrary angle and §2 forbids rotating a pixel
-asset, so replacing it needs an authored 8-direction set plus angle-bucketing at the call site —
-a different rule from the one every burst here follows, and one none of them needed.
+### The slash trail — **shipped**, and the forecast above it was wrong
+
+The paragraph this replaced read: *"`PlaySlashTrail` is still a white `Line2D`. A streak spans
+player→enemy at an arbitrary angle and §2 forbids rotating a pixel asset, so replacing it needs an
+authored 8-direction set plus angle-bucketing at the call site."* Two of those three clauses are
+false, and the third cites the wrong section — the rotation ban is §9's, not §2's.
+
+**The angle is not arbitrary, and five minutes with the scene file said so.** `CombatScreen.tscn`
+pins `PlayerSprite` at canvas centre `(120, 350)`; every target is an `EnemyView` centre inside
+`EnemyRow` (`176..976 × 20..330`). Across one to four enemies the attack vector spans about
+**−13° to −49°** — one and a half octants, never down and never left. An eight-way set would have
+authored eight images and ever shown two, which is the "authored and never seen" trap `CLAUDE.md`
+already names about a Rare potion at the card weights.
+
+So the answer was not eight orientations, it was **one, plus motion**. `CombatFx.PlayTravelling`
+tweens the frame run from the attacker to the target between two `SnapTranslation`'d endpoints, so
+the direction the player reads is the direction the sprite actually goes and the art only has to
+agree with the mean of the band. That is `anim::Facing`'s argument one asset class over — *one axis
+rather than four per-clip direction arguments, because everything that moves at all moves along it*
+— and it is legal because §9 bans transforms, not translations.
+
+Five things came out of it:
+
+- **`swipe` is the fifth run and the first that travels**, which is why it has its own cadence.
+  For a stationary burst the frame time decides only how long the beat lasts; for a travelling one
+  it also decides how fast the thing crosses, so collapsing the two would mean choosing a slash
+  speed by editing every burst's duration. That the swipe *lands before `impact` blooms* under it is
+  an assertion rather than a comment, because both numbers are tunable and a nudge to either one
+  inverts the beat silently — a blade still in flight while the hit blooms reads as the impact
+  landing first.
+- **The Rust rules needed a fifth that runs in both directions.** The four `burst` rules were all
+  satisfiable by a shape drawn round, so a swipe redrawn as a disc would have left the tween
+  carrying the whole claim. `fx.rs` declares per run whether it is drawn about a *point* or along an
+  *axis* — `backgrounds.rs`'s per-band tiling rule in another shape — and asserts both, since a
+  burst that drifted into a bar would be quietly aiming a beat the call site positions by its
+  centre. Measured gap: bursts 0.94–1.00, swipe 3.00–10.50.
+- **The guard is the half that generalises, and the slash was the *fourth* thing through that hole.**
+  The hit spark (§5), the dust motes (§7), the two contact shadows and this trail were all live for
+  multiple phases with every suite green — not four careless edits but one blind spot, because both
+  art checks key on something these constructs are not. `artgen validate` reads files under
+  `assets/`; the transform scan reads identifiers declared `TextureRect`. A scan keyed to the
+  *construct* (`TestNothingDrawsSmoothArt`) is what sits between them, and its exemption is a marker
+  on the line rather than a file in a list, per §6's `AudioManager`/`volume_db` lesson.
+- **Its first version failed the thing this same change had just fixed.** It banned `DrawPolyline`
+  outright and went red on `MapScreen`'s rewritten connectors — hard-edged, integer-width, on-ramp,
+  pixel-snapped, i.e. pixel art drawn the way a `Control` draws. What makes a stroke smooth is the
+  `antialiased` flag, which defaults to false. **A guard that bans the medium's own tool because one
+  caller passed the wrong argument is not a stricter guard, it is a wrong one** — and the honest
+  tell was that the false positive was code written that hour to *satisfy* the rule.
+- **The two contact shadows had been invisible for as long as the backdrop has existed**, which is
+  why nobody had reported them. `ScreenBackground` moves its bands to the front of the child list, so
+  they paint at z 0 before everything else; both `Shadow` nodes carried `z_index = -1`, which puts
+  them *behind* that opaque masonry. The smooth-gradient violation was real and the feature it
+  violated for had never once rendered. Found by painting the texture `R5` and scanning the
+  screenshot for red — nothing. That is the sharper half of the lesson: **the check that a thing is
+  drawn correctly and the check that it is drawn at all are different checks**, and this project had
+  neither.
+
+**What is deferred, and stated so it is not mistaken for finished:** the swipe fires only on
+player→enemy damage. An enemy hitting the player still gets a shake and no directional beat, which
+is the mirror of this art and would be an authored second orientation rather than a reuse — the
+axis argument gives one orientation per direction of travel, not one for both.
 
 ## 6. An easing vocabulary — **shipped**
 

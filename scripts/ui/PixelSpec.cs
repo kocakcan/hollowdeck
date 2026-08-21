@@ -127,6 +127,95 @@ public static class PixelSpec
         rect.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
     }
 
+    // The contact shadow under a creature sprite, built once and shared.
+    //
+    // Both EnemyView and CombatScreen had a byte-identical private copy of a
+    // BuildShadowTexture that returned a 64x20 radial GradientTexture2D from
+    // black at alpha 0.55 to transparent. That is a smooth gradient against
+    // section 5's ramp and a soft mask edge against section 3, sitting directly
+    // under the 5x sprites - the most pixel-dense spot on the screen - and it
+    // was outside section 3's named exception list, which covers exactly two
+    // textures and both of them in ScreenBackground.
+    //
+    // Translucency comes from an ordered dither rather than from partial alpha,
+    // which is what section 3 leaves available and what the medium does anyway:
+    // every pixel here is fully opaque or fully absent. anim.rs's `dissolve`
+    // makes the same trade one asset class over, and for the same reason - a
+    // fixed lattice is deterministic, so the same shadow comes out of every
+    // call and CI has something stable to diff.
+    //
+    // It is not tinted per act. A shadow is an absence of light rather than a
+    // material, which is the one thing ScreenBackground's per-act rule already
+    // exempts fire and gold for, arriving from the other direction.
+    private static Texture2D? _contactShadow;
+
+    // 4x4 ordered (Bayer) threshold. Sixteen levels is enough for a falloff
+    // this short and small enough that the pattern reads as texture rather than
+    // as a second shape.
+    private static readonly int[,] DitherThreshold =
+    {
+        { 0, 8, 2, 10 },
+        { 12, 4, 14, 6 },
+        { 3, 11, 1, 9 },
+        { 15, 7, 13, 5 },
+    };
+
+    public const int ContactShadowWidth = 64;
+    public const int ContactShadowHeight = 20;
+
+    // Levels the 4x4 lattice resolves, and how far in from the rim the shadow
+    // goes solid.
+    //
+    // Without the boost, coverage reaches 1 only at the exact centre - the
+    // ellipse is 20px tall, so one row off centre is already a tenth of the
+    // way to the rim - and the whole shadow comes out as an even 28% stipple
+    // with no core. 1.4 puts about a third of it solid, which is what makes it
+    // read as a creature standing on the floor rather than as noise on it.
+    private const int DitherLevels = 16;
+    private const float CoreBoost = 1.4f;
+
+    public static Texture2D ContactShadow()
+    {
+        if (_contactShadow is { } cached) return cached;
+
+        var image = Image.CreateEmpty(ContactShadowWidth, ContactShadowHeight, false, Image.Format.Rgba8);
+        image.Fill(new Color(0f, 0f, 0f, 0f));
+
+        // N0, the darkest entry on the ramp, and that is measured rather than
+        // chosen. A dithered opaque pixel *replaces* what is under it where the
+        // gradient it stands in for *darkened* it, so the ink has to be darker
+        // than the darkest floor or the shadow simply vanishes: act I's floor
+        // samples at (20, 26, 36) and N1 is (18, 16, 15), near enough the same
+        // weight to be invisible. Shot and compared before it was believed.
+        var ink = Ramp.N0;
+        float halfWidth = ContactShadowWidth / 2f;
+        float halfHeight = ContactShadowHeight / 2f;
+
+        for (int y = 0; y < ContactShadowHeight; y++)
+        {
+            for (int x = 0; x < ContactShadowWidth; x++)
+            {
+                float dx = (x + 0.5f - halfWidth) / halfWidth;
+                float dy = (y + 0.5f - halfHeight) / halfHeight;
+                // Elliptical distance, so a 64x20 box reads as an ellipse and
+                // not as a circle the box happens to have squashed - which is
+                // what the gradient's FillTo of (1, 0.5) was doing by hand.
+                float coverage = CoreBoost * (1f - MathF.Sqrt(dx * dx + dy * dy));
+                if (coverage <= 0f) continue;
+
+                // Solid at the centre, thinning to nothing at the rim. The
+                // comparison is against the *next* threshold up so a coverage
+                // of exactly 1 fills every cell of the lattice.
+                if (coverage * DitherLevels > DitherThreshold[y % 4, x % 4])
+                {
+                    image.SetPixel(x, y, ink);
+                }
+            }
+        }
+
+        return _contactShadow = ImageTexture.CreateFromImage(image);
+    }
+
     // The shared 43-color ramp (section 5). Seven hue families, each
     // hue-shifted rather than a straight lightness ramp - shadows toward
     // blue/violet, highlights toward yellow - which is what stops pixel art

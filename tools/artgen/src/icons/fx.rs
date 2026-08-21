@@ -76,6 +76,16 @@ pub fn icons() -> Vec<Icon> {
         Icon { category: "fx", name: "venom_1", draw: venom_1 },
         Icon { category: "fx", name: "venom_2", draw: venom_2 },
         Icon { category: "fx", name: "venom_3", draw: venom_3 },
+        // The player's blade reaching an enemy. Bone rather than any of the
+        // six chromatic families: the other four say *what kind of thing
+        // landed*, and this one says a weapon arrived - it is the only effect
+        // in the set whose subject is the attack rather than its result. It is
+        // also the only run that travels, which is what lets one authored
+        // orientation cover every angle the fight can produce.
+        Icon { category: "fx", name: "swipe_0", draw: swipe_0 },
+        Icon { category: "fx", name: "swipe_1", draw: swipe_1 },
+        Icon { category: "fx", name: "swipe_2", draw: swipe_2 },
+        Icon { category: "fx", name: "swipe_3", draw: swipe_3 },
     ]
 }
 
@@ -187,19 +197,133 @@ fn venom_1() -> Canvas { burst(1, P4, P3, P2) }
 fn venom_2() -> Canvas { burst(2, P4, P3, P2) }
 fn venom_3() -> Canvas { burst(3, P4, P3, P2) }
 
+/// The axis every `swipe` frame is drawn along: up and to the right, 45°.
+///
+/// One orientation rather than the eight-direction set
+/// `docs/PIXEL_ART_ROADMAP.md` §5 forecast, and the reason is measured rather
+/// than assumed. The attacker is not arbitrary — `CombatScreen.tscn` pins
+/// `PlayerSprite` at canvas centre (120, 350) and every target is an
+/// `EnemyView` centre inside `EnemyRow` (176..976 x 20..330) — so across one
+/// to four enemies the attack vector only ever spans about -13° to -49°.
+/// That is one and a half octants, never down and never left: an eight-way
+/// set would author eight images and ever show two.
+///
+/// What carries the remaining spread is **motion**, not silhouette.
+/// `CombatFx.PlayTravelling` tweens the frame run from the attacker to the
+/// target, so the direction a player reads is the direction the sprite
+/// actually goes, and the art only has to agree with the *mean* of the band
+/// (-31°, which is this diagonal). Same argument `anim::Facing` makes one
+/// asset class over: one axis rather than four per-clip direction arguments,
+/// because everything that moves at all moves along it.
+const SWIPE: (f32, f32) = (std::f32::consts::FRAC_1_SQRT_2, -std::f32::consts::FRAC_1_SQRT_2);
+
+/// A bar of `weight` through the centre pixel, `half_len` either way along
+/// `SWIPE`.
+///
+/// `Canvas::thick_line` stamps its weight block down and to the right of each
+/// step rather than around it, so a bar drawn straight through `CX` lands
+/// displaced by half its own weight on both axes. Every rule at the bottom of
+/// this file measures a centroid, and `every_effect_frame_is_centred` fails on
+/// a shape that is otherwise exactly right. The correction is applied here
+/// rather than in `Canvas`, because the other callers of `thick_line` draw
+/// shapes whose centroid nothing measures and moving it would move all of them.
+fn bar(canvas: &mut Canvas, half_len: f32, weight: i32, colour: Rgb) {
+    let (dx, dy) = SWIPE;
+    let (reach_x, reach_y) = ((dx * half_len).round() as i32, (dy * half_len).round() as i32);
+    let nudge = (weight - 1) / 2;
+    canvas.thick_line(
+        CX - reach_x - nudge,
+        CX - reach_y - nudge,
+        CX + reach_x - nudge,
+        CX + reach_y - nudge,
+        weight,
+        colour,
+    );
+}
+
+/// The four beats of a blade arriving, in order:
+///
+/// 0. **Contact** — a short heavy bar with an `N8` core. The brightest frame,
+///    which is what makes it the one `SpriteAnimator` declines under Reduce
+///    Motion, exactly as `burst`'s flash is.
+/// 1. **Draw** — the edge has swept through: longer, thinner, still hot at
+///    the middle where the blade met the body.
+/// 2. **Tail** — longer and thinner again, down to the trailing edge.
+/// 3. **Motes** — what is left, thrown along the axis.
+///
+/// It satisfies the same four rules `burst` does — the extent grows across all
+/// four frames and the mass falls after frame 1 — which is not a coincidence
+/// forced on it: a slash that shortened as it faded would read as the blade
+/// being pulled back rather than followed through.
+fn swipe(frame: usize, hot: Rgb, mid: Rgb, cool: Rgb) -> Canvas {
+    let mut canvas = new_icon();
+    match frame {
+        0 => {
+            bar(&mut canvas, 6.0, 5, hot);
+            canvas.disc(CX, CX, 3, N8);
+        }
+        1 => {
+            bar(&mut canvas, 10.0, 3, mid);
+            bar(&mut canvas, 5.0, 3, hot);
+        }
+        2 => {
+            bar(&mut canvas, 13.0, 2, mid);
+            bar(&mut canvas, 4.0, 2, hot);
+        }
+        3 => {
+            // Mirrored pairs, so what is left of the blade is still centred on
+            // the axis it travelled: an odd mote out would drag the centroid
+            // off and aim the whole effect somewhere the call site did not.
+            let (dx, dy) = SWIPE;
+            for reach in [10.0f32, 14.0] {
+                for sign in [-1.0f32, 1.0] {
+                    let x = CX + (dx * reach * sign).round() as i32;
+                    let y = CX + (dy * reach * sign).round() as i32;
+                    canvas.rect(x, y, 2, 2, cool);
+                }
+            }
+        }
+        other => unreachable!("a swipe has {FRAMES} frames; asked for frame {other}"),
+    }
+    finish(&mut canvas);
+    canvas
+}
+
+fn swipe_0() -> Canvas { swipe(0, N8, N7, N6) }
+fn swipe_1() -> Canvas { swipe(1, N8, N7, N6) }
+fn swipe_2() -> Canvas { swipe(2, N8, N7, N6) }
+fn swipe_3() -> Canvas { swipe(3, N8, N7, N6) }
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::palette::N0;
 
+    /// What an effect is drawn *about*: a point, or an axis.
+    ///
+    /// Declared per run rather than inferred, which is `backgrounds.rs`'s
+    /// per-band tiling rule in another shape — a floor closes both axes, a
+    /// plinth only x, and asking a piece for a property it never had is a rule
+    /// with no failure behind it. Here the two classes want opposite
+    /// assertions: a burst that came out long would be aiming itself
+    /// somewhere, and a swipe that came out round would be leaving the whole
+    /// "direction comes from motion" claim resting on the tween alone.
+    enum Shape {
+        /// Symmetric about the centre pixel. It landed *here*.
+        Radial,
+        /// Drawn along `SWIPE`. It came *from* somewhere.
+        Axial,
+    }
+
     /// Every frame of every effect, so a rule holds for the set rather than
     /// for the one effect somebody remembered to list.
-    fn every_run() -> Vec<(&'static str, Vec<Canvas>)> {
+    fn every_run() -> Vec<(&'static str, Shape, Vec<Canvas>)> {
         vec![
-            ("impact", vec![impact_0(), impact_1(), impact_2(), impact_3()]),
-            ("ward", vec![ward_0(), ward_1(), ward_2(), ward_3()]),
-            ("bloom", vec![bloom_0(), bloom_1(), bloom_2(), bloom_3()]),
-            ("venom", vec![venom_0(), venom_1(), venom_2(), venom_3()]),
+            ("impact", Shape::Radial, vec![impact_0(), impact_1(), impact_2(), impact_3()]),
+            ("ward", Shape::Radial, vec![ward_0(), ward_1(), ward_2(), ward_3()]),
+            ("bloom", Shape::Radial, vec![bloom_0(), bloom_1(), bloom_2(), bloom_3()]),
+            ("venom", Shape::Radial, vec![venom_0(), venom_1(), venom_2(), venom_3()]),
+            ("swipe", Shape::Axial, vec![swipe_0(), swipe_1(), swipe_2(), swipe_3()]),
         ]
     }
 
@@ -231,7 +355,7 @@ mod tests {
 
     #[test]
     fn every_effect_has_the_declared_frame_count() {
-        for (name, frames) in every_run() {
+        for (name, _, frames) in every_run() {
             assert_eq!(frames.len(), FRAMES, "{name} does not have FRAMES frames");
         }
         // Every entry in the registry is one of those frames and vice versa -
@@ -252,7 +376,7 @@ mod tests {
     /// four files without any of them differing.
     #[test]
     fn consecutive_frames_differ() {
-        for (name, frames) in every_run() {
+        for (name, _, frames) in every_run() {
             for i in 1..frames.len() {
                 assert_ne!(
                     frames[i - 1].pixels(),
@@ -267,8 +391,8 @@ mod tests {
     /// A burst expands. The reverse reads as an implosion, and at 0.06s a
     /// frame nobody would be able to say why it looked wrong.
     #[test]
-    fn a_burst_never_contracts() {
-        for (name, frames) in every_run() {
+    fn an_effect_never_contracts() {
+        for (name, _, frames) in every_run() {
             for i in 1..frames.len() {
                 let (previous, current) = (extent(&frames[i - 1]), extent(&frames[i]));
                 assert!(
@@ -280,15 +404,16 @@ mod tests {
         }
     }
 
-    /// And it thins as it goes. Frame 0 is exempt because it is the flash — a
-    /// compact solid disc that the ring frame legitimately has more material
-    /// than; the rule is about what happens *after* the throw.
+    /// And it thins as it goes. Frame 0 is exempt because it is the opening
+    /// flash — a compact solid the second frame legitimately has more material
+    /// than, whether that second frame is a burst's ring or a swipe's drawn
+    /// edge; the rule is about what happens *after* the throw.
     ///
     /// This is `anim.rs`'s `dissolve` lesson in another shape: written the
     /// other way round, the creature visibly reassembled as it died.
     #[test]
-    fn a_burst_dissipates_after_the_ring() {
-        for (name, frames) in every_run() {
+    fn an_effect_dissipates_after_its_second_frame() {
+        for (name, _, frames) in every_run() {
             for i in 2..frames.len() {
                 let (previous, current) = (body(&frames[i - 1]).len(), body(&frames[i]).len());
                 assert!(
@@ -308,9 +433,9 @@ mod tests {
     /// shape symmetric about pixel `CX` sits half a pixel off the true middle
     /// by construction. Anything looser than 1 would admit a real miss.
     #[test]
-    fn every_burst_is_centred() {
+    fn every_effect_frame_is_centred() {
         let middle = (GRID - 1) as f32 / 2.0;
-        for (name, frames) in every_run() {
+        for (name, _, frames) in every_run() {
             for (i, frame) in frames.iter().enumerate() {
                 let pixels = body(frame);
                 assert!(!pixels.is_empty(), "{name} frame {i} drew nothing");
@@ -321,6 +446,59 @@ mod tests {
                     (cx - middle).abs() <= 1.0 && (cy - middle).abs() <= 1.0,
                     "{name} frame {i} centres on ({cx:.2}, {cy:.2}), not ({middle}, {middle})"
                 );
+            }
+        }
+    }
+
+    /// The spread of a run's material along `SWIPE` against its spread across
+    /// `SWIPE`, at its widest. 1.0 is a shape with no axis; a bar is its
+    /// length over its weight.
+    fn elongation(canvas: &Canvas) -> f32 {
+        let (ax, ay) = SWIPE;
+        let (mut along, mut across) = (0.0f32, 0.0f32);
+        for (x, y) in body(canvas) {
+            let (dx, dy) = ((x - CX) as f32, (y - CX) as f32);
+            along = along.max((dx * ax + dy * ay).abs());
+            across = across.max((dx * -ay + dy * ax).abs());
+        }
+        if across == 0.0 {
+            return f32::INFINITY;
+        }
+        along / across
+    }
+
+    /// A swipe is a line and a burst is not, and neither half of that is
+    /// checkable anywhere else.
+    ///
+    /// `validate` reads finished pixels and cannot tell a bar from a blob; the
+    /// C# side can only count files and measure where a rect was placed. So
+    /// the whole of "the art agrees with what the call site does with it"
+    /// lives here — and it has to run in both directions. A swipe redrawn as a
+    /// disc passes every other rule in this file while leaving
+    /// `CombatFx.PlayTravelling`'s tween as the only thing saying the attack
+    /// had a direction, and a burst that drifted into a bar would be quietly
+    /// aiming a beat the call site positions by its centre.
+    ///
+    /// The bands are wide because the measured gap is: the four bursts sit at
+    /// 0.94–1.00 and the swipe's frames at 3.00–10.50, so nothing here is a
+    /// constant fitted to the best case.
+    #[test]
+    fn a_swipe_is_drawn_along_its_axis_and_a_burst_is_not() {
+        for (name, shape, frames) in every_run() {
+            for (i, frame) in frames.iter().enumerate() {
+                let ratio = elongation(frame);
+                match shape {
+                    Shape::Axial => assert!(
+                        ratio >= 2.0,
+                        "{name} frame {i} is {ratio:.2} long against its width - \
+                         an axial effect that round leaves the tween carrying the direction alone"
+                    ),
+                    Shape::Radial => assert!(
+                        ratio <= 1.5,
+                        "{name} frame {i} is {ratio:.2} long against its width - \
+                         a radial effect is positioned by its centre and must not aim itself"
+                    ),
+                }
             }
         }
     }

@@ -30,7 +30,6 @@ public partial class EnemyView : Button
 
     private TextureRect _sprite = null!;
     private TextureRect _shadow = null!;
-    private static Texture2D? _shadowTexture;
     private Label _nameLabel = null!;
     private ProgressBar _hpBar = null!;
     private ProgressBar _ghostHpBar = null!;
@@ -72,7 +71,12 @@ public partial class EnemyView : Button
 
         _sprite = GetNode<TextureRect>("VBox/Sprite");
         _shadow = GetNode<TextureRect>("VBox/Sprite/Shadow");
-        _shadow.Texture = _shadowTexture ??= BuildShadowTexture();
+        // One shared dithered ellipse, built in PixelSpec - this file and
+        // CombatScreen each carried a copy of the smooth-gradient version it
+        // replaced. The Nearest filter is what stops the lattice being blurred
+        // back into the gradient it is standing in for.
+        _shadow.Texture = PixelSpec.ContactShadow();
+        PixelSpec.ApplyPixelFilter(_shadow);
         _nameLabel = GetNode<Label>("VBox/NameLabel");
         // HpFrame is pinned to 160px wide and shrink-centered in the .tscn -
         // 160 being PixelSpec.SpriteScale * PixelSpec.CreatureGrid, i.e. the
@@ -99,28 +103,6 @@ public partial class EnemyView : Button
         Instances.Add(this);
         Refresh();
         StartIntentPulse();
-    }
-
-    // Soft elliptical contact shadow - a non-square radial gradient reads as
-    // an ellipse rather than a circle. Purely a per-sprite decoration (not
-    // tied to a shared floor line with the player's own sprite, which uses
-    // a different positioning mechanism entirely - see Phase 4 plan notes).
-    private static Texture2D BuildShadowTexture()
-    {
-        var gradient = new Gradient
-        {
-            Offsets = new float[] { 0f, 1f },
-            Colors = new Color[] { new(0f, 0f, 0f, 0.55f), new(0f, 0f, 0f, 0f) },
-        };
-        return new GradientTexture2D
-        {
-            Gradient = gradient,
-            Fill = GradientTexture2D.FillEnum.Radial,
-            FillFrom = new Vector2(0.5f, 0.5f),
-            FillTo = new Vector2(1f, 0.5f),
-            Width = 64,
-            Height = 20,
-        };
     }
 
     // The breathing loop, the hit recoil and the wind-up lean are all frame

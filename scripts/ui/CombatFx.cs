@@ -2,10 +2,12 @@ using Godot;
 
 namespace Hollowdeck.UI;
 
-// The combat effect bursts - docs/PIXEL_ART_ROADMAP.md section 5.
+// The combat effect frames - docs/PIXEL_ART_ROADMAP.md section 5.
 //
-// Four generated four-frame runs (tools/artgen/src/icons/fx.rs), spawned as a
-// transient TextureRect and played one-shot by SpriteAnimator. What they
+// Five generated four-frame runs (tools/artgen/src/icons/fx.rs), spawned as a
+// transient TextureRect and played one-shot by SpriteAnimator. Four of them
+// burst in place; the fifth travels, which is the whole of how a slash gets a
+// direction without an authored direction set (see PlayTravelling). What they
 // replaced was CombatScreen.SpawnHitSpark: a CpuParticles2D burst whose texture
 // was a 24x24 radial GradientTexture2D drawn at ScaleAmountMin 0.4 / Max 0.9.
 //
@@ -42,11 +44,17 @@ public static class CombatFx
     // the status row redrawing a turn's worth of information at once.
     public const string Venom = "venom";
 
+    // The player's blade reaching an enemy. This is the one effect that
+    // travels, and the only one whose subject is the attack rather than its
+    // result - so it is drawn in bone rather than in any of the six chromatic
+    // families the other four use.
+    public const string Swipe = "swipe";
+
     // Every effect, for the coverage check. The list is what
     // PixelSpecSmokeTest drives rather than a set of names retyped there, so a
-    // fifth burst is registered in one place - the third-copy failure
+    // sixth effect is registered in one place - the third-copy failure
     // SpriteAnimator.CreatureClips is the same fix for.
-    public static readonly string[] All = { Impact, Ward, Bloom, Venom };
+    public static readonly string[] All = { Impact, Ward, Bloom, Venom, Swipe };
 
     // Seconds per frame. Four frames at this cadence is 0.24s, which sits
     // between the hit clip's 0.10 and the enemy turn's 0.35 pacing - long
@@ -58,12 +66,82 @@ public static class CombatFx
     // be a content knob for a difference that does not exist.
     public const double FrameSeconds = 0.06;
 
+    // And a second number for the one run that travels, which is *not* the
+    // per-effect dial the paragraph above declines.
+    //
+    // For a stationary burst the cadence decides only how long the beat lasts.
+    // For a travelling one it also decides how fast the thing crosses the
+    // screen, because the tween is fitted to the run - so the two are
+    // different kinds of number and collapsing them would mean choosing a
+    // slash speed by editing every burst's duration.
+    //
+    // 0.04 puts the swipe's whole run at 0.16s against Impact's 0.24s, and
+    // TravelFraction lands it on the target at the drawn-edge frame so its
+    // tail and motes dissipate *on* the enemy. Both matter: the two are
+    // spawned in the same frame by PlayHitVfx, and a blade still in flight
+    // while the impact blooms under it reads as the hit landing before the
+    // weapon arrived.
+    public const double TravelFrameSeconds = 0.04;
+    public const double TravelFraction = 0.5;
+
     /// <summary>
     /// Spawns <paramref name="effect"/> centred on <paramref name="localCenter"/>
     /// in <paramref name="parent"/>'s coordinates. The node frees itself when
     /// the run ends.
     /// </summary>
     public static void Play(Node parent, Vector2 localCenter, string effect)
+    {
+        if (Spawn(parent, localCenter, effect) is not { } spawned) return;
+        SpriteAnimator.AttachOneShot(spawned.Rect, spawned.Frames, FrameSeconds, spawned.Rect.QueueFree);
+    }
+
+    /// <summary>
+    /// Spawns <paramref name="effect"/> at <paramref name="fromLocal"/> and carries it
+    /// to <paramref name="toLocal"/> while its frames run, both in
+    /// <paramref name="parent"/>'s coordinates. The node frees itself when the run ends.
+    /// </summary>
+    // Direction comes from the motion, which is why the art is one orientation
+    // rather than the eight-way set PIXEL_ART_ROADMAP section 5 forecast. That
+    // forecast read "a streak spans player->enemy at an arbitrary angle", and
+    // the angle is not arbitrary: PlayerSprite is pinned at canvas (120, 350)
+    // and every target is an EnemyView centre inside EnemyRow, so across one to
+    // four enemies the vector only ever spans about -13 to -49 degrees. Eight
+    // authored images, two of them ever seen.
+    //
+    // Tweening `position` is legal where tweening `scale` is not, and the
+    // distinction is section 9's rather than an oversight in the guard: a
+    // transform resamples the texture, a translation onto a whole source pixel
+    // does not. Both endpoints go through SnapTranslation for that reason, and
+    // PlayPlayerPositionBeat already animates _playerSprite exactly this way.
+    //
+    // Ungated on ReduceMotion, like the lunge and the hit shake beside it. The
+    // opening flash frame is declined anyway - AttachOneShot does it for every
+    // run in this file through SpriteAnimator.FlashOpeningClips - and what is
+    // left is moment-to-moment combat juice, which ROADMAP Phase 11's
+    // animation-speed setting is the answer to rather than this binary.
+    public static void PlayTravelling(Node parent, Vector2 fromLocal, Vector2 toLocal, string effect)
+    {
+        if (Spawn(parent, fromLocal, effect) is not { } spawned) return;
+
+        var rect = spawned.Rect;
+        double run = TravelFrameSeconds * spawned.Frames.Length;
+        SpriteAnimator.AttachOneShot(rect, spawned.Frames, TravelFrameSeconds, rect.QueueFree);
+
+        var landing = PixelSpec.SnapTranslation(toLocal - rect.Size / 2f, PixelSpec.SpriteScale);
+        // Motion.Jolt is the vocabulary's only Linear curve, and a blade that
+        // eased into its target would be decelerating through the body. Its
+        // table row is about a shake step because that was the only linear
+        // thing in the game when section 11 was written; the shape is what is
+        // being reused, and MotionCurve.Over is the sanctioned way to take it
+        // at another period.
+        rect.CreateTween().TweenTo(rect, "position", landing, Motion.Jolt.Over((float)(run * TravelFraction)));
+    }
+
+    // The half Play and PlayTravelling share: resolve the frames, build the
+    // rect, put it on a whole source pixel. Split out when the second entry
+    // point arrived rather than copied, because the snap is the part that is
+    // easy to leave off and impossible to see afterwards.
+    private static (TextureRect Rect, Texture2D[] Frames)? Spawn(Node parent, Vector2 localCenter, string effect)
     {
         var frames = ArtAssets.FxFrames(effect);
         if (frames.Length == 0)
@@ -72,7 +150,7 @@ public static class CombatFx
             // that does not spawn is indistinguishable from one nothing called,
             // and this is the arm a forgotten `artgen generate` lands on.
             GD.PushError($"CombatFx: no frames for '{effect}' - run `artgen generate fx` and re-import");
-            return;
+            return null;
         }
 
         var rect = new TextureRect
@@ -97,6 +175,6 @@ public static class CombatFx
         rect.Position = PixelSpec.SnapTranslation(localCenter - rect.Size / 2f, PixelSpec.SpriteScale);
 
         parent.AddChild(rect);
-        SpriteAnimator.AttachOneShot(rect, frames, FrameSeconds, rect.QueueFree);
+        return (rect, frames);
     }
 }
