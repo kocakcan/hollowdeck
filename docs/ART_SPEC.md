@@ -70,6 +70,33 @@ The one deliberate exception: smooth procedural gradients that are *not* pixel a
 and ground-plane in `ScreenBackground` — stay on `Linear`, because `Nearest` would band them. They
 are lighting, not art.
 
+**That exception is two textures, and it is now claimed on the line rather than granted to a file.**
+`PixelSpecSmokeTest.TestNothingDrawsSmoothArt` fails a `Gradient`, a `GradientTexture*`, a `Line2D`,
+a `Polygon2D`, a particle node or an `antialiased: true` anywhere under `scripts/`, and the only way
+past it is the marker `ART_SPEC-3-exception` on the offending line. Exempting `ScreenBackground.cs`
+wholesale would be a rule wider than its own reason — the reason is that *these two textures* are
+lighting, which says nothing about a third gradient added to that file later — and it is the
+`AudioManager`/`volume_db` mistake §11 records, one section over. A second assertion counts the
+marked constructs and fails if there are not exactly four (two textures, each a `Gradient` and the
+`GradientTexture2D` wrapping it), because an exemption is a claim about a scan's reach and a marker
+left behind on a line the scan would not have flagged is a claim about nothing.
+
+What that scan is for is a shape this project has now shipped **four** times: the hit spark, the
+dust motes above, the two contact shadows under the creature sprites, and the slash trail — a white
+10px `Line2D` at alpha 0.85 that spanned attacker to target for five phases. None of the four was a
+careless edit and none was catchable, because both existing art checks key on something these
+constructs are not: `artgen validate` reads files under `assets/`, and the transform scan reads
+identifiers declared `TextureRect`. A scan keyed to the *construct* is what closes the gap between
+them.
+
+Note what the scan deliberately does **not** ban: the canvas `Draw*` family. Its first version
+failed `MapScreen`'s connector paths on the same commit that fixed them — a hard-edged,
+integer-width, on-ramp, pixel-snapped stroke, which is pixel art drawn the way a `Control` draws
+rather than smooth art. What makes a stroke smooth is the `antialiased` flag, which defaults to
+false, so banning the primitive bans the medium's own tool because one caller passed the wrong
+argument to it. The stroke *width* is the one hazard left over, and it is asserted directly against
+`MapScreen`'s two width constants rather than by a regex reading a literal out of an argument list.
+
 ## 4. Resolution architecture
 
 **Stay on `canvas_items` stretch at 1152x648. Do not move to `stretch/mode="viewport"`.**
@@ -346,6 +373,21 @@ and a driver that never advances them look identical to every other check here, 
 has to *end* — its budget is asserted against a real 60fps tick rather than against its own frame
 time, since a check that steps by the constant it is testing cannot observe that constant at all.
 
+A fifth run joined those bursts and is the first that **travels** — the swipe. It is spawned by
+`CombatFx.PlayTravelling`, which tweens `position` between two `SnapTranslation`'d endpoints while
+the frames run, and it is checked for the two things a second spawn path adds: that the *landing* is
+on the grid (the origin is shared code the burst checks already cover, the destination is not) and
+that its travel finishes before the `impact` that follows it blooms at the same point. That last is
+an assertion rather than a comment because both numbers are tunable and a later nudge to either one
+silently inverts the beat — a blade still in flight while the hit blooms under it reads as the
+impact landing first.
+
+The generator side carries the half no runtime check can: `fx.rs` declares per run whether it is
+drawn about a *point* or along an *axis*, and asserts both directions — a swipe redrawn as a disc
+leaves the tween carrying the direction alone, and a burst that drifted into a bar would be aiming a
+beat the call site positions by its centre. The bands are wide because the measured gap is (bursts
+0.94–1.00, the swipe 3.00–10.50), so neither is a constant fitted to its best case.
+
 Events are the one category where the *missing* direction is survivable: `ArtAssets.EventIcon`
 falls back to the map's scroll, so an event authored without art still renders a screen with a
 subject. The check is there for the orphan direction, where a renamed id would drop back to the
@@ -390,6 +432,17 @@ The rules:
   to `assets/icons/fx/<effect>_<n>.png`. Both are played by `SpriteAnimator` setting
   `TextureRect.Texture`, and the distinction is only about where the pixels come from: an effect has
   no source tile to displace, so there is nothing for `animate` to derive it from.
+
+  An authored run may also **travel**, which is the one thing neither kind did until the combat
+  swipe. `CombatFx.PlayTravelling` tweens the rect's `position` between two `SnapTranslation`'d
+  endpoints while its frames play, and that is legal under the translation rule below rather than an
+  exception to the transform rule above: a transform resamples the texture and a translation onto a
+  whole source pixel does not. It is also what removes the need for a direction *set* — a streak
+  spanning attacker to target was assumed to need eight authored orientations plus angle-bucketing,
+  and the measured span across every fight this game can produce is about -13° to -49°, one and a
+  half octants. Direction the player can read comes from the motion; the art only has to agree with
+  the mean of that band. Same argument `anim::Facing` makes with one axis rather than four per-clip
+  direction arguments.
 
   This bullet said "derives" flat for as long as frame animation has existed, which was true when
   creatures were the only thing animating. It is recorded here rather than quietly rewritten because
@@ -563,7 +616,7 @@ The eight, in period order:
 
 | Curve | Period | Shape | What it is for |
 | --- | --- | --- | --- |
-| `Jolt` | 0.03s | Linear / Out | one step of a shake; a jitter that eases is a wobble |
+| `Jolt` | 0.03s | Linear / Out | constant velocity: one step of a shake, or a travelling effect crossing to its target. A jitter that eases is a wobble, and a blade that eases decelerates through the body |
 | `Flash` | 0.06s | Sine / Out | the in-half of an impact tint |
 | `Snap` | 0.12s | Sine / Out | an immediate answer to input — hover, the out-half of a flash |
 | `Pop` | 0.18s | Back / Out | a small overshoot: something leaving with a kick, a number punching in |

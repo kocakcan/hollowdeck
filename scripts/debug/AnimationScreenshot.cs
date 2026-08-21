@@ -131,8 +131,60 @@ public partial class AnimationScreenshot : Node
 
         await Snapshot("user://anim_03_combat_effects.png");
 
+        foreach (var stale in combat.GetChildren().OfType<TextureRect>().Where(r => r.GetChildren().OfType<SpriteAnimator>().Any()))
+        {
+            stale.QueueFree();
+        }
+
+        await SnapshotTheSwipeInFlight(combat);
+
         SettingsManager.Instance.SetReduceMotion(reduceMotion, scratch);
         if (Godot.FileAccess.FileExists(scratch)) DirAccess.RemoveAbsolute(scratch);
+    }
+
+    // The swipe, laid out along the path it actually takes.
+    //
+    // It is the one effect whose direction comes from *motion* rather than from
+    // the art (CombatFx.PlayTravelling), which makes it the one effect a
+    // single still cannot show at all: a frame of it is a bar on a diagonal,
+    // and what the player reads is that bar crossing the board. A tween also
+    // cannot be stepped the way _Process can, so waiting for one would be the
+    // same unreliable clock the sheet above exists to avoid.
+    //
+    // So this spawns four travelling swipes whose *origins* are the four points
+    // the real tween passes through, and ticks the i-th to its i-th frame. The
+    // line is the live geometry - CombatScreen pins PlayerSprite at canvas
+    // (120, 350) and an EnemyView centre sits in the row above it - so what is
+    // photographed is the path the game takes, not an arrangement chosen to
+    // look good.
+    private async System.Threading.Tasks.Task SnapshotTheSwipeInFlight(Node combat)
+    {
+        var from = new Vector2(120, 350);
+        var to = new Vector2(576, 170);
+
+        for (int i = 0; i < 4; i++)
+        {
+            var at = from.Lerp(to, i / 3f);
+            CombatFx.PlayTravelling(combat, at, to, CombatFx.Swipe);
+
+            var rect = combat.GetChildren().OfType<TextureRect>().LastOrDefault();
+            var animator = rect?.GetChildren().OfType<SpriteAnimator>().FirstOrDefault();
+            for (int frame = 0; frame < i; frame++) animator?._Process(CombatFx.TravelFrameSeconds);
+            animator?.SetProcess(false);
+
+        }
+
+        // Every live tween, killed before the shot. The travel tweens would
+        // otherwise carry all four rects to the target and stack them on one
+        // point - which is exactly the "it worked perfectly and photographed
+        // nothing" failure the sheet above records, arriving through the one
+        // channel that sheet does not have. Killing the lot rather than
+        // filtering is deliberate: this is the last shot in the run, and an
+        // enemy's idle pulse frozen mid-cycle is one less thing making the
+        // image non-deterministic.
+        foreach (var tween in GetTree().GetProcessedTweens()) tween.Kill();
+
+        await Snapshot("user://anim_04_swipe_in_flight.png");
     }
 
     private async System.Threading.Tasks.Task Snapshot(string path)

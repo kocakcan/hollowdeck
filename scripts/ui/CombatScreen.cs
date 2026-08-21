@@ -242,7 +242,9 @@ public partial class CombatScreen : Control
 
         _playerSprite = GetNode<TextureRect>("PlayerSprite");
         _playerSprite.Texture = ArtAssets.PlayerSprite();
-        GetNode<TextureRect>("PlayerSprite/Shadow").Texture = BuildShadowTexture();
+        var playerShadow = GetNode<TextureRect>("PlayerSprite/Shadow");
+        playerShadow.Texture = PixelSpec.ContactShadow();
+        PixelSpec.ApplyPixelFilter(playerShadow);
         _playerSpriteRestPos = _playerSprite.Position;
         _playerAnimator = SpriteAnimator.Attach(_playerSprite, "player", SpriteAnimator.PlayerClips);
         StartPlayerIdleBob();
@@ -412,7 +414,7 @@ public partial class CombatScreen : Control
     private void PlayPlayerLungeToward(Vector2 targetGlobalPos)
     {
         _playerAnimator?.Play("windup");
-        var direction = (targetGlobalPos - (_playerSprite.GlobalPosition + _playerSprite.Size / 2f)).Normalized();
+        var direction = (targetGlobalPos - PlayerCenter).Normalized();
         PlayPlayerPositionBeat(new List<Vector2> { _playerSpriteRestPos + direction * 26f }, 0.09f);
     }
 
@@ -534,6 +536,19 @@ public partial class CombatScreen : Control
     private void SpawnBurst(Vector2 globalPos, string effect) =>
         CombatFx.Play(this, ToLocalPoint(globalPos), effect);
 
+    // The same, for the one effect that travels rather than landing.
+    //
+    // What this replaced was PlaySlashTrail: a two-point Line2D, 10px wide, at
+    // Color(1, 1, 1, 0.85). Pure white is off ART_SPEC section 5's ramp (the
+    // brightest neutral is N8, #ede4d4), the stroke was soft-edged against
+    // section 3, it sat at whatever fractional position the endpoints gave it
+    // against section 9, and it was ungated and asserted by nothing. It was
+    // invisible for the third time in the same way - not a TextureRect, not a
+    // file under assets/ - which is why this change also brings the scan that
+    // would have caught it (PixelSpecSmokeTest.TestNothingDrawsSmoothArt).
+    private void SpawnTravellingBurst(Vector2 fromGlobal, Vector2 toGlobal, string effect) =>
+        CombatFx.PlayTravelling(this, ToLocalPoint(fromGlobal), ToLocalPoint(toGlobal), effect);
+
     // The global centre of whatever a PopupDelta beat is aimed at. One switch
     // rather than the three hand-written copies the VFX sites had between them,
     // now that four effects read it instead of one.
@@ -544,47 +559,16 @@ public partial class CombatScreen : Control
     private Vector2? BeatCenter(Node popupParent) => popupParent switch
     {
         EnemyView enemyView => enemyView.GlobalPosition + enemyView.Size / 2f,
-        CombatScreen => _playerSprite.GlobalPosition + _playerSprite.Size / 2f,
+        CombatScreen => PlayerCenter,
         _ => null,
     };
 
-    // Soft elliptical contact shadow beneath the player sprite - same
-    // technique EnemyView.BuildShadowTexture uses for enemy sprites (a
-    // non-square radial gradient reads as an ellipse, not a circle).
-    private static Texture2D BuildShadowTexture()
-    {
-        var gradient = new Gradient
-        {
-            Offsets = new float[] { 0f, 1f },
-            Colors = new Color[] { new(0f, 0f, 0f, 0.55f), new(0f, 0f, 0f, 0f) },
-        };
-        return new GradientTexture2D
-        {
-            Gradient = gradient,
-            Fill = GradientTexture2D.FillEnum.Radial,
-            FillFrom = new Vector2(0.5f, 0.5f),
-            FillTo = new Vector2(1f, 0.5f),
-            Width = 64,
-            Height = 20,
-        };
-    }
-
-    // Tapering stroke from attacker to target, fading fast - reads as a
-    // directional slash better than a particle cloud would for a melee hit.
-    private void PlaySlashTrail(Vector2 fromGlobal, Vector2 toGlobal)
-    {
-        var line = new Line2D
-        {
-            Width = 10f,
-            DefaultColor = new Color(1f, 1f, 1f, 0.85f),
-        };
-        line.AddPoint(ToLocalPoint(fromGlobal));
-        line.AddPoint(ToLocalPoint(toGlobal));
-        AddChild(line);
-        var tween = line.CreateTween();
-        tween.TweenTo(line, "modulate:a", 0f, Motion.Settle);
-        tween.TweenCallback(Callable.From(line.QueueFree));
-    }
+    // Where the player sprite is, in global coordinates. Three sites had a copy
+    // of this expression - the lunge's direction, BeatCenter's own arm, and the
+    // slash's origin - which was survivable while nothing about the sprite
+    // moved. It is one expression now because the swipe made it three readers
+    // of the same fact rather than three coincidences.
+    private Vector2 PlayerCenter => _playerSprite.GlobalPosition + _playerSprite.Size / 2f;
 
     // Blue tint pulse for block gain, mirroring FlashHit's red damage pulse.
     private static void FlashBlock(CanvasItem target)
@@ -1347,7 +1331,7 @@ public partial class CombatScreen : Control
         {
             enemyView.PlayHitRecoil();
             PlayPlayerLungeToward(center);
-            PlaySlashTrail(_playerSprite.GlobalPosition + _playerSprite.Size / 2f, center);
+            SpawnTravellingBurst(PlayerCenter, center, CombatFx.Swipe);
         }
         else
         {

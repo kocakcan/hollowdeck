@@ -173,13 +173,30 @@ public partial class MapScreen : Control
         }
     }
 
-    // Gentle bow through an offset midpoint instead of a straight line, for
-    // a hand-drawn feel - a real Bezier curve (via Curve2D) rather than a
-    // sharp two-segment kink. The offset is derived from the endpoints
-    // themselves (not RNG) so it's stable across the repeated QueueRedraw()
-    // calls a Control naturally gets, instead of jittering every redraw.
-    // Paths leading out of the player's current node get a brighter/thicker
-    // stroke; everything else dims, matching "available vs. unreachable."
+    // Gentle bow through an offset midpoint instead of a straight line - a real
+    // Bezier curve (via Curve2D) rather than a sharp two-segment kink. The
+    // offset is derived from the endpoints themselves (not RNG) so it's stable
+    // across the repeated QueueRedraw() calls a Control naturally gets, instead
+    // of jittering every redraw. Paths leading out of the player's current node
+    // get a brighter/thicker stroke; everything else dims, matching "available
+    // vs. unreachable."
+    //
+    // The bow is a design decision and stays. What did not stay is how it was
+    // stroked: `DrawPolyline(points, color, highlighted ? 3f : 1.5f,
+    // antialiased: true)` in two hand-written float colours. That is three
+    // ART_SPEC violations in one call - a soft edge against section 3, a
+    // fractional width against section 2, and two colours off section 5's ramp
+    // - and it was the last anti-aliased art in the game. It survived every
+    // pixel pass for the reason the hit spark, the dust motes and the slash
+    // trail each did: `_Draw` output is neither a TextureRect the transform
+    // scan knows nor a file under assets/ that `artgen validate` reads. The
+    // comment this replaced said the goal was "a hand-drawn feel", which was
+    // the pre-pixel-art art direction still talking.
+    //
+    // Dimming is a darker ramp entry rather than a lower alpha, because a
+    // translucent stroke over a per-act backdrop is a different colour on every
+    // act - which is the same argument that keeps the combat bursts four frame
+    // sets rather than one tinted four ways.
     private void DrawCurvedPath(Vector2 from, Vector2 to, bool highlighted)
     {
         var direction = (to - from).Normalized();
@@ -190,11 +207,32 @@ public partial class MapScreen : Control
         var curve = new Curve2D();
         curve.AddPoint(from, @out: (control - from) * 0.5f);
         curve.AddPoint(to, @in: (control - to) * 0.5f);
-        var points = curve.Tessellate();
 
-        var color = highlighted ? new Color(0.85f, 0.7f, 0.35f, 0.9f) : new Color(0.45f, 0.45f, 0.47f, 0.45f);
-        DrawPolyline(points, color, highlighted ? 3f : 1.5f, antialiased: true);
+        // Tessellate lands its points wherever the curve is; a stroke drawn
+        // between two fractional endpoints is a fractional-width stroke however
+        // integral the width argument is. Rounding to whole canvas pixels is
+        // what section 9's translation rule means for something drawn rather
+        // than placed - at scale 1, because this is drawn straight onto the
+        // canvas rather than being a scaled pixel asset.
+        var points = new List<Vector2>();
+        foreach (var point in curve.Tessellate())
+        {
+            var snapped = point.Round();
+            // Consecutive duplicates are what rounding a dense tessellation
+            // produces, and they make DrawPolyline stamp the same cap twice.
+            if (points.Count == 0 || points[^1] != snapped) points.Add(snapped);
+        }
+        if (points.Count < 2) return;
+
+        var color = highlighted ? PixelSpec.Ramp.G3 : PixelSpec.Ramp.N4;
+        DrawPolyline(points.ToArray(), color, highlighted ? PathWidth : DimPathWidth, antialiased: false);
     }
+
+    // Whole pixels. 1.5 was the dim stroke's width for as long as the map has
+    // existed and is exactly the kind of number section 2 calls a bug rather
+    // than a judgement call.
+    private const float PathWidth = 3f;
+    private const float DimPathWidth = 2f;
 
     // Where the node band may start: below the run-status block, never above
     // TopMargin. The block's height is a function of how many relics the run is
