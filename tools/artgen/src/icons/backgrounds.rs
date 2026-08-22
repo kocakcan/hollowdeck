@@ -1227,6 +1227,12 @@ mod tests {
     /// would restate `light.rs` here and pass even if the lamp were flipped
     /// wholesale, while "flipping `raised` flips the answer" cannot be satisfied
     /// by a function that ignores the flag.
+    ///
+    /// **This holds the function and not the decision**, and on its own that is
+    /// not enough — see `a_rendered_groove_lights_opposite_a_rendered_block`
+    /// below, which is the one that renders. Kept because the two fail at
+    /// different things: this one pins which two of the four faces the lamp
+    /// reaches, which a relational check over output cannot see.
     #[test]
     fn a_cut_groove_lights_opposite_a_raised_block() {
         for stone in [WARD, REACH, THRONE] {
@@ -1258,6 +1264,93 @@ mod tests {
         assert_eq!(face_tone(LEFT, true, WARD), WARD.lit, "a raised block's left face is unlit");
         assert_eq!(face_tone(BOTTOM, true, WARD), WARD.shade, "a raised block's underside is lit");
         assert_eq!(face_tone(RIGHT, true, WARD), WARD.shade, "a raised block's right face is lit");
+    }
+
+    /// The same rule, through `rim` and over real pixels.
+    ///
+    /// **The test above could not fail on the thing that matters, and this is
+    /// the mutation that showed it:** swapping the `true`/`false` arguments at
+    /// `rim`'s two `face_tone` call sites - a groove lit like a block and a
+    /// block lit like a groove, exactly the failure `face_tone`'s own comment
+    /// describes - left all 30 cargo tests green, `artgen validate` green and
+    /// all 23 engine suites green, while **18 PNGs changed**: the focal feature
+    /// of every room in all three acts, shipping with its carving embossed and
+    /// its relief incised.
+    ///
+    /// A pure-function check cannot reach that, because the decision is not in
+    /// the function - it is in which argument the caller passes. That is the
+    /// finding the commit immediately before this one is named after, and it
+    /// was reintroduced one file over, inside the test whose stated reason for
+    /// existing is that the failure is invisible to the eye.
+    ///
+    /// Asserted as an inversion **at one fixed normal**, which is what makes it
+    /// about the caller rather than about the lamp: a pixel meeting the void on
+    /// its right and a pixel meeting a joint on its right are the same face of
+    /// the same stone, and they must not take the same tone. Flip the lamp
+    /// wholesale and this still passes - that half is the test above.
+    #[test]
+    fn a_rendered_groove_lights_opposite_a_rendered_block() {
+        for stone in [WARD, REACH, THRONE] {
+            let mut canvas = Canvas::new(FOCAL_W as u32, FOCAL_H as u32);
+
+            // A solid block with a one-pixel joint cut down the middle of it,
+            // which is the arrangement `face_tone`'s comment says is the only
+            // one that shows the bug: a raised edge and a cut groove side by
+            // side, in one tile.
+            for y in 40..80 {
+                for x in 40..80 {
+                    canvas.set(x, y, stone.face);
+                }
+            }
+            for y in 40..80 {
+                canvas.set(60, y, stone.joint);
+            }
+
+            rim(&mut canvas, stone);
+
+            // Both of these are a face whose outward normal is RIGHT. The first
+            // meets nothing, so it is the outside of a raised block; the second
+            // meets the joint, so it is the wall of a cut groove.
+            let meets_void = canvas.get(79, 60).rgb();
+            let meets_joint = canvas.get(59, 60).rgb();
+
+            assert!(
+                meets_void == stone.lit || meets_void == stone.shade,
+                "rim left the block's right edge untouched at {meets_void:?}, so this test is \
+                 measuring a pixel the pass never wrote"
+            );
+            assert_ne!(
+                meets_void, meets_joint,
+                "a raised edge and a cut groove took the same tone on the same face - carved \
+                 detail then reads as embossed, and every focal feature in the game ships wrong \
+                 with the whole suite green"
+            );
+
+            // Inequality alone is not enough and that was measured, not
+            // reasoned: swapping *both* of rim's flags swaps both tones and
+            // leaves the two still unequal, so the first version of this test
+            // was green over the exact 18-PNG mutation it was written for.
+            //
+            // Which is which, therefore - but expressed by asking `face_tone`
+            // rather than by naming `lit` and `shade` here. Naming them would
+            // restate light.rs in this file and start failing if the lamp were
+            // ever re-aimed, which is not this test's business. Routed through
+            // the function, a wholesale lamp flip moves both sides and passes;
+            // what cannot pass is the caller handing the wrong flag, which is
+            // the only thing rim actually decides.
+            assert_eq!(
+                meets_void,
+                face_tone(RIGHT, true, stone),
+                "the outside of a block is not being lit as a raised face - rim has its \
+                 raised/cut arguments the wrong way round"
+            );
+            assert_eq!(
+                meets_joint,
+                face_tone(RIGHT, false, stone),
+                "the wall of a cut groove is not being lit as a cut face - rim has its \
+                 raised/cut arguments the wrong way round"
+            );
+        }
     }
     use super::*;
     use crate::palette::is_on_ramp;

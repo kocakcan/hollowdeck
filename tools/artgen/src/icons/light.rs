@@ -39,8 +39,12 @@
 //!
 //! ## Named exceptions
 //!
-//! These have no lit side, and none of them is a defect. Anything not listed
-//! here is directional and takes its highlight position from this module:
+//! These have no lit side, and none of them is a defect. **This is a list of
+//! reasons, not the classification itself** — that is `shapes::SHAPE_LIGHT`,
+//! which is data and is checked. It used to end "anything not listed here is
+//! directional", a complement rule that quietly disagreed with the table on the
+//! two outline passes (`finish`, `finish_heavy`), and which would therefore
+//! have demanded a light assertion for painting an outline on all four sides:
 //!
 //! - `flame`, `orb`, `sparkle` — **emissive**. They *are* the light, locally.
 //!   Giving one a lit side would say it is lit by something else.

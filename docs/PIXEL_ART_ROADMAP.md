@@ -339,11 +339,22 @@ beside each shape, and every `Directional` row must be measured by an assertion 
 
 Five things came out of it:
 
-- **The prose list was already wrong, and it had been for as long as it existed.** The class was
-  written three times — in `light.rs`'s header, in `shapes.rs`'s module header, and in each shape's
-  own doc comment — and the two headers agreed with each other on a directional *nine* while the doc
-  comments made it ten. `tower_shield` was the missing one. That is the argument for the table in a
-  word: nobody was maintaining three copies, because nothing could tell them apart.
+- **The prose list was already wrong, and it had been for as long as it existed** — but *which*
+  copies had drifted took a second pass to get right, and the first account of it here was wrong in
+  a way worth keeping. The class was written in four places: `shapes.rs`'s module header,
+  `ART_SPEC.md` §10, `light.rs`'s header, and each shape's own doc comment. **The two carrying a
+  drifted directional *nine* were the first two**, both omitting `tower_shield`, against a doc-comment
+  set of ten. `light.rs` never listed the directional shapes at all — it states a *complement* rule
+  over seven named exceptions, so by its own arithmetic it implied twelve and had `tower_shield`
+  right. Saying "the two module headers drifted" pointed the next reader at the one file that was
+  fine and left `ART_SPEC.md`'s copy — the one a reader actually consults — standing. Both are fixed
+  now, and neither is a list any more: §10 keeps the *reasoning* per class, which is what the table
+  has no room for, and `light.rs` keeps its exceptions as reasons rather than as a classification.
+- **A complement rule is a copy too, and it disagreed with the table.** "Anything not listed here is
+  directional" made `finish` and `finish_heavy` Directional where `SHAPE_LIGHT` calls them Symmetric
+  — which under the new coverage check is a demand for a light assertion on painting an outline on
+  all four sides at once. A rule that derives a set beats a list only when something checks it, and
+  nothing read this one either.
 - **The coverage check went red on two shapes the moment it existed, which is the whole return.**
   `sword` and `tower_shield` were directional, said so, and were measured by nothing —
   `every_directional_shape_lights_toward_the_lamp` drove a hand-written six. Neither is exotic:
@@ -364,6 +375,16 @@ Five things came out of it:
   its eight tests touched light direction, so its `raised` flag was unasserted. Its own comment says
   the failure is **invisible in a single tile**, which is the sharpest possible statement of why it
   needed a test rather than an eye.
+- **And the first test written for it could not fail on the thing that matters** — the previous
+  commit's own title arriving one file over, inside the test whose stated reason for existing is that
+  the failure is invisible. It drove `face_tone` directly; the decision is not in that function but
+  in which flag `rim` hands it. Swapping `rim`'s two arguments left all 30 cargo tests, `validate`
+  and all 23 engine suites green while **18 PNGs changed**: the focal feature of every room in all
+  three acts, carving embossed and relief incised. It renders a block beside a cut joint and reads
+  the pixels now. Two further things cost a measurement each: asserting only that the two tones
+  *differ* is **still green** under that swap, because it moves both; and pinning which is which by
+  naming `lit` and `shade` would restate the lamp here and break if it were ever re-aimed, so the
+  check asks `face_tone` and constrains the caller alone.
 
 **What is still deferred, and stated so it is not mistaken for finished:** those ~186 hand-placed
 highlights are audited but *unheld*. Nothing asserts them, `artgen validate` is structurally blind to

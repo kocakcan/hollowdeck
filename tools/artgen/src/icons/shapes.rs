@@ -873,15 +873,46 @@ mod tests {
     /// exemption list is needed and none may quietly grow.
     fn public_shapes() -> Vec<String> {
         let mut names = Vec::new();
-        for (offset, _) in SOURCE.match_indices("\npub fn ") {
-            let rest = &SOURCE[offset + "\npub fn ".len()..];
-            let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-            let body_at = rest.find('{').unwrap_or(rest.len());
-            if rest[..body_at].contains("&mut Canvas") {
-                names.push(name);
+        for prefix in ["\npub fn ", "\npub(crate) fn "] {
+            for (offset, _) in SOURCE.match_indices(prefix) {
+                let rest = &SOURCE[offset + prefix.len()..];
+                let name: String =
+                    rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+                let body_at = rest.find('{').unwrap_or(rest.len());
+                let signature = &rest[..body_at];
+                // `&mut ` plus anything ending in `Canvas`, so a shape written
+                // against `crate::canvas::Canvas` is still a shape. Matching the
+                // bare `&mut Canvas` was a scan whose reach was one spelling
+                // wide, which is the lesson this whole item is about.
+                if signature.split("&mut ").skip(1).any(|after| {
+                    after
+                        .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':'))
+                        .next()
+                        .is_some_and(|ty| ty.ends_with("Canvas"))
+                }) {
+                    names.push(name);
+                }
             }
         }
         names
+    }
+
+    /// Whether `haystack` calls `name`, as a whole identifier.
+    ///
+    /// A plain `contains("shield(")` matches inside `tower_shield(`, which is
+    /// not hypothetical: adding the `tower_shield` assertion **silently
+    /// satisfied `shield`'s coverage row**, and `shield`'s own light assertion
+    /// could then be deleted with all 30 tests green. §10 calls `shield` the
+    /// second most-quoted form in the game. The guard this commit exists to
+    /// build broke a guard it already had, through the fix, which is the
+    /// sharpest form of this file's own thesis so far.
+    fn calls(haystack: &str, name: &str) -> bool {
+        let needle = format!("{name}(");
+        haystack.match_indices(&needle).any(|(at, _)| {
+            at == 0
+                || !matches!(haystack.as_bytes()[at - 1],
+                    b'_' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')
+        })
     }
 
     /// The doc comment immediately above `pub fn <name>`, as one string.
@@ -909,11 +940,16 @@ mod tests {
     fn every_shape_declares_a_light_class() {
         let table: Vec<&str> = SHAPE_LIGHT.iter().map(|(n, _)| *n).collect();
         let shapes = public_shapes();
-        assert!(
-            shapes.len() >= 19,
-            "only found {} public shapes, so the scan is broken rather than the table: {shapes:?}",
-            shapes.len()
-        );
+        // A canary on the scan, not a count of the content: a scan that found
+        // nothing makes both loops below vacuous and this test green. Named
+        // shapes rather than a number, so removing a shape and updating the
+        // table does not fire it spuriously.
+        for known in ["blade", "shield", "gem", "finish"] {
+            assert!(
+                shapes.iter().any(|s| s == known),
+                "the scan did not find `{known}`, so it is broken rather than the table: {shapes:?}"
+            );
+        }
         for name in &shapes {
             assert!(
                 table.contains(&name.as_str()),
@@ -983,14 +1019,24 @@ mod tests {
         let mut inside = false;
         for line in SOURCE.lines() {
             let trimmed = line.trim_start();
-            if trimmed.contains("LIGHT-ASSERTION") {
+            // Matched as the *whole* line rather than by `contains`, and so it
+            // cannot fire on this function's own source: the doc comment above,
+            // the condition on this line, and the two assert messages below all
+            // name the marker, and a `contains` test put four lines of this very
+            // scan into `measured`.
+            if trimmed == "// LIGHT-ASSERTION" {
                 inside = true;
                 continue;
             }
             if !inside {
                 continue;
             }
-            if trimmed == "}" {
+            // A test function's closing brace, at this module's one indent
+            // level. `trimmed == "}"` was the first version and it ends a block
+            // at the first *nested* close instead - the `else` inside the blade
+            // sweep's loop, two lines before that test's own end - so anything
+            // written after a loop would be invisible to this scan.
+            if line == "    }" {
                 inside = false;
                 continue;
             }
@@ -1000,7 +1046,7 @@ mod tests {
             }
         }
         assert!(
-            measured.contains("blade("),
+            calls(&measured, "blade") && calls(&measured, "shield"),
             "no LIGHT-ASSERTION block was found at all, so this test is measuring nothing"
         );
 
@@ -1009,7 +1055,7 @@ mod tests {
                 continue;
             }
             assert!(
-                measured.contains(&format!("{name}(")),
+                calls(&measured, name),
                 "`{name}` is Directional and no LIGHT-ASSERTION block draws it — \
                  a class is a claim that the lamp reaches this shape, and an unmeasured \
                  claim is the prose list this table replaced"

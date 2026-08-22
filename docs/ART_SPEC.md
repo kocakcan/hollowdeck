@@ -582,10 +582,16 @@ relation `palette.rs` does not have and its failure mode is silent at the top of
 
 ### Named exceptions
 
-Three classes, and every shape in `shapes.rs` states its own in its doc comment:
+Three classes. **Which shape is in which is `shapes::SHAPE_LIGHT`, and this section deliberately no
+longer lists them** — it carried its own copy of the directional set until that copy was found to
+have been wrong for as long as it existed, omitting `tower_shield`. A list here cannot be checked
+against anything: nothing in the toolchain reads markdown, and `the_table_agrees_with_the_doc_comments`
+scans `shapes.rs`'s doc comments alone. What this section is for is the *reasoning*, which the table
+has no room for:
 
-- **Directional** — `blade`, `sword`, `shield`, `droplet`, `flask`, `gem`, `scale`, `skull`,
-  `raised_fist`.
+- **Directional** — derives its lit side from `LIGHT`, and therefore must be measured: a class is a
+  claim that the lamp reaches the shape, and `every_directional_shape_has_a_light_assertion` is what
+  turns that claim into a demand.
 - **Emissive** — `flame`, `orb`, `sparkle`, and the whole of `icons/fx.rs`. They *are* the light,
   locally; giving one a lit side would say it is lit by something else.
 - **Symmetric** — `eye` (an aperture is a hole, and lighting one side of a hole is a mistake),
