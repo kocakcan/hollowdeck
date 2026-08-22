@@ -111,6 +111,7 @@ public partial class CombatTargetingSmokeTest : Node
         await TestASummonBuildsAnEnemyViewMidFight();
         TestTheBlockedBeatNeedsAnAbsorbedHit();
         await TestAnEnemyAttackNamesItselfAsTheAttacker();
+        await TestABlockedEnemyAttackStillNamesTheEnemy();
 
         GD.Print($"CombatTargetingSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -140,10 +141,36 @@ public partial class CombatTargetingSmokeTest : Node
             "Block falling with nothing absorbed is a turn boundary, not a blocked hit - " +
             "gating on the Block delta fires this beat every turn either side carried Block");
 
+        // Which blade goes with which attacker. The two runs share one drawn
+        // axis - an axis is undirected, so the mirror is the identity - which
+        // means pigment is the entire channel separating "the player swung" from
+        // "something swung at the player". A swap is therefore not a wrong
+        // colour, it is the beat pointing the wrong way.
+        //
+        // PixelSpecSmokeTest's spawn scan cannot say this. It asks whether a
+        // constant is named in scripts/ui, so it goes red when an arm is deleted
+        // and stays green when the two are exchanged: measured, all 23 suites
+        // passed with every enemy throwing the player's bone blade.
+        var swinger = new PlayerCombatant { Name = "Player", MaxHp = 10, CurrentHp = 10 };
+        var beast = new EnemyCombatant { Name = "Beast", MaxHp = 10, CurrentHp = 10 };
+        Check("the_player_swings_the_bone_blade",
+            CombatScreen.BladeFor(swinger) == CombatFx.Swipe,
+            $"the player's blade is {CombatScreen.BladeFor(swinger)}, expected {CombatFx.Swipe}");
+        Check("an_enemy_swings_the_oxblood_blade",
+            CombatScreen.BladeFor(beast) == CombatFx.Gash,
+            $"an enemy's blade is {CombatScreen.BladeFor(beast)}, expected {CombatFx.Gash}");
+
+        // And that they are not the same run, which is what the two checks above
+        // would both still pass if the constants ever collapsed into one.
+        Check("the_two_blades_are_different_runs",
+            CombatScreen.BladeFor(swinger) != CombatScreen.BladeFor(beast),
+            "both directions spawn the same blade - with the geometry shared there is then " +
+            "nothing at all telling the player which way the beat is aimed");
+
         Check("blocked_beat_ignores_a_hit_that_got_through",
             !CombatScreen.IsAbsorbedHit(hpDelta: -3, absorbedDelta: 1),
             "Block that absorbed part of a hit still lost HP, which is the ordinary hit " +
-            "reaction - two beats for one hit otherwise");
+            "reaction - two beats for one hit otherwise, and now two blades as well");
     }
 
     // The other half of that argument, for the beat that has a *direction*.
@@ -203,6 +230,59 @@ public partial class CombatTargetingSmokeTest : Node
             CombatScreen.AttackerOf(-5, 0, enemy) is null,
             "an HP loss the counter did not move resolved to an attacker - a Poison tick would " +
             "draw a blade from whichever enemy last swung");
+
+        instance.QueueFree();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    // The same drive, one beat over, for the direction that had a gate and no
+    // cause: a swing Block stopped whole.
+    //
+    // It is worth driving rather than asserting about numbers for a reason the
+    // landed half does not have. AbsorbedAttackerOf reads
+    // LastAbsorbedAttacker, which DealDamageEffect writes on the *absorbed*
+    // branch - a branch no enemy turn takes unless the player is actually
+    // holding Block when the swing arrives. Typing the diff here would exercise
+    // the rule and say nothing about whether the write is on the path, which is
+    // the half that can silently not happen.
+    //
+    // Block is set before TryEndTurn deliberately: the player's Block is
+    // cleared in EndEnemyTurn, so it is live for the whole enemy turn and gone
+    // by the time the player holds one again. Setting it after would be
+    // wiped before the enemy swung.
+    private async System.Threading.Tasks.Task TestABlockedEnemyAttackStillNamesTheEnemy()
+    {
+        CombatContext.EnemyDefinitionIds = new List<string> { "rot_hound" };
+        var instance = GD.Load<PackedScene>("res://scenes/CombatScreen.tscn").Instantiate();
+        AddChild(instance);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        var combat = CombatManager.Instance!;
+        var enemy = combat.Enemies[0];
+        var player = combat.Player;
+
+        // Far past anything rot_hound can telegraph, so the absorb is whole
+        // whichever move the weighted roll picks - the point is the branch, not
+        // the arithmetic.
+        player.Block = 999;
+        int hpBefore = player.CurrentHp;
+        int absorbedBefore = player.HitsAbsorbed;
+
+        combat.TryEndTurn();
+        await ToSignal(GetTree().CreateTimer(1.2f), SceneTreeTimer.SignalName.Timeout);
+
+        int hpDelta = player.CurrentHp - hpBefore;
+        int absorbedDelta = player.HitsAbsorbed - absorbedBefore;
+        Check("the_enemy_turn_was_absorbed_whole", hpDelta == 0 && absorbedDelta > 0,
+            $"the player lost {-hpDelta} HP over {absorbedDelta} absorbed hits - this check says " +
+            "nothing at all unless Block actually ate a swing");
+
+        Check("an_absorbed_hit_names_the_enemy_that_swung",
+            ReferenceEquals(
+                CombatScreen.AbsorbedAttackerOf(hpDelta, absorbedDelta, player.LastAbsorbedAttacker),
+                enemy),
+            $"the absorbed hit resolved to {player.LastAbsorbedAttacker?.Name ?? "nobody"} rather " +
+            $"than to {enemy.Name} - the ward burst would bloom with nothing crossing the gap");
 
         instance.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);

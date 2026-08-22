@@ -187,6 +187,13 @@ public partial class EffectSmokeTest : Node
     // So the property worth asserting is the *difference*, not the increment:
     // an absorbed hit moves the counter and an expiry does not. Checking only
     // that damage increments it would stay green under the original bug.
+    //
+    // The counter has a second half now, LastAbsorbedAttacker, because the beat
+    // grew a blade: a swing Block stopped whole used to bloom a ward burst with
+    // nothing crossing the gap toward it, so the one attack in a fight the
+    // player could not see coming was the one that got stopped. The counter is
+    // still what makes the name mean anything - the field is never cleared, so
+    // read alone it survives every turn boundary the beat has to refuse.
     private void TestAbsorbingAHitIsDistinguishableFromLosingBlock()
     {
         var attacker = new EnemyCombatant { Name = "Attacker", MaxHp = 50, CurrentHp = 50 };
@@ -202,6 +209,14 @@ public partial class EffectSmokeTest : Node
         Check("absorbing_a_hit_counts_it", target.HitsAbsorbed == 1,
             $"Block ate 4 damage and HitsAbsorbed is {target.HitsAbsorbed}, expected 1");
 
+        // Identity, not non-null, for the reason LastAttacker's twin below says
+        // it: a LastAbsorbedAttacker wrongly set to the *target* passes every
+        // null check and throws the blade out of the thing it should arrive at.
+        Check("absorbing_a_hit_names_who_swung",
+            ReferenceEquals(target.LastAbsorbedAttacker, attacker),
+            $"LastAbsorbedAttacker is {target.LastAbsorbedAttacker?.Name ?? "null"}, expected " +
+            $"{attacker.Name} - the ward burst would bloom with nothing crossing the gap");
+
         // A hit Block cannot reach must not count - otherwise the beat fires on
         // damage that went straight through, which is the opposite mistake.
         target.Block = 0;
@@ -216,6 +231,27 @@ public partial class EffectSmokeTest : Node
         Check("expiring_block_does_not_count", target.HitsAbsorbed == before,
             $"clearing Block moved HitsAbsorbed from {before} to {target.HitsAbsorbed} - the " +
             "view layer cannot then tell an absorbed hit from an expired one");
+
+        // And the rule that reads the pair. LastAbsorbedAttacker is still set
+        // from the absorb at the top of this test and is now stale by exactly
+        // the amount the turn boundary makes it stale - which is the point: the
+        // field is never cleared, and the counter is the whole of what refuses
+        // it. Driven here rather than in a fight because PopupDelta needs a live
+        // one and a built screen to reach.
+        Check("absorbed_attacker_of_an_absorbed_hit_is_the_attacker",
+            ReferenceEquals(CombatScreen.AbsorbedAttackerOf(0, 1, target.LastAbsorbedAttacker), attacker),
+            "a hit Block ate whole did not resolve to whoever swung it");
+        Check("absorbed_attacker_of_an_expiring_block_is_nobody",
+            CombatScreen.AbsorbedAttackerOf(0, 0, target.LastAbsorbedAttacker) is null,
+            "Block fell with the counter still and something resolved to an attacker - a stale " +
+            "name would throw a blade every turn either side held leftover Block");
+
+        // A partial absorb moves this pair *and* HitsTaken, so both readers see
+        // it. Only one may answer, or the hit draws two blades: the landed beat
+        // owns it, and this is the refusal that leaves it there.
+        Check("absorbed_attacker_of_a_partial_absorb_is_nobody",
+            CombatScreen.AbsorbedAttackerOf(-3, 1, attacker) is null,
+            "a hit that got past Block resolved to an absorbed attacker as well as a landed one");
     }
 
     // Combatant.HitsTaken/LastAttacker are the same argument as HitsAbsorbed
@@ -242,14 +278,17 @@ public partial class EffectSmokeTest : Node
             Combat = null!,
         };
 
-        // A hit Block eats whole is not a blade's beat, it is the ward burst's -
-        // and it is the case the `unblocked` gate exists for. First, so a
-        // counter that moved here would fail before anything sets it legitimately.
+        // A hit Block eats whole is the absorbed pair's beat rather than this
+        // one's - it draws a blade too, but through HitsAbsorbed and
+        // LastAbsorbedAttacker - and it is the case the `unblocked` gate exists
+        // for. First, so a counter that moved here would fail before anything
+        // sets it legitimately.
         EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 4 });
         Check("a_fully_blocked_hit_is_not_a_landed_one",
             target.HitsTaken == 0 && target.LastAttacker is null,
             $"Block ate all 4 damage and HitsTaken is {target.HitsTaken}, LastAttacker is " +
-            $"{target.LastAttacker?.Name ?? "null"} - a hit that never reached HP has no blade");
+            $"{target.LastAttacker?.Name ?? "null"} - nothing reached HP, so this pair must not " +
+            "move and the impact burst must not fire");
 
         target.Block = 0;
         EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 4 });

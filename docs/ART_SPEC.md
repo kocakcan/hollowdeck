@@ -377,10 +377,12 @@ Two more runs joined those bursts and both **travel** — the swipe, and the bla
 way. They are spawned by `CombatFx.PlayTravelling`, which tweens `position` between two
 `SnapTranslation`'d endpoints while the frames run, and are checked for the two things a second spawn
 path adds: that the *landing* is on the grid (the origin is shared code the burst checks already
-cover, the destination is not) and that the travel finishes before the `impact` that follows it
-blooms at the same point. That last is an assertion rather than a comment because both numbers are
-tunable and a later nudge to either one silently inverts the beat — a blade still in flight while the
-hit blooms under it reads as the impact landing first.
+cover, the destination is not) and that the travel finishes before the burst that follows it blooms
+at the same point. That last is an assertion rather than a comment because both numbers are tunable
+and a later nudge to either one silently inverts the beat — a blade still in flight while the hit
+blooms under it reads as the impact landing first. It governs `ward` as well as `impact` without a
+second copy: what it pins is the relation between the two cadence constants, and every burst runs on
+the same one.
 
 The two blades share one drawn axis and differ only in pigment, and that is forced rather than
 chosen: **an axis is undirected.** The player's attack vector spans about −13° to −49° and an enemy's
@@ -388,6 +390,18 @@ spans 131° to 167°, which is the same line read from the other end, so a secon
 be a second answer to a question that has one. What separates them is colour — bone for the player's
 blade, oxblood for what is coming at them — because once both are travelling, colour is the only
 channel left.
+
+Which is why **which blade goes with which attacker is asserted, and not by the spawn scan.** That
+scan asks whether a constant is *named* under `scripts/ui`, so it catches an arm deleted and cannot
+catch the two exchanged — measured, every enemy throwing the player's bone blade left all 23 suites
+green. With the geometry deliberately shared there is then nothing at all left saying which way the
+beat is aimed, so `CombatScreen.BladeFor` is public and both pairings are pinned, along with the fact
+that they differ.
+
+Both blades are spawned from one call site, `PlayAttackApproach`, which is the half of a hit that
+belongs to whoever swung — the lunge and the blade crossing the gap. It is shared by the landed beat
+and by the one Block ate whole, because those are the same approach and differ only in what happens
+at the far end: `impact` and a screen shake keyed to HP lost, or `ward` and a flash.
 
 The generator side carries the half no runtime check can: `fx.rs` declares per run whether it is
 drawn about a *point* or along an *axis*, and asserts both directions — a swipe redrawn as a disc

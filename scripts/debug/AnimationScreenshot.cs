@@ -192,6 +192,35 @@ public partial class AnimationScreenshot : Node
         LayBladeAlongItsPath(combat, new Vector2(876, 170), player, CombatFx.Gash);
         KillEveryTween();
         await Snapshot("user://anim_05_gash_in_flight.png");
+
+        foreach (var stale in combat.GetChildren().OfType<TextureRect>()
+                     .Where(r => r.GetChildren().OfType<SpriteAnimator>().Any()))
+        {
+            stale.QueueFree();
+        }
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        // The one composite this project has that nothing else can show: an
+        // incoming blade arriving into the ward burst it is about to be stopped
+        // by. It is worth its own frame because it is the only place two runs
+        // land on the same point *by design* - every other pairing in the sheet
+        // is two effects kept deliberately apart.
+        //
+        // What it is here to answer is whether oxblood reads against ward's
+        // blue at the moment they overlap. They do overlap: the blade lands at
+        // half its run (0.08s) and the burst blooms over 0.24s, which is the
+        // relation PixelSpecSmokeTest pins - so the blade is still on screen
+        // while the ward opens under it, and that is the beat rather than a
+        // collision. The blade is laid at its landing and the ward stepped to
+        // its ring frame, which is that instant held still.
+        LayBladeAlongItsPath(combat, new Vector2(876, 170), player, CombatFx.Gash);
+        CombatFx.Play(combat, player, CombatFx.Ward);
+        var ward = combat.GetChildren().OfType<TextureRect>().LastOrDefault();
+        var wardAnimator = ward?.GetChildren().OfType<SpriteAnimator>().FirstOrDefault();
+        wardAnimator?._Process(CombatFx.FrameSeconds);
+        wardAnimator?.SetProcess(false);
+        KillEveryTween();
+        await Snapshot("user://anim_06_gash_into_ward.png");
     }
 
     // Every live tween, killed before a blade shot. The travel tweens would

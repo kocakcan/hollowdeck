@@ -525,12 +525,56 @@ Six things came out of it:
   bar already covered, which changed no geometry and passed: a mutation has to move the thing the
   assertion measures.
 
-**What is deferred, and stated so it is not mistaken for finished:** a fully-blocked enemy attack
-still draws no blade. Every VFX in `PopupDelta` hangs off an HP diff, and `DealDamageEffect`'s
-counter is gated on damage that got past Block, so a swing the player absorbed whole gets the ward
-burst and nothing crossing the gap. That is defensible — it is what the outgoing direction has always
-done — but it is a decision rather than an oversight, and closing it means a second counter, not a
-second asset.
+### The blocked blade — **shipped**, and the forecast above it was right for once
+
+The paragraph this replaces read: *"a fully-blocked enemy attack still draws no blade. … closing it
+means a second counter, not a second asset."* Both halves held. `Combatant.LastAbsorbedAttacker` is
+that counter's other half, written beside `HitsAbsorbed++` in the one place Block eats anything, and
+`CombatScreen.AbsorbedAttackerOf` reads the pair the way `AttackerOf` reads the landed one. No new
+art, no new frame set, no new constant.
+
+What the entry did not contain is that **it was never an enemy-only gap.** A player swing an enemy
+blocked whole was silent by the identical mechanism, so giving the absorbed beat a cause fixed both
+directions in one edit — which is what giving the *landed* beat a cause did one item up, and for the
+same reason: a beat without a cause is missing in every direction at once, and only one of them gets
+noticed.
+
+Five things came out of it:
+
+- **The invariant this reverses was written into the code, not merely absent from it.**
+  `Combatant.HitsTaken`'s comment said "a hit Block ate whole is the ward burst's beat and not a
+  blade's", and `AttackerOf`'s said the fully-blocked case was deliberately out of scope. Those were
+  a decision rather than a fact — the ward burst says the Block *held* and says nothing whatever
+  about who tested it, so the one swing in a fight the player could not see coming was the one that
+  got stopped. Both comments are rewritten rather than left standing, since a rule the code has
+  outgrown reads exactly like one it never met.
+- **The write is gated on `absorbedByBlock`, not on the hit being absorbed *whole*.** The tempting
+  version puts one distinction in two places. A partial absorb moves both pairs and the *readers*
+  separate them: `IsAbsorbedHit` demands `hpDelta == 0`, so a partial takes the landed arm and draws
+  exactly one blade. `AbsorbedAttackerOf` is built on `IsAbsorbedHit` rather than restating the
+  condition, so the two cannot come apart.
+- **The absorbed arm shares the approach and not the landing.** `PlayAttackApproach` — the lunge plus
+  the travelling blade — is what both beats want; `impact`, the recoil and the screen shake are what
+  only a landed hit wants, and the last of those is keyed to HP lost and would be shaking over zero.
+- **The ordering assertion already covered this and had to be *renamed* rather than duplicated.**
+  `combat_fx_travel_arrives_before_the_impact_blooms` pins a relation between `TravelFrameSeconds`
+  and `FrameSeconds`, and `ward` runs on the same `FrameSeconds` every burst does — so a second copy
+  aimed at ward would have asserted the identical arithmetic twice. It is
+  `..._before_the_burst_blooms` now, which is what it always measured.
+- **The mutation that mattered was not one this branch introduced, and it had been green all along.**
+  Six of seven mutations went red as expected. The seventh — `BladeFor` collapsed to always return
+  the bone blade — went red too, but only through `PixelSpecSmokeTest`'s spawn scan, which sees
+  whether a constant is *named* in `scripts/ui`. **Swapping the two arms keeps both names present and
+  left all 23 suites green**: every enemy throwing the player's blade and the player throwing
+  oxblood back, with the geometry shared so pigment is the entire channel telling the two apart. That
+  is a hole in the seam this item doubles the traffic through, so `BladeFor` is public and asserted
+  now — both arms and their distinctness, since two checks pinning the constants would both survive
+  the constants collapsing into one.
+
+**What is deferred, and stated so it is not mistaken for finished:** the *other* three ways HP falls
+still have no cause channel, and that is unchanged and still deliberate. A Poison tick, `LoseHpEffect`
+and Thorns' direct subtraction all reach `PopupDelta` as a bare HP diff and play `impact`; giving
+every HP change a cause is the wider change §5 declined above, and this item did not take it.
 
 ## 6. An easing vocabulary — **shipped**
 
