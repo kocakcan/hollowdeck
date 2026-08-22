@@ -268,8 +268,20 @@ public partial class CombatTargetingSmokeTest : Node
         int hpBefore = player.CurrentHp;
         int absorbedBefore = player.HitsAbsorbed;
 
+        // Sampled every frame across a real wall clock rather than waited out.
+        // The blade lives 4 x TravelFrameSeconds = 0.16s and frees itself, so a
+        // single look after the turn has finished is a look at an empty screen;
+        // and this scene's frame time is not a clock, which is why the deadline
+        // is real milliseconds and the *sampling* is per frame. Ten-odd frames
+        // carry the blade, so the peak cannot be missed.
         combat.TryEndTurn();
-        await ToSignal(GetTree().CreateTimer(1.2f), SceneTreeTimer.SignalName.Timeout);
+        bool sawBlade = false;
+        ulong deadline = Time.GetTicksMsec() + 1400;
+        while (Time.GetTicksMsec() < deadline)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (!sawBlade) sawBlade = ABladeIsInFlight(instance, CombatFx.Gash);
+        }
 
         int hpDelta = player.CurrentHp - hpBefore;
         int absorbedDelta = player.HitsAbsorbed - absorbedBefore;
@@ -284,9 +296,33 @@ public partial class CombatTargetingSmokeTest : Node
             $"the absorbed hit resolved to {player.LastAbsorbedAttacker?.Name ?? "nobody"} rather " +
             $"than to {enemy.Name} - the ward burst would bloom with nothing crossing the gap");
 
+        // And that the beat is actually *wired*, which is the half everything
+        // else in this branch is compatible with being false. The pair, the
+        // rule and the pigment are all pure functions and all assertable on
+        // their own; PopupDelta handing them to PlayBlockAbsorbVfx is not, and
+        // deleting that one call reverts the whole feature with every suite
+        // green and every check count unchanged. Measured, before this existed.
+        //
+        // It also refuses the wrong field: LastAttacker in place of
+        // LastAbsorbedAttacker names nobody on the first turn of a fight, so no
+        // blade is ever spawned and this goes red where the rule checks above
+        // cannot - they are handed the diff rather than reading it.
+        Check("an_absorbed_hit_throws_a_blade_across_the_gap", sawBlade,
+            $"no {CombatFx.Gash} run was ever in flight while {enemy.Name}'s swing was absorbed - " +
+            "the ward burst blooms and nothing crosses the gap, which is the beat this closes");
+
         instance.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }
+
+    // Whether a travelling run of `effect` is on screen right now, found by its
+    // frames rather than by counting nodes: the ward burst is a TextureRect
+    // carrying a SpriteAnimator too, so a count cannot tell the two apart and
+    // would pass on the burst alone - which is exactly the state this beat had
+    // before the blade was added to it.
+    private static bool ABladeIsInFlight(Node combat, string effect) =>
+        combat.GetChildren().OfType<TextureRect>().Any(r =>
+            r.Texture?.ResourcePath.Contains($"/{effect}_") == true);
 
     // The glow is EnemyView's own Button background, so anything drawn over
     // the enemy erases it - and the stylebox assertions above all still pass

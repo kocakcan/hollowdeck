@@ -224,9 +224,26 @@ public partial class EffectSmokeTest : Node
         Check("an_unblocked_hit_does_not_count", target.HitsAbsorbed == 1,
             $"a hit against 0 Block moved HitsAbsorbed to {target.HitsAbsorbed}");
 
+        // A *partial* absorb, which is the case the write gate turns on and the
+        // one nothing here reached. Both pairs move: Block eats 2 and 3 gets
+        // through, so this counter counts it and HitsTaken counts it too, and
+        // the whole-absorb distinction lives in the reader rather than in the
+        // write. Without this, re-gating DealDamageEffect to `unblocked == 0`
+        // is behaviour-neutral today and stays green - which is precisely how a
+        // rule ends up documented one way and coded another.
+        target.Block = 2;
+        target.LastAbsorbedAttacker = null;
+        int before = target.HitsAbsorbed;
+        EffectRegistry.Execute(ctx, new EffectSpec { Action = "deal_damage", Amount = 5 });
+        Check("a_partly_absorbed_hit_counts_it_too",
+            target.HitsAbsorbed == before + 1 && ReferenceEquals(target.LastAbsorbedAttacker, attacker),
+            $"Block ate 2 of 5 and HitsAbsorbed went {before} -> {target.HitsAbsorbed}, attacker " +
+            $"{target.LastAbsorbedAttacker?.Name ?? "null"} - the gate is on Block eating anything, " +
+            "not on it eating the hit whole");
+
         // And the turn boundary, which is the case that was actually wrong.
         target.Block = 12;
-        int before = target.HitsAbsorbed;
+        before = target.HitsAbsorbed;
         target.Block = 0;
         Check("expiring_block_does_not_count", target.HitsAbsorbed == before,
             $"clearing Block moved HitsAbsorbed from {before} to {target.HitsAbsorbed} - the " +

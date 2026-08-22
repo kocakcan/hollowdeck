@@ -571,6 +571,41 @@ Five things came out of it:
   now — both arms and their distinctness, since two checks pinning the constants would both survive
   the constants collapsing into one.
 
+The review pass then found the thing all of that mutation testing had been aimed one level below, and
+it is the most useful entry here:
+
+- **Every mutation tested was of a pure function, and the feature itself was held by none of them.**
+  The pair, the rule and the pigment are each assertable standing alone, so each got an assertion —
+  and `PopupDelta` handing the pair to `PlayBlockAbsorbVfx` is the one part that is not, so it got
+  none. Deleting that single call reverts the whole feature to `main`'s behaviour, and **all 23
+  suites passed with byte-identical check counts.** So did passing the *wrong field* —
+  `LastAttacker` for `LastAbsorbedAttacker` — which names nobody on turn one and the wrong enemy in
+  a crowd. The spawn scan cannot see either, because `Ward`, `Swipe` and `Gash` are all still
+  *named* under `scripts/ui`: that is the `BladeFor` hole above, one layer up, in the same branch
+  that had just closed it. The check that closes this one samples for a live `gash` run every frame
+  across a real wall clock — per frame because the blade lives 0.16s and frees itself, on a real
+  clock because this scene's frame time is not one.
+- **The shot did not contain its subject, and only rendering it said so.** `LayBladeAlongItsPath`
+  lays a whole run out along its line, so reusing it put three redundant blades in mid-air and left
+  the one at the landing on its last frame, already motes, with the ward drawn over an empty
+  landing. Stepping it by hand to the landing instead was *also* wrong, and the reason is the
+  finding: the blade arrives on its third frame and is breaking up by then, and the ward does not
+  open its ring until 0.06s against a 0.08s travel — so **the two runs never meet in mid-air.** They
+  meet on the player, in the same pixels, which is the whole reason the pair needed a frame of its
+  own. It runs both on the real clock and freezes on the ward's ring frame now.
+- **A comment claimed an ordering invariant that cannot be violated.** `PlayAttackApproach`'s "the
+  lunge is about to move the sprite, so a blade spawned second would leave from the wrong place" was
+  inherited from `PlayHitVfx` and is false: the lunge only *creates* a `Tween`, which steps in the
+  process loop, so the origin is identical either side of the call — instrumented over a real card
+  play. The hazard that is real is a lunge from an *earlier* beat still in flight, which statement
+  order does nothing about and which this beat roughly doubles the frequency of. Written down rather
+  than fixed.
+- **`CLAUDE.md` stated the write gate as the opposite of the code**, and no assertion reached the
+  difference: every `HitsAbsorbed` check drove a whole absorb or none, so re-gating the write to
+  `unblocked == 0` on the strength of that sentence was behaviour-neutral today and green. The
+  partial absorb is covered now. This is the drifted-telegraph shape arriving in a documentation
+  line, which is the one place this project keeps finding it hardest to see.
+
 **What is deferred, and stated so it is not mistaken for finished:** the *other* three ways HP falls
 still have no cause channel, and that is unchanged and still deliberate. A Poison tick, `LoseHpEffect`
 and Thorns' direct subtraction all reach `PopupDelta` as a bare HP diff and play `impact`; giving

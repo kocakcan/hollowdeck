@@ -211,16 +211,69 @@ public partial class AnimationScreenshot : Node
         // half its run (0.08s) and the burst blooms over 0.24s, which is the
         // relation PixelSpecSmokeTest pins - so the blade is still on screen
         // while the ward opens under it, and that is the beat rather than a
-        // collision. The blade is laid at its landing and the ward stepped to
-        // its ring frame, which is that instant held still.
-        LayBladeAlongItsPath(combat, new Vector2(876, 170), player, CombatFx.Gash);
+        // collision.
+        //
+        // Unlike every other shot in this file, this one is **not** stepped by
+        // hand. Both effects are spawned exactly as a fight spawns them - blade
+        // first, because PlayAttackApproach runs before the burst - and then run
+        // on the real clock until the ward reaches its ring frame, at which
+        // point everything is frozen where it stands.
+        //
+        // Stepping was tried and photographed the wrong instant twice, which is
+        // why it is worth the polling loop, and what it turned up is worth
+        // recording because it is not what the beat feels like: **the two runs
+        // do not meet in mid-air.** The travel is TravelFraction (0.5) of a
+        // four-frame 0.16s run, so 0.08s, and the ward does not open its ring
+        // until 0.06s - by which point Motion.Jolt, an ease-out, has carried
+        // the blade almost the whole way. So the overlap this shot is here to
+        // judge happens *on the player*, in the same pixels, which is exactly
+        // why the pair needed a frame of its own and why every other pairing in
+        // this sheet is kept apart.
+        //
+        // Stepped by hand it photographed the landing instead: the blade
+        // arrives on its third frame, already breaking into motes, so the still
+        // was honest about the arrival and showed none of the blade. Caught in
+        // review, by rendering it. This file's rule is that a shot which only
+        // sometimes contains its subject is worse than none; one that never
+        // does is worse again, because it still looks like evidence.
+        //
+        // The frozen frame index is exact - the loop polls it - while the blade's
+        // position is wherever the real easing has it after a real 0.06s, so it
+        // can shift by a frame's travel between runs. That is the same
+        // looping-animation wobble ScreenShot's own note declines to chase, and
+        // it is preferable to a fraction picked here to look right.
+        CombatFx.PlayTravelling(combat, new Vector2(876, 170), player, CombatFx.Gash);
         CombatFx.Play(combat, player, CombatFx.Ward);
-        var ward = combat.GetChildren().OfType<TextureRect>().LastOrDefault();
-        var wardAnimator = ward?.GetChildren().OfType<SpriteAnimator>().FirstOrDefault();
-        wardAnimator?._Process(CombatFx.FrameSeconds);
-        wardAnimator?.SetProcess(false);
+
+        // Polled on the frame index rather than waited out in milliseconds: the
+        // whole overlap is 0.06s against a 60fps tick, so a wait long enough to
+        // be reliable is longer than the thing being photographed.
+        for (int i = 0; i < 30 && !ShowsFrame(combat, CombatFx.Ward, 1); i++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        FreezeEveryRun(combat);
         KillEveryTween();
         await Snapshot("user://anim_06_gash_into_ward.png");
+    }
+
+    // Whether `effect`'s run is currently showing frame `frame`. Read off the
+    // texture rather than off SpriteAnimator's private cursor, which is also
+    // what the shot itself is a picture of.
+    private static bool ShowsFrame(Node combat, string effect, int frame) =>
+        combat.GetChildren().OfType<TextureRect>()
+            .Any(r => r.Texture?.ResourcePath.EndsWith($"/{effect}_{frame}.png") == true);
+
+    // Stop every effect driver where it stands, so the engine cannot tick one
+    // more time on the way to Snapshot's own awaited frame - the off-by-one beat
+    // the sheet above records paying for once already.
+    private static void FreezeEveryRun(Node combat)
+    {
+        foreach (var animator in combat.GetChildren().OfType<TextureRect>()
+                     .SelectMany(r => r.GetChildren().OfType<SpriteAnimator>()))
+        {
+            animator.SetProcess(false);
+        }
     }
 
     // Every live tween, killed before a blade shot. The travel tweens would

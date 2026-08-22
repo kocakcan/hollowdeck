@@ -973,7 +973,9 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   (`CombatFx.All`) is what `PixelSpecSmokeTest` drives, so a seventh effect is one entry rather than
   a name retyped in a test. **A blade needs a cause, and there are two of them**: `PopupDelta` is a
   state diff, so `Combatant` carries `HitsTaken`/`LastAttacker` for a hit that reached HP and
-  `HitsAbsorbed`/`LastAbsorbedAttacker` for one Block ate whole. Counter *and* name, always read
+  `HitsAbsorbed`/`LastAbsorbedAttacker` for one Block ate **any** of — the whole-absorb distinction
+  is the *reader's* (`IsAbsorbedHit` demands `hpDelta == 0`), never the write's, so a partial absorb
+  moves both pairs and draws one blade. Counter *and* name, always read
   together — either name alone survives every turn boundary and would throw a blade out of an enemy
   that did nothing. All four are written in `DealDamageEffect` and nowhere else; the other three ways
   HP falls (a Poison tick, `LoseHpEffect`, Thorns' direct subtraction) have no attacker to draw a

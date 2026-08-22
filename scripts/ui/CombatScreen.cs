@@ -1441,10 +1441,23 @@ public partial class CombatScreen : Control
     // hit and one Block ate whole are the same approach and differ only in what
     // happens at the far end.
     //
-    // The two lines are ordered, not merely grouped. PlayerCenter reads the
-    // sprite's live GlobalPosition and the lunge is about to move it, so a
-    // blade spawned second would leave from where the player is going rather
-    // than from where they are.
+    // The order is inherited from PlayHitVfx, where it was written as
+    // load-bearing: "PlayerCenter reads the sprite's live GlobalPosition and
+    // the lunge is about to move it". **That is not true, and it was checked
+    // rather than reasoned about.** PlayPlayerLungeToward only *creates* a
+    // Tween, which steps in the process loop, so the origin CombatantCenter
+    // reads is identical either side of the call - instrumented over a real
+    // card play, before and after both (120, 350). The two statements commute,
+    // and no mutation can produce the failure the old comment described.
+    //
+    // The hazard that is real is a lunge from an *earlier* beat still in
+    // flight: a mixed AoE where one enemy blocks whole (immediate) and another
+    // takes a big hit (deferred by HitStopSeconds) reads the player's centre
+    // mid-lunge, up to about 26px off. Statement order does nothing about that,
+    // and this beat roughly doubles how often two approaches fire from one
+    // refresh - so it is written down here rather than left to be rediscovered.
+    // Not fixed: the blade would have to spawn from a rest position the sprite
+    // is not currently at, which is a wider change than this one.
     private void PlayAttackApproach(Combatant attacker, Vector2 targetCenter)
     {
         if (attacker is PlayerCombatant) PlayPlayerLungeToward(targetCenter);
