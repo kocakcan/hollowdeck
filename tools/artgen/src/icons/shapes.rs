@@ -19,40 +19,88 @@
 //! edge. `light.rs` is the other half — one source, up and to the left, for
 //! every icon (`docs/ART_SPEC.md` §10).
 //!
-//! Every shape below is in exactly one of three classes, and each one says
-//! which in its own doc comment rather than leaving a reader to infer it:
+//! Every shape below is in exactly one of three classes (`light::LightClass`),
+//! and `SHAPE_LIGHT` is where that is written down. Each shape still says which
+//! in its own doc comment, because that is where a reader meets it — but the
+//! two are held against each other by a test rather than by good intentions.
 //!
-//! - **Directional** — derives its lit side from `LIGHT`. `blade`, `sword`,
-//!   `shield`, `droplet`, `flask`, `gem`, `scale`, `skull`, `raised_fist`.
-//! - **Emissive** — a light source, so it is lit from inside and the direction
-//!   does not apply. `flame`, `orb`, `sparkle`.
-//! - **Symmetric** — concentric or single-colour; there is no face to light.
-//!   `eye`, `arrow`, `crack`, `barb`.
+//! There used to be a third copy right here, an inline prose list of the nine
+//! directional shapes. It is gone because it was **wrong**: `tower_shield` had
+//! been directional since it was written and this list never learned about it,
+//! which is the whole argument for the table in one word.
 //!
 //! The colour parameters (`edge`, `lit`, `highlight`, `shade`) stay callers'
 //! business, because a material's pigment is a content decision. Where those
 //! colours *land* is not a parameter and must never become one.
 
-use crate::icons::light::{by_face, lit_offset, LIGHT};
+use crate::icons::light::{by_face, lit_offset, LightClass, LIGHT};
 use crate::canvas::Canvas;
 use crate::palette::*;
 
 pub const GRID: i32 = 32;
 
+/// Every public shape in this module and the §10 class it belongs to.
+///
+/// The single copy of a fact that was previously stated three times — here as
+/// prose, in `light.rs`'s header, and in each shape's own doc comment — and
+/// agreed on by none of them. Three tests hold it: `every_shape_declares_a_light_class`
+/// (nothing may be absent), `the_table_agrees_with_the_doc_comments` (the prose
+/// a reader actually meets may not drift from it), and
+/// `every_directional_shape_has_a_light_assertion` (a `Directional` row is a
+/// claim that something measures the shape, so something must).
+///
+/// `finish` and `finish_heavy` are in it although they are passes rather than
+/// shapes. Excluding them would need a second list of exemptions, and the
+/// honest classification is free: an outline is painted on every side at once,
+/// which is exactly what `Symmetric` means.
+///
+/// `gem` is `Directional` even though its doc says "directional in the
+/// pavilion, symmetric in the table". The table being flat is a fact about one
+/// region; the shape has a lit side and `by_face` derives it, and a row here
+/// answers "does the lamp reach this shape", not "does it reach every pixel".
+///
+/// `allow(dead_code)` for the reason `LightClass` carries one: the consumers
+/// are the three tests below, and the table is a statement about this module
+/// rather than an input to drawing anything.
+#[allow(dead_code)]
+pub const SHAPE_LIGHT: &[(&str, LightClass)] = &[
+    ("finish", LightClass::Symmetric),
+    ("finish_heavy", LightClass::Symmetric),
+    ("blade", LightClass::Directional),
+    ("sword", LightClass::Directional),
+    ("shield", LightClass::Directional),
+    ("tower_shield", LightClass::Directional),
+    ("droplet", LightClass::Directional),
+    ("flame", LightClass::Emissive),
+    ("arrow", LightClass::Symmetric),
+    ("sparkle", LightClass::Emissive),
+    ("skull", LightClass::Directional),
+    ("flask", LightClass::Directional),
+    ("raised_fist", LightClass::Directional),
+    ("crack", LightClass::Symmetric),
+    ("eye", LightClass::Symmetric),
+    ("orb", LightClass::Emissive),
+    ("gem", LightClass::Directional),
+    ("scale", LightClass::Directional),
+    ("barb", LightClass::Symmetric),
+];
+
 pub fn new_icon() -> Canvas {
     Canvas::new(GRID as u32, GRID as u32)
 }
 
-/// The finishing pass every icon ends with: a hard N0 outline so the shape
-/// separates from whatever it is drawn over. Card art sits on a lit frame,
+/// **Symmetric.** The finishing pass every icon ends with: a hard N0 outline so
+/// the shape separates from whatever it is drawn over. An outline is painted on
+/// every side at once, which is what puts a pass in this class rather than
+/// outside the taxonomy. Card art sits on a lit frame,
 /// HUD icons sit on near-black — without this, half the set disappears
 /// against one background or the other.
 pub fn finish(canvas: &mut Canvas) {
     canvas.outline(N0);
 }
 
-/// Heavier outline that also fills diagonal neighbours, closing the staircase
-/// gaps a steep silhouette leaves. Right for chunky shapes, too fat for thin
+/// **Symmetric.** Heavier outline that also fills diagonal neighbours, closing
+/// the staircase gaps a steep silhouette leaves. Right for chunky shapes, too fat for thin
 /// ones — hence the choice rather than one rule.
 pub fn finish_heavy(canvas: &mut Canvas) {
     canvas.outline_with(N0, true);
@@ -803,6 +851,171 @@ pub fn barb(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The module's own source, for the three scans below.
+    ///
+    /// They read code rather than pixels for the reason `docs/ART_SPEC.md` §8
+    /// gives about `cargo test` generally: a shape's *class* is a property of
+    /// the drawing code and leaves no trace in the output. A symmetric shape
+    /// wrongly marked directional and a directional one wrongly marked
+    /// symmetric both produce icons that are on the ramp, on the grid and
+    /// hard-alpha.
+    const SOURCE: &str = include_str!("shapes.rs");
+
+    /// Every `pub fn` in this module that takes a canvas to draw on, paired with
+    /// its signature.
+    ///
+    /// Derived rather than listed, which is the whole point: a shape added
+    /// tomorrow is in this set the moment it compiles, so it fails the class
+    /// check until somebody decides what it is. `new_icon`, `blunt_taper`,
+    /// `shield_outline` and `breastplate_outline` fall out on their own — they
+    /// return a canvas or a run of points rather than drawing onto one — so no
+    /// exemption list is needed and none may quietly grow.
+    fn public_shapes() -> Vec<String> {
+        let mut names = Vec::new();
+        for (offset, _) in SOURCE.match_indices("\npub fn ") {
+            let rest = &SOURCE[offset + "\npub fn ".len()..];
+            let name: String = rest.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
+            let body_at = rest.find('{').unwrap_or(rest.len());
+            if rest[..body_at].contains("&mut Canvas") {
+                names.push(name);
+            }
+        }
+        names
+    }
+
+    /// The doc comment immediately above `pub fn <name>`, as one string.
+    fn doc_comment_for(name: &str) -> String {
+        let at = SOURCE
+            .find(&format!("\npub fn {name}"))
+            .unwrap_or_else(|| panic!("no pub fn {name}"));
+        let mut lines: Vec<&str> = Vec::new();
+        for line in SOURCE[..at].lines().rev() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("///") {
+                lines.push(trimmed);
+            } else if !trimmed.is_empty() {
+                break;
+            }
+        }
+        lines.reverse();
+        lines.join("\n")
+    }
+
+    /// Nothing may be missing from the table. A shape absent from it is not
+    /// "assumed symmetric" — it is a shape nobody has decided about, and the
+    /// state this replaced is exactly that in three prose copies.
+    #[test]
+    fn every_shape_declares_a_light_class() {
+        let table: Vec<&str> = SHAPE_LIGHT.iter().map(|(n, _)| *n).collect();
+        let shapes = public_shapes();
+        assert!(
+            shapes.len() >= 19,
+            "only found {} public shapes, so the scan is broken rather than the table: {shapes:?}",
+            shapes.len()
+        );
+        for name in &shapes {
+            assert!(
+                table.contains(&name.as_str()),
+                "shape `{name}` draws onto a canvas and is absent from SHAPE_LIGHT — \
+                 §10 has three classes and every shape is in exactly one of them"
+            );
+        }
+        for name in &table {
+            assert!(
+                shapes.contains(&name.to_string()),
+                "SHAPE_LIGHT names `{name}`, which is not a public shape in this module — \
+                 a table entry for a shape that no longer exists holds nothing"
+            );
+        }
+    }
+
+    /// The table and the prose beside each shape must agree.
+    ///
+    /// Two statements of one fact is what this item exists to collapse, and the
+    /// doc comment cannot simply be deleted: it is where a reader meets the
+    /// class, and `SHAPE_LIGHT` is 19 rows of `("blade", Directional)` with no
+    /// room for *why*. So both stay and this holds them together — which is the
+    /// same shape as `BalanceModel` reading `ShopScreen.RelicPriceFor` rather
+    /// than mirroring it, one language over.
+    #[test]
+    fn the_table_agrees_with_the_doc_comments() {
+        for (name, class) in SHAPE_LIGHT {
+            let doc = doc_comment_for(name);
+            let declared = [
+                ("**Directional", LightClass::Directional),
+                ("**Emissive", LightClass::Emissive),
+                ("**Symmetric", LightClass::Symmetric),
+            ]
+            .into_iter()
+            .filter_map(|(marker, c)| doc.find(marker).map(|at| (at, c)))
+            .min_by_key(|(at, _)| *at)
+            .map(|(_, c)| c);
+
+            assert_eq!(
+                declared,
+                Some(*class),
+                "`{name}` is {class:?} in SHAPE_LIGHT and its doc comment says {declared:?} — \
+                 the table and the prose a reader actually meets have come apart"
+            );
+        }
+    }
+
+    /// A `Directional` row is a claim that something measures the shape, so
+    /// something must.
+    ///
+    /// **This is the assertion with teeth, and it went red on two shapes the
+    /// moment it existed.** The sweep below drove a hand-written six, so
+    /// `sword` and `tower_shield` — directional since they were written, each
+    /// declaring it in its own doc comment — had no light assertion at all.
+    /// Neither is exotic: `sword` is Strike's own form at ten call sites and
+    /// `tower_shield` is the 12-Block relic. They were simply not on a list.
+    ///
+    /// The light tests are found by the marker `LIGHT-ASSERTION` on the line
+    /// above them rather than by a second list of test names, per the
+    /// `ART_SPEC-3-exception` idiom one language over: a claim about coverage
+    /// belongs on the thing making it. Comment lines are stripped before the
+    /// search, because this module's doc comments name every shape in it — the
+    /// exact trap `combat_fx_are_spawned` shipped and had to be fixed for.
+    #[test]
+    fn every_directional_shape_has_a_light_assertion() {
+        let mut measured = String::new();
+        let mut inside = false;
+        for line in SOURCE.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.contains("LIGHT-ASSERTION") {
+                inside = true;
+                continue;
+            }
+            if !inside {
+                continue;
+            }
+            if trimmed == "}" {
+                inside = false;
+                continue;
+            }
+            if !trimmed.starts_with("//") {
+                measured.push_str(line);
+                measured.push('\n');
+            }
+        }
+        assert!(
+            measured.contains("blade("),
+            "no LIGHT-ASSERTION block was found at all, so this test is measuring nothing"
+        );
+
+        for (name, class) in SHAPE_LIGHT {
+            if *class != LightClass::Directional {
+                continue;
+            }
+            assert!(
+                measured.contains(&format!("{name}(")),
+                "`{name}` is Directional and no LIGHT-ASSERTION block draws it — \
+                 a class is a claim that the lamp reaches this shape, and an unmeasured \
+                 claim is the prose list this table replaced"
+            );
+        }
+    }
     use crate::palette::{B1, B2, B5, N6, N8, P1, P3};
 
     /// Centre of mass of every pixel of exactly `colour`. `None` if the shape
@@ -850,6 +1063,7 @@ mod tests {
     /// offset swamped the one-pixel lateral one the rule actually decides.
     /// Projecting onto `across` first removes a term the rule never touches.
     #[test]
+    // LIGHT-ASSERTION
     fn a_blade_edge_faces_the_light_at_every_angle() {
         for step in 0..32 {
             let angle = step as f32 * std::f32::consts::TAU / 32.0;
@@ -961,6 +1175,7 @@ mod tests {
     /// each dominated by pixels that predate the change. Every row below now
     /// fails when the pass it names is deleted *and* when it is inverted.
     #[test]
+    // LIGHT-ASSERTION
     fn every_directional_shape_lights_toward_the_lamp() {
         // droplet: the specular is derived, so pin it against the derivation
         // rather than against "somewhere up and left". The form it replaced sat
@@ -1033,6 +1248,70 @@ mod tests {
         assert!(
             toward_light(shade, rim) > 0.0,
             "shield's lit rim at {rim:?} is not toward the lamp from its \
+             shadow rim at {shade:?}"
+        );
+    }
+
+    // LIGHT-ASSERTION
+    /// The two directional shapes the hand-written sweep did not contain.
+    ///
+    /// Both were `**Directional**` in their own doc comments from the day they
+    /// were written, and neither was measured by anything — found by
+    /// `every_directional_shape_has_a_light_assertion` the moment it existed,
+    /// which is the entire argument for deriving a sweep from a table instead
+    /// of typing out the shapes somebody happened to think of. Neither is
+    /// obscure: `sword` is Strike's own form at ten call sites, and
+    /// `tower_shield` is the 12-Block relic standing beside a heater.
+    ///
+    /// **`sword` is measured through `blade`'s rule rather than a rule of its
+    /// own, and that is the point of the check.** It has no light pass — it
+    /// draws furniture and then delegates — so what can break is the
+    /// delegation: a `sword` rewritten to lay down its own edge, the way
+    /// `iron_resolve` once drew its own tower shield and kept a profile the
+    /// shared fix had already deleted. The furniture is a different pigment
+    /// from the blade, so `body`/`edge` centroids see only the delegated half.
+    ///
+    /// The lateral projection is not optional here for the reason the blade
+    /// sweep's own doc gives: `edge` runs hilt to shoulder while `body` reaches
+    /// the tip, so the along-axis term swamps the one-pixel lateral one the
+    /// rule actually decides, and comparing the centroids directly fails on a
+    /// correctly lit blade.
+    #[test]
+    fn sword_and_tower_shield_light_toward_the_lamp() {
+        let hilt = (8, 24);
+        let tip = (24, 8);
+        let mut canvas = new_icon();
+        sword(&mut canvas, hilt, tip, N6, N8);
+
+        let body = centroid(&canvas, N6).expect("sword drew no blade body");
+        let edge = centroid(&canvas, N8).expect("sword drew no blade edge");
+        let along = unit(hilt, tip);
+        let across = (-along.1, along.0);
+        let delta = (edge.0 - body.0, edge.1 - body.1);
+        let lateral = delta.0 * across.0 + delta.1 * across.1;
+        assert!(
+            lateral.abs() > 0.01,
+            "sword drew its edge down the middle of its blade: no side at all"
+        );
+
+        let normal = (across.0 * lateral.signum(), across.1 * lateral.signum());
+        assert!(
+            crate::icons::light::is_lit(normal),
+            "sword's edge landed on the face normal to {normal:?}, which the lamp \
+             does not reach — the blade it delegates to derives this, so a sword \
+             lit from the far side has stopped delegating"
+        );
+
+        // tower_shield: the same three-pass split as `shield`, and a
+        // whole-colour centroid is honest for both because the light pass *is*
+        // what places those two colours.
+        let mut canvas = new_icon();
+        tower_shield(&mut canvas, 16, 4, 22, 24, B1, B5, B2);
+        let rim = centroid(&canvas, B5).expect("tower shield drew no lit rim");
+        let shade = centroid(&canvas, B2).expect("tower shield drew no shadow rim");
+        assert!(
+            toward_light(shade, rim) > 0.0,
+            "tower shield's lit rim at {rim:?} is not toward the lamp from its \
              shadow rim at {shade:?}"
         );
     }
@@ -1172,6 +1451,7 @@ mod tests {
     /// the check passed with the new flank deleted, and passed again with the
     /// flank moved to the *lit* side.
     #[test]
+    // LIGHT-ASSERTION
     fn the_fist_shades_the_flank_the_lamp_misses() {
         let mut canvas = new_icon();
         raised_fist(&mut canvas);

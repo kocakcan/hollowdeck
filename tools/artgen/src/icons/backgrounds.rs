@@ -1210,6 +1210,55 @@ fn throne_strongroom() -> Canvas { focal(THRONE, 0x6bce, strongroom) }
 
 #[cfg(test)]
 mod tests {
+    /// `face_tone` is the tree's second consumer of §10's lamp and had no light
+    /// assertion of any kind, which the class table one module over is what
+    /// turned up: `shapes.rs` now proves every `Directional` shape is measured,
+    /// and nothing at all made the same demand of this file.
+    ///
+    /// The half worth pinning is `raised`, because its own doc says the failure
+    /// is **invisible in a single tile** — a groove lit like a block and a block
+    /// lit like a groove are each internally coherent, and only a `vault`, where
+    /// the two sit side by side, shows it. That is a rule about the drawing code
+    /// with no trace in the output, which is precisely what `validate` cannot
+    /// reach and what `cargo test` is here for.
+    ///
+    /// Driven over all four axis normals rather than one, and asserted as an
+    /// *inversion* rather than by naming which tone each side takes: naming them
+    /// would restate `light.rs` here and pass even if the lamp were flipped
+    /// wholesale, while "flipping `raised` flips the answer" cannot be satisfied
+    /// by a function that ignores the flag.
+    #[test]
+    fn a_cut_groove_lights_opposite_a_raised_block() {
+        for stone in [WARD, REACH, THRONE] {
+            let mut lit_faces = 0;
+            for normal in [TOP, BOTTOM, LEFT, RIGHT] {
+                let raised = face_tone(normal, true, stone);
+                let cut = face_tone(normal, false, stone);
+                assert_ne!(
+                    raised, cut,
+                    "face_tone gave a raised block and a cut groove the same tone on the \
+                     face normal to {normal:?} - carved detail then reads as embossed, and \
+                     nothing about a single tile shows it"
+                );
+                if raised == stone.lit {
+                    lit_faces += 1;
+                }
+            }
+            assert_eq!(
+                lit_faces, 2,
+                "a raised block took {lit_faces} lit faces of four - one lamp at 45 degrees \
+                 reaches exactly two of the four axis-aligned faces, so any other count is \
+                 a lamp that is not §10's"
+            );
+        }
+
+        // And that it is *the lamp's* two rather than any two: up and left are
+        // the faces that turn back into a light travelling down and right.
+        assert_eq!(face_tone(TOP, true, WARD), WARD.lit, "a raised block's top face is unlit");
+        assert_eq!(face_tone(LEFT, true, WARD), WARD.lit, "a raised block's left face is unlit");
+        assert_eq!(face_tone(BOTTOM, true, WARD), WARD.shade, "a raised block's underside is lit");
+        assert_eq!(face_tone(RIGHT, true, WARD), WARD.shade, "a raised block's right face is lit");
+    }
     use super::*;
     use crate::palette::is_on_ramp;
 
