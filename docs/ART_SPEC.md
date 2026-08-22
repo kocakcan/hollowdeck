@@ -582,10 +582,16 @@ relation `palette.rs` does not have and its failure mode is silent at the top of
 
 ### Named exceptions
 
-Three classes, and every shape in `shapes.rs` states its own in its doc comment:
+Three classes. **Which shape is in which is `shapes::SHAPE_LIGHT`, and this section deliberately no
+longer lists them** — it carried its own copy of the directional set until that copy was found to
+have been wrong for as long as it existed, omitting `tower_shield`. A list here cannot be checked
+against anything: nothing in the toolchain reads markdown, and `the_table_agrees_with_the_doc_comments`
+scans `shapes.rs`'s doc comments alone. What this section is for is the *reasoning*, which the table
+has no room for:
 
-- **Directional** — `blade`, `sword`, `shield`, `droplet`, `flask`, `gem`, `scale`, `skull`,
-  `raised_fist`.
+- **Directional** — derives its lit side from `LIGHT`, and therefore must be measured: a class is a
+  claim that the lamp reaches the shape, and `every_directional_shape_has_a_light_assertion` is what
+  turns that claim into a demand.
 - **Emissive** — `flame`, `orb`, `sparkle`, and the whole of `icons/fx.rs`. They *are* the light,
   locally; giving one a lit side would say it is lit by something else.
 - **Symmetric** — `eye` (an aperture is a hole, and lighting one side of a hole is a mistake),
@@ -621,10 +627,35 @@ Two things about those assertions are load-bearing and were both wrong once:
   Four of the six were green on the previous code because a whole-colour centroid over a shape that
   already had shading measures the shading it already had.
 
-**Not enforced, and this paragraph is the point of the section:** every hand-placed highlight in
+**The class list above is data rather than prose**, and that is the half of this section's own
+exemption that turned out to be closable. `shapes::SHAPE_LIGHT` is the single copy; `LightClass` is
+its vocabulary; three tests hold it. Every public shape must appear in the table, so a shape added
+tomorrow fails until somebody decides what it is. The table must agree with the doc comment beside
+each shape, because the prose is where a reader meets the class and 19 rows of `("blade",
+Directional)` have no room for *why*. And **every `Directional` row must actually be measured** — a
+class is a claim that the lamp reaches a shape, so an unmeasured claim is the prose list this
+replaced. The light assertions are found by a `LIGHT-ASSERTION` marker on the line above them,
+comment lines stripped, per the `ART_SPEC-3-exception` idiom §3 uses.
+
+That last one went red on two shapes the moment it existed. `sword` and `tower_shield` had been
+directional since they were written, each said so in its own doc comment, and **neither was measured
+by anything** — the sweep drove a hand-written six. Neither is obscure: `sword` is Strike's own form
+at ten call sites and `tower_shield` is the 12-Block relic. They were simply not on a list. The
+prose list this file and `shapes.rs` each carried had already drifted the same way, omitting
+`tower_shield` from the directional nine.
+
+`backgrounds.rs`'s `face_tone` is the tree's second consumer of the lamp and had no light assertion
+either. Its `raised` flag — which flips the normals, because a groove presents its far wall to the
+light — is a rule whose failure its own comment calls **invisible in a single tile**: a groove lit
+like a block and a block lit like a groove are each internally coherent. That is precisely the class
+of rule `validate` cannot reach.
+
+**Still not enforced, and this paragraph is the point of the section:** every hand-placed highlight in
 `cards.rs`, `relics.rs`, `misc.rs`, `events.rs` and `potions.rs`. Those were audited once, by
 reading all ~186 of them and looking at the output; nothing holds them there. A new icon can put a
-`G5` pixel in its bottom-right corner and the whole suite stays green.
+`G5` pixel in its bottom-right corner and the whole suite stays green. The table above does not
+touch this and was never going to: a class list being wrong and a hand-placed highlight being wrong
+are different failures, and only the first is expressible in a table.
 
 `artgen validate` is *structurally* blind here and no amount of work on it would help: a highlight
 on the wrong side is still on the ramp, still 32x32 and still hard-alpha, so it passes every rule

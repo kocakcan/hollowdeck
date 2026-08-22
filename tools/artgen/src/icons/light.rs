@@ -39,8 +39,12 @@
 //!
 //! ## Named exceptions
 //!
-//! These have no lit side, and none of them is a defect. Anything not listed
-//! here is directional and takes its highlight position from this module:
+//! These have no lit side, and none of them is a defect. **This is a list of
+//! reasons, not the classification itself** — that is `shapes::SHAPE_LIGHT`,
+//! which is data and is checked. It used to end "anything not listed here is
+//! directional", a complement rule that quietly disagreed with the table on the
+//! two outline passes (`finish`, `finish_heavy`), and which would therefore
+//! have demanded a light assertion for painting an outline on all four sides:
 //!
 //! - `flame`, `orb`, `sparkle` — **emissive**. They *are* the light, locally.
 //!   Giving one a lit side would say it is lit by something else.
@@ -64,10 +68,49 @@
 //! the same form, because its `N0` finger grooves already separate the fingers
 //! and the knuckles are free to fall into shadow.
 //!
-//! **Nothing enforces membership of that list. It is a list.** Mark `flame`
-//! directional in the wrong direction and every check in the repository stays
-//! green — see the limits section of `docs/ART_SPEC.md` §10, which says the
-//! same thing where a reader will actually meet it.
+//! **That list is data now, and it used to be three copies of prose.** It was
+//! written here, restated in `shapes.rs`'s own module header — which had
+//! already drifted, omitting `tower_shield` — and declared a third time in each
+//! shape's doc comment. Nothing read any of them, so marking `flame`
+//! directional in the wrong direction left every check in the repository green.
+//!
+//! `shapes::SHAPE_LIGHT` is the single copy; `LightClass` below is its
+//! vocabulary. Three assertions hold it: every public shape must appear in the
+//! table, the table must agree with the doc comment beside each shape, and
+//! every `Directional` row must actually be measured by a light assertion. The
+//! last is the one with teeth — the sweep drove a hand-written six, so a
+//! seventh directional shape was unmeasured and green, which is how `sword` and
+//! `tower_shield` turn out to have had no light assertion at all.
+//!
+//! What this does **not** close is `docs/ART_SPEC.md` §10's standing exemption:
+//! the ~186 hand-placed highlights in the category modules are still held by
+//! nothing, for the reason that section gives. A class list being wrong and a
+//! hand-placed highlight being wrong are different failures, and only the first
+//! of them is expressible in a table.
+
+/// Which of §10's three classes a shape belongs to.
+///
+/// `Directional` is the only one that means work: it is a claim that the shape
+/// derives a lit side from `LIGHT`, and therefore that something measures it.
+/// The other two are claims that there is nothing to measure — an emissive
+/// shape *is* the light locally, and a symmetric one has no face — which is why
+/// they are declared rather than merely omitted. A shape that is simply missing
+/// from the table is neither of those; it is a shape nobody has decided about.
+///
+/// Read only by assertions today, hence the `allow`. Left public and outside
+/// `cfg(test)` deliberately: this is a declaration *about* the drawing code, in
+/// the same file as the lamp it refers to, and a reader looking for "what class
+/// is this shape" should not have to know it lives in a test build.
+#[allow(dead_code)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LightClass {
+    /// Derives its lit side from `LIGHT`. Must carry a light assertion.
+    Directional,
+    /// A light source: lit from inside, so the lamp does not apply.
+    Emissive,
+    /// Concentric, single-colour, or a mark too thin to have faces.
+    Symmetric,
+}
 
 /// Unit vector the light **travels** along: down and to the right, so the
 /// source is up and to the left.

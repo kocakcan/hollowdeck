@@ -1010,6 +1010,15 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   `scripts/`, whose only exemption is the marker `ART_SPEC-3-exception` on the line itself. Do not
   widen it to the canvas `Draw*` family — a hard-edged integer-width on-ramp stroke is pixel art,
   and banning the primitive failed `MapScreen`'s connectors on the commit that fixed them
+- `tools/artgen/src/icons/light.rs` + `shapes.rs`'s `SHAPE_LIGHT` — ART_SPEC §10's one lamp, and the
+  table saying which of its three classes each shape is in. The class used to be prose in four places
+  — `shapes.rs`'s module header and `ART_SPEC.md` §10 (both carrying a drifted directional *nine*
+  that omitted `tower_shield`), `light.rs`'s complement rule, and each shape's doc comment. It is
+  data now, the two drifted lists are gone rather than corrected, and three Rust tests hold it — every shape classified, the table agreeing with the doc comment
+  beside each shape, and **every `Directional` row actually measured**, found by a `LIGHT-ASSERTION`
+  marker rather than a second list of test names. That last one found `sword` and `tower_shield`
+  measured by nothing. What it does *not* close is §10's standing exemption: the ~186 hand-placed
+  highlights in the category modules are still held by nothing
 - `tools/artgen/src/icons/backgrounds.rs` — the twenty-one pieces, and the only category that breaks
   the grid, the location *and* the naming at once. Its Rust tests hold what `validate` is blind to:
   seam continuity per band, a pillar's transparency, and the per-band contrast budget
