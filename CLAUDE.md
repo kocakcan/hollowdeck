@@ -965,9 +965,21 @@ top-left corner no longer maps to canvas `(0, 0)` (see the mouse note in the `sm
   also a speed. **The two blades are one drawn axis in two pigments**, because an axis is undirected:
   the enemy-to-player span is 131° to 167°, the same line read from the other end, and `fx.rs`
   asserts every axial frame is symmetric under a half turn. So the incoming blade needed a colour and
-  not a silhouette — bone for the player's, oxblood for what is coming at them. The registry
+  not a silhouette — bone for the player's, oxblood for what is coming at them. **Which blade goes
+  with which attacker is asserted directly** (`CombatScreen.BladeFor`), because the spawn scan reads
+  whether a constant is *named* under `scripts/ui` and therefore catches an arm deleted but not the
+  two exchanged — measured, swapping them left all 23 suites green, and with the geometry shared
+  pigment is the entire channel telling the two apart. The registry
   (`CombatFx.All`) is what `PixelSpecSmokeTest` drives, so a seventh effect is one entry rather than
-  a name retyped in a test
+  a name retyped in a test. **A blade needs a cause, and there are two of them**: `PopupDelta` is a
+  state diff, so `Combatant` carries `HitsTaken`/`LastAttacker` for a hit that reached HP and
+  `HitsAbsorbed`/`LastAbsorbedAttacker` for one Block ate **any** of — the whole-absorb distinction
+  is the *reader's* (`IsAbsorbedHit` demands `hpDelta == 0`), never the write's, so a partial absorb
+  moves both pairs and draws one blade. Counter *and* name, always read
+  together — either name alone survives every turn boundary and would throw a blade out of an enemy
+  that did nothing. All four are written in `DealDamageEffect` and nowhere else; the other three ways
+  HP falls (a Poison tick, `LoseHpEffect`, Thorns' direct subtraction) have no attacker to draw a
+  blade from and deliberately get none
 - `scripts/ui/SpriteAnimator.cs` — the one frame-swap driver, for creature clips and effect bursts
   alike. `Attach` resolves frames from a sprite id and needs an `idle`; `AttachOneShot` takes frames
   outright and holds the last one, which is what a burst needs and what frees it

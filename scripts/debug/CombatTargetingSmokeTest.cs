@@ -111,6 +111,7 @@ public partial class CombatTargetingSmokeTest : Node
         await TestASummonBuildsAnEnemyViewMidFight();
         TestTheBlockedBeatNeedsAnAbsorbedHit();
         await TestAnEnemyAttackNamesItselfAsTheAttacker();
+        await TestABlockedEnemyAttackStillNamesTheEnemy();
 
         GD.Print($"CombatTargetingSmokeTest: {_pass} passed, {_fail} failed");
         GetTree().Quit(_fail == 0 ? 0 : 1);
@@ -140,10 +141,36 @@ public partial class CombatTargetingSmokeTest : Node
             "Block falling with nothing absorbed is a turn boundary, not a blocked hit - " +
             "gating on the Block delta fires this beat every turn either side carried Block");
 
+        // Which blade goes with which attacker. The two runs share one drawn
+        // axis - an axis is undirected, so the mirror is the identity - which
+        // means pigment is the entire channel separating "the player swung" from
+        // "something swung at the player". A swap is therefore not a wrong
+        // colour, it is the beat pointing the wrong way.
+        //
+        // PixelSpecSmokeTest's spawn scan cannot say this. It asks whether a
+        // constant is named in scripts/ui, so it goes red when an arm is deleted
+        // and stays green when the two are exchanged: measured, all 23 suites
+        // passed with every enemy throwing the player's bone blade.
+        var swinger = new PlayerCombatant { Name = "Player", MaxHp = 10, CurrentHp = 10 };
+        var beast = new EnemyCombatant { Name = "Beast", MaxHp = 10, CurrentHp = 10 };
+        Check("the_player_swings_the_bone_blade",
+            CombatScreen.BladeFor(swinger) == CombatFx.Swipe,
+            $"the player's blade is {CombatScreen.BladeFor(swinger)}, expected {CombatFx.Swipe}");
+        Check("an_enemy_swings_the_oxblood_blade",
+            CombatScreen.BladeFor(beast) == CombatFx.Gash,
+            $"an enemy's blade is {CombatScreen.BladeFor(beast)}, expected {CombatFx.Gash}");
+
+        // And that they are not the same run, which is what the two checks above
+        // would both still pass if the constants ever collapsed into one.
+        Check("the_two_blades_are_different_runs",
+            CombatScreen.BladeFor(swinger) != CombatScreen.BladeFor(beast),
+            "both directions spawn the same blade - with the geometry shared there is then " +
+            "nothing at all telling the player which way the beat is aimed");
+
         Check("blocked_beat_ignores_a_hit_that_got_through",
             !CombatScreen.IsAbsorbedHit(hpDelta: -3, absorbedDelta: 1),
             "Block that absorbed part of a hit still lost HP, which is the ordinary hit " +
-            "reaction - two beats for one hit otherwise");
+            "reaction - two beats for one hit otherwise, and now two blades as well");
     }
 
     // The other half of that argument, for the beat that has a *direction*.
@@ -207,6 +234,95 @@ public partial class CombatTargetingSmokeTest : Node
         instance.QueueFree();
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
     }
+
+    // The same drive, one beat over, for the direction that had a gate and no
+    // cause: a swing Block stopped whole.
+    //
+    // It is worth driving rather than asserting about numbers for a reason the
+    // landed half does not have. AbsorbedAttackerOf reads
+    // LastAbsorbedAttacker, which DealDamageEffect writes on the *absorbed*
+    // branch - a branch no enemy turn takes unless the player is actually
+    // holding Block when the swing arrives. Typing the diff here would exercise
+    // the rule and say nothing about whether the write is on the path, which is
+    // the half that can silently not happen.
+    //
+    // Block is set before TryEndTurn deliberately: the player's Block is
+    // cleared in EndEnemyTurn, so it is live for the whole enemy turn and gone
+    // by the time the player holds one again. Setting it after would be
+    // wiped before the enemy swung.
+    private async System.Threading.Tasks.Task TestABlockedEnemyAttackStillNamesTheEnemy()
+    {
+        CombatContext.EnemyDefinitionIds = new List<string> { "rot_hound" };
+        var instance = GD.Load<PackedScene>("res://scenes/CombatScreen.tscn").Instantiate();
+        AddChild(instance);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        var combat = CombatManager.Instance!;
+        var enemy = combat.Enemies[0];
+        var player = combat.Player;
+
+        // Far past anything rot_hound can telegraph, so the absorb is whole
+        // whichever move the weighted roll picks - the point is the branch, not
+        // the arithmetic.
+        player.Block = 999;
+        int hpBefore = player.CurrentHp;
+        int absorbedBefore = player.HitsAbsorbed;
+
+        // Sampled every frame across a real wall clock rather than waited out.
+        // The blade lives 4 x TravelFrameSeconds = 0.16s and frees itself, so a
+        // single look after the turn has finished is a look at an empty screen;
+        // and this scene's frame time is not a clock, which is why the deadline
+        // is real milliseconds and the *sampling* is per frame. Ten-odd frames
+        // carry the blade, so the peak cannot be missed.
+        combat.TryEndTurn();
+        bool sawBlade = false;
+        ulong deadline = Time.GetTicksMsec() + 1400;
+        while (Time.GetTicksMsec() < deadline)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (!sawBlade) sawBlade = ABladeIsInFlight(instance, CombatFx.Gash);
+        }
+
+        int hpDelta = player.CurrentHp - hpBefore;
+        int absorbedDelta = player.HitsAbsorbed - absorbedBefore;
+        Check("the_enemy_turn_was_absorbed_whole", hpDelta == 0 && absorbedDelta > 0,
+            $"the player lost {-hpDelta} HP over {absorbedDelta} absorbed hits - this check says " +
+            "nothing at all unless Block actually ate a swing");
+
+        Check("an_absorbed_hit_names_the_enemy_that_swung",
+            ReferenceEquals(
+                CombatScreen.AbsorbedAttackerOf(hpDelta, absorbedDelta, player.LastAbsorbedAttacker),
+                enemy),
+            $"the absorbed hit resolved to {player.LastAbsorbedAttacker?.Name ?? "nobody"} rather " +
+            $"than to {enemy.Name} - the ward burst would bloom with nothing crossing the gap");
+
+        // And that the beat is actually *wired*, which is the half everything
+        // else in this branch is compatible with being false. The pair, the
+        // rule and the pigment are all pure functions and all assertable on
+        // their own; PopupDelta handing them to PlayBlockAbsorbVfx is not, and
+        // deleting that one call reverts the whole feature with every suite
+        // green and every check count unchanged. Measured, before this existed.
+        //
+        // It also refuses the wrong field: LastAttacker in place of
+        // LastAbsorbedAttacker names nobody on the first turn of a fight, so no
+        // blade is ever spawned and this goes red where the rule checks above
+        // cannot - they are handed the diff rather than reading it.
+        Check("an_absorbed_hit_throws_a_blade_across_the_gap", sawBlade,
+            $"no {CombatFx.Gash} run was ever in flight while {enemy.Name}'s swing was absorbed - " +
+            "the ward burst blooms and nothing crosses the gap, which is the beat this closes");
+
+        instance.QueueFree();
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    // Whether a travelling run of `effect` is on screen right now, found by its
+    // frames rather than by counting nodes: the ward burst is a TextureRect
+    // carrying a SpriteAnimator too, so a count cannot tell the two apart and
+    // would pass on the burst alone - which is exactly the state this beat had
+    // before the blade was added to it.
+    private static bool ABladeIsInFlight(Node combat, string effect) =>
+        combat.GetChildren().OfType<TextureRect>().Any(r =>
+            r.Texture?.ResourcePath.Contains($"/{effect}_") == true);
 
     // The glow is EnemyView's own Button background, so anything drawn over
     // the enemy erases it - and the stylebox assertions above all still pass

@@ -22,16 +22,32 @@ public class DealDamageEffect : IEffect
             // view layer diffs is incremented here rather than inferred there.
             // See Combatant.HitsAbsorbed: falling Block on its own cannot tell
             // an absorbed hit from an expired one.
-            if (absorbedByBlock > 0) target.HitsAbsorbed++;
+            //
+            // Gated on `absorbedByBlock` rather than on Block having eaten the
+            // hit *whole*, which is the tempting version and puts one
+            // distinction in two places. A partly absorbed hit moves this pair
+            // and the one below, and it is the reader that separates them:
+            // CombatScreen.IsAbsorbedHit demands hpDelta == 0, so a partial
+            // absorb takes the ordinary hit-reaction arm and draws exactly one
+            // blade rather than two.
+            if (absorbedByBlock > 0)
+            {
+                target.HitsAbsorbed++;
+                target.LastAbsorbedAttacker = ctx.Source;
+            }
 
             // And the other half of that argument: the one place a hit reaches
             // HP, so the view layer can tell an attack from every other way HP
             // falls. See Combatant.HitsTaken - a blade is drawn from the
             // attacker to the target, and a Poison tick has no attacker to draw
-            // it from. Gated on `unblocked` rather than on targetAmount for the
-            // same reason Plating is below: a hit Block ate whole already has a
-            // beat of its own, and it is the ward burst rather than a weapon
-            // crossing the gap.
+            // it from.
+            //
+            // Gated on `unblocked` rather than on targetAmount for the same
+            // reason Plating is below, and the reason is now only about *which*
+            // beat rather than about whether there is one: a hit Block ate
+            // whole is an absorption, so it moves the pair above and plays the
+            // ward burst. Both pairs carry a blade; what separates them is that
+            // this one also cost HP.
             if (unblocked > 0)
             {
                 target.HitsTaken++;

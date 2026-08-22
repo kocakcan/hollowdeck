@@ -1022,16 +1022,22 @@ public partial class PixelSpecSmokeTest : Node
         Check("combat_fx_travel_actually_travels", rect.Position.DistanceTo(landing) > scale,
             $"a travelling burst starts at {rect.Position} and lands at {landing} - it does not move");
 
-        // The blade must reach the target before the impact that follows it
+        // The blade must reach the target before the burst that follows it
         // blooms there, which is the whole reason the travelling cadence is its
         // own constant rather than FrameSeconds. Stated as an assertion because
         // both numbers are tunable and a later nudge to either one silently
         // inverts the beat.
+        //
+        // It governs *both* landings rather than only the impact it is named
+        // for, and it does so without a second copy: ward is what blooms when
+        // Block eats a swing whole, and it runs on the same FrameSeconds every
+        // other burst does. What this pins is the relation between the two
+        // constants, so a burst is late here or late nowhere.
         double travel = CombatFx.TravelFrameSeconds * FxFrameCount * CombatFx.TravelFraction;
-        double impact = CombatFx.FrameSeconds * FxFrameCount;
-        Check("combat_fx_travel_arrives_before_the_impact_blooms", travel < impact / 2.0,
-            $"a swipe crosses in {travel:0.###}s against impact's {impact:0.###}s run - a blade still " +
-            "in flight while the hit blooms under it reads as the impact landing first");
+        double burst = CombatFx.FrameSeconds * FxFrameCount;
+        Check("combat_fx_travel_arrives_before_the_burst_blooms", travel < burst / 2.0,
+            $"a blade crosses in {travel:0.###}s against a burst's {burst:0.###}s run - a blade still " +
+            "in flight while impact or ward blooms under it reads as the landing coming first");
 
         host.QueueFree();
     }

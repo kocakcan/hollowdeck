@@ -920,7 +920,10 @@ deferral — an enemy's attack getting no directional beat — has now closed to
 line here because the finding was not an art one: an axis is *undirected*, so the "authored second
 orientation" that file forecast did not exist, and what was actually missing was a cause channel.
 `PopupDelta` is a state diff, so nothing knew which enemy swung — and the same gap was making the
-player lunge at an enemy that was dying of its own Poison. The easing
+player lunge at an enemy that was dying of its own Poison. *That* entry's own last deferral has since
+closed the same way: a swing Block stopped whole drew no blade either, and it needed a second cause
+pair rather than a second asset. Worth one line here because the finding generalises past both — a
+beat without a cause is missing in **every** direction at once, and only one of them gets noticed. The easing
 vocabulary (`scripts/ui/Motion.cs`, ART_SPEC §11) is the one **this** phase should read before
 touching a tween: eight named curves replaced thirty-four ad-hoc pairs of duration and transition,
 and the setting below now has one place to multiply.

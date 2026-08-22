@@ -587,7 +587,15 @@ public partial class CombatScreen : Control
     //
     // One place the choice is made, and it is also what keeps both constants
     // visible to PixelSpecSmokeTest's "is anything spawning this?" scan.
-    private static string BladeFor(Combatant attacker) =>
+    //
+    // That scan is not enough to hold this, which is worth stating because it
+    // looks like it should be. It sees whether a constant is *named* in
+    // scripts/ui, so it catches an arm deleted and cannot catch the two arms
+    // swapped - both names are still there, and every enemy throws bone at the
+    // player while the player throws oxblood back. Measured: all 23 suites
+    // green through exactly that edit. Public so the pairing itself can be
+    // asserted, which is the same reason AttackerOf and IsAbsorbedHit are.
+    public static string BladeFor(Combatant attacker) =>
         attacker is PlayerCombatant ? CombatFx.Swipe : CombatFx.Gash;
 
     // Where the player sprite is, in global coordinates. Three sites had a copy
@@ -1299,10 +1307,34 @@ public partial class CombatScreen : Control
     /// blade would fly out of an enemy that did nothing.
     ///
     /// Deliberately silent about fully-blocked hits: they lose no HP, so they
-    /// never reach here. That beat is the ward burst.
+    /// never reach here. AbsorbedAttackerOf below is their half.
     /// </remarks>
     public static Combatant? AttackerOf(int hpDelta, int struckDelta, Combatant? lastAttacker) =>
         hpDelta < 0 && struckDelta > 0 ? lastAttacker : null;
+
+    /// <summary>
+    /// Who swung the hit Block ate whole, or null — AttackerOf for the beat
+    /// that costs no HP.
+    /// </summary>
+    /// <remarks>
+    /// The absorbed beat had a gate (IsAbsorbedHit) and no *cause* for as long
+    /// as it existed, so the ward burst bloomed on a combatant with nothing
+    /// crossing the gap toward it: the one swing in a fight the player could
+    /// not see coming was the one that got stopped. This is the same pair
+    /// AttackerOf reads, one beat over — see Combatant.LastAbsorbedAttacker.
+    ///
+    /// Built on IsAbsorbedHit rather than restating `hpDelta == 0`, so the two
+    /// readers of that condition cannot come apart. Passing the whole diff
+    /// through it is also what refuses a *partial* absorb: that moves both
+    /// pairs, hpDelta is below zero, and the blade it is owed is the landed
+    /// beat's, drawn once by AttackerOf.
+    ///
+    /// lastAbsorbedAttacker alone is not enough for the reason it never is:
+    /// Block falls on its own at every turn boundary, and the field would keep
+    /// naming whoever last tested it.
+    /// </remarks>
+    public static Combatant? AbsorbedAttackerOf(int hpDelta, int absorbedDelta, Combatant? lastAbsorbedAttacker) =>
+        IsAbsorbedHit(hpDelta, absorbedDelta) ? lastAbsorbedAttacker : null;
 
     private void PopupDelta(Combatant c, Node popupParent, Vector2 localSpawnPos)
     {
@@ -1334,7 +1366,8 @@ public partial class CombatScreen : Control
             }
             else if (IsAbsorbedHit(hpDelta, absorbed))
             {
-                PlayBlockAbsorbVfx(popupParent, c, localSpawnPos);
+                PlayBlockAbsorbVfx(popupParent, c, localSpawnPos,
+                    AbsorbedAttackerOf(hpDelta, absorbed, c.LastAbsorbedAttacker));
             }
 
             // Only on the way up. Poison decays as it ticks, so diffing without
@@ -1397,29 +1430,69 @@ public partial class CombatScreen : Control
         if (popupParent is EnemyView enemyView) enemyView.PlayHitRecoil();
         else if (target is PlayerCombatant) PlayPlayerHitShake();
 
-        // Before the spawn, not after: PlayerCenter reads the sprite's live
-        // GlobalPosition and the lunge is about to move it, so a blade spawned
-        // second would leave from where the player is going rather than from
-        // where they are.
-        if (attacker is PlayerCombatant) PlayPlayerLungeToward(center);
-
-        if (attacker is not null && CombatantCenter(attacker) is { } from)
-        {
-            SpawnTravellingBurst(from, center, BladeFor(attacker));
-        }
+        if (attacker is not null) PlayAttackApproach(attacker, center);
 
         SpawnBurst(center, CombatFx.Impact);
         PlayScreenShake(hpLost);
     }
 
+    // The half of a hit that belongs to whoever swung: the lunge and the blade
+    // crossing the gap. Extracted because it is wanted by both beats - a landed
+    // hit and one Block ate whole are the same approach and differ only in what
+    // happens at the far end.
+    //
+    // The order is inherited from PlayHitVfx, where it was written as
+    // load-bearing: "PlayerCenter reads the sprite's live GlobalPosition and
+    // the lunge is about to move it". **That is not true, and it was checked
+    // rather than reasoned about.** PlayPlayerLungeToward only *creates* a
+    // Tween, which steps in the process loop, so the origin CombatantCenter
+    // reads is identical either side of the call - instrumented over a real
+    // card play, before and after both (120, 350). The two statements commute,
+    // and no mutation can produce the failure the old comment described.
+    //
+    // The hazard that is real is a lunge from an *earlier* beat still in
+    // flight: a mixed AoE where one enemy blocks whole (immediate) and another
+    // takes a big hit (deferred by HitStopSeconds) reads the player's centre
+    // mid-lunge, up to about 26px off. Statement order does nothing about that,
+    // and this beat roughly doubles how often two approaches fire from one
+    // refresh - so it is written down here rather than left to be rediscovered.
+    // Not fixed: the blade would have to spawn from a rest position the sprite
+    // is not currently at, which is a wider change than this one.
+    private void PlayAttackApproach(Combatant attacker, Vector2 targetCenter)
+    {
+        if (attacker is PlayerCombatant) PlayPlayerLungeToward(targetCenter);
+
+        if (CombatantCenter(attacker) is { } from)
+        {
+            SpawnTravellingBurst(from, targetCenter, BladeFor(attacker));
+        }
+    }
+
     // Block absorbed the hit entirely (no HP lost) - previously silent; a
     // "Blocked" text plus a metallic-blue flash and a ward burst gives it the
     // same "something happened" feedback a landed hit already gets.
-    private void PlayBlockAbsorbVfx(Node popupParent, Combatant blocker, Vector2 localSpawnPos)
+    //
+    // The blade is the late addition and the reason this takes an attacker at
+    // all: the three beats above say the Block held and say nothing about who
+    // tested it, so a swing stopped whole was the one swing in a fight that
+    // arrived from nowhere. It goes through the same PlayAttackApproach a
+    // landed hit does, which is what makes the two directions one decision -
+    // an enemy's oxblood blade and the player's bone one both stop here.
+    //
+    // What this arm deliberately does *not* borrow from PlayHitVfx: no impact
+    // burst, because nothing reached HP and impact is the beat that says it
+    // did; no recoil, because the ward burst and the flash are the target's
+    // whole answer; and no screen shake, which is keyed to HP lost and would be
+    // shaking over zero.
+    private void PlayBlockAbsorbVfx(Node popupParent, Combatant blocker, Vector2 localSpawnPos,
+        Combatant? attacker)
     {
         SpawnFloatingText(popupParent, localSpawnPos, "Blocked!", new Color(0.6f, 0.8f, 1f));
         if (popupParent is CanvasItem target) FlashBlock(target);
-        if (CombatantCenter(blocker) is { } center) SpawnBurst(center, CombatFx.Ward);
+        if (CombatantCenter(blocker) is not { } center) return;
+
+        if (attacker is not null) PlayAttackApproach(attacker, center);
+        SpawnBurst(center, CombatFx.Ward);
     }
 
     private void SpawnFloatingText(Node parent, Vector2 localPos, string text, Color color, bool bigHit = false)

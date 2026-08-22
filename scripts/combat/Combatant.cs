@@ -13,20 +13,30 @@ public abstract class Combatant
     public Dictionary<StatusType, int> Statuses = new();
     public bool IsDead => CurrentHp <= 0;
 
-    // How many hits this combatant's Block has eaten, ever, this fight. The one
-    // *cause* the view layer gets, and it exists because a state diff cannot
-    // recover one: CombatScreen.PopupDelta sees Block fall and has no way to
-    // tell "a hit was absorbed" from "the turn ended and Block expired", which
-    // are the same two numbers moving the same way.
+    // How many hits this combatant's Block has eaten, ever, this fight, and who
+    // dealt the last one. One of the two *causes* the view layer gets, and it
+    // exists because a state diff cannot recover one: CombatScreen.PopupDelta
+    // sees Block fall and has no way to tell "a hit was absorbed" from "the
+    // turn ended and Block expired", which are the same two numbers moving the
+    // same way.
     //
     // Both combatants clear Block on their own turn, so without this the
     // "Blocked!" beat fired every single turn either side had leftover Block
     // and nothing had attacked. Monotonic on purpose - a counter cannot be
     // confused by the clear, where a bool would need someone to reset it.
     //
+    // LastAbsorbedAttacker is the second half of that pair, and it arrived
+    // later than the counter, which had been carrying the beat alone. Read
+    // together they answer "is this absorption the hit that enemy dealt" -
+    // which is what CombatScreen.AbsorbedAttackerOf asks, and what lets a swing
+    // Block ate whole still draw a blade across the gap. Alone it goes stale
+    // exactly as LastAttacker does below: it would keep naming the last enemy
+    // that swung while Block quietly expired on a turn nothing attacked at all.
+    //
     // Not serialized, because no Combatant is: Combat is deliberately absent
     // from RunManager.AutoSaveScreens, so a fight never outlives its session.
     public int HitsAbsorbed;
+    public Combatant? LastAbsorbedAttacker;
 
     // How many hits have reached this combatant's HP, ever, this fight, and who
     // dealt the last one. HitsAbsorbed's sibling, and it exists for the
@@ -41,11 +51,18 @@ public abstract class Combatant
     // Read together they answer "is this HP loss the hit that enemy dealt",
     // which is the question CombatScreen.AttackerOf asks.
     //
-    // Set in exactly one place, DealDamageEffect, gated on damage that got past
-    // Block. Nothing else in combat may write them: a hit Block ate whole is
-    // the ward burst's beat and not a blade's, and the other three in-combat HP
-    // losses (the Poison tick, LoseHpEffect, Thorns' direct subtraction) are
-    // deliberately none of this feature's business.
+    // All four fields are set in exactly one place, DealDamageEffect: this pair
+    // gated on damage that got past Block, the pair above gated on damage Block
+    // ate. Nothing else in combat may write them, and the reason is the same
+    // for both - the other three in-combat HP losses (the Poison tick,
+    // LoseHpEffect, Thorns' direct subtraction) have no attacker to draw a
+    // blade from.
+    //
+    // This paragraph used to end "a hit Block ate whole is the ward burst's
+    // beat and not a blade's". That was a decision rather than a fact, and it
+    // was reversed deliberately: the ward burst says the Block held and says
+    // nothing whatever about who swung, so the one swing in the game that could
+    // not be seen coming was the one that got stopped.
     //
     // Not serialized, because no Combatant is: Combat is deliberately absent
     // from RunManager.AutoSaveScreens, so a fight never outlives its session.
